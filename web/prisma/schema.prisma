@@ -51,7 +51,18 @@ model Event {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  registrations Registration[]
+  registrations  Registration[]
+  emailTemplate  EmailTemplate?
+}
+
+model EmailTemplate {
+  id        String   @id @default(cuid())
+  eventId   String?  @unique
+  event     Event?   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  subject   String
+  htmlBody  String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Registration {

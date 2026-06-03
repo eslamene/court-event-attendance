@@ -8,5 +8,5 @@ export async function GET() {
     return (await import("@/lib/i18n/responses")).jsonForbidden();
   }
 
-  return NextResponse.json(getNotificationsSummary());
+  return NextResponse.json(await getNotificationsSummary());
 }

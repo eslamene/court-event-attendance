@@ -1,5 +1,8 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
+import { CaretLeft } from "@phosphor-icons/react";
 import { PLATFORM_LOGO_PATH } from "@/lib/platform-logo";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
@@ -36,9 +39,12 @@ export function EventCard({ event }: { event: EventListItem }) {
           /register/{event.slug}
         </p>
       </div>
-      <span className="shrink-0 text-gold-dark" aria-hidden>
-        ←
-      </span>
+      <CaretLeft
+        size={24}
+        weight="bold"
+        className="shrink-0 text-gold-dark"
+        aria-hidden
+      />
     </Link>
   );
 }

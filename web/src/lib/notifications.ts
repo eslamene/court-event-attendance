@@ -2,8 +2,24 @@ import { Resend } from "resend";
 import sgMail from "@sendgrid/mail";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
-import { sendTwilioMessage } from "./twilio-client";
-import { PLATFORM_LOGO_PATH } from "./platform-logo";
+import { validateRecipientEmail } from "./email-address";
+import {
+  formatDeliveryError,
+  formatResendError,
+  formatSendGridError,
+} from "./notification-errors";
+import {
+  isTwilioEmailConfigured,
+  resolveTwilioEmailFrom,
+  sendTwilioCommsEmail,
+  sendTwilioMessage,
+} from "./twilio-client";
+import { fetchVerifiedEmailSenders } from "./sendgrid-senders";
+import {
+  renderEmailTemplate,
+  resolveEmailTemplateForEvent,
+} from "./email-template";
+import { buildQrImageUrl } from "./qr";
 
 export type NotificationChannel = "email" | "sms" | "whatsapp";
 
@@ -15,22 +31,83 @@ export type DeliveryResult = {
   provider?: string;
 };
 
-export function getEmailProvider(): "sendgrid" | "resend" | null {
-  if (process.env.SENDGRID_API_KEY && process.env.EMAIL_FROM) return "sendgrid";
-  if (process.env.RESEND_API_KEY && process.env.EMAIL_FROM) return "resend";
+export type EmailProvider = "twilio" | "sendgrid" | "resend" | null;
+
+function isFromFieldError(error?: string): boolean {
+  return Boolean(
+    error?.toLowerCase().includes("field 'from'") ||
+      error?.toLowerCase().includes("sender identity")
+  );
+}
+
+export function getEmailProvider(): EmailProvider {
+  if (!process.env.EMAIL_FROM) return null;
+  const forced = process.env.EMAIL_PROVIDER?.trim().toLowerCase();
+  if (forced === "sendgrid" && process.env.SENDGRID_API_KEY) return "sendgrid";
+  if (forced === "resend" && process.env.RESEND_API_KEY) return "resend";
+  if (forced === "twilio" && isTwilioEmailConfigured()) return "twilio";
+  if (isTwilioEmailConfigured()) return "twilio";
+  if (process.env.SENDGRID_API_KEY) return "sendgrid";
+  if (process.env.RESEND_API_KEY) return "resend";
   return null;
 }
 
-export function getNotificationsSummary() {
+async function sendViaSendGrid(params: {
+  to: string;
+  from: string;
+  subject: string;
+  html: string;
+}): Promise<DeliveryResult> {
+  const toCheck = validateRecipientEmail(params.to, "Recipient");
+  if (!toCheck.ok) {
+    return { sent: false, channel: "email", error: toCheck.error };
+  }
+
+  try {
+    sgMail.setApiKey(process.env.SENDGRID_API_KEY!);
+    await sgMail.send({
+      to: toCheck.address,
+      from: params.from,
+      subject: params.subject,
+      html: params.html,
+    });
+    return { sent: true, channel: "email", provider: "Twilio SendGrid" };
+  } catch (e) {
+    return {
+      sent: false,
+      channel: "email",
+      error: formatSendGridError(e),
+    };
+  }
+}
+
+function emailProviderLabel(provider: EmailProvider): string {
+  if (provider === "twilio") return "Twilio Email";
+  if (provider === "sendgrid") return "Twilio SendGrid";
+  if (provider === "resend") return "Resend";
+  return "—";
+}
+
+export async function getNotificationsSummary() {
   const emailProvider = getEmailProvider();
   const twilioBase = Boolean(
-    process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN
+    process.env.TWILIO_ACCOUNT_SID?.startsWith("AC") &&
+      process.env.TWILIO_AUTH_TOKEN
   );
+
+  const twilioFrom = resolveTwilioEmailFrom();
+  const verified = await fetchVerifiedEmailSenders();
 
   return {
     email: {
       configured: Boolean(emailProvider),
-      provider: emailProvider === "sendgrid" ? "Twilio SendGrid" : "Resend",
+      provider: emailProviderLabel(emailProvider),
+      fromAddress: verified.configuredFrom ?? twilioFrom?.address ?? null,
+      fromError: twilioFrom?.error ?? null,
+      fromMatchesVerified: verified.matchesVerified,
+      verifiedSenders: verified.singleSenders,
+      verifiedDomains: verified.authenticatedDomains,
+      senderHint: verified.hint ?? null,
     },
     sms: {
       configured: twilioBase && Boolean(process.env.TWILIO_PHONE_NUMBER),
@@ -43,51 +120,41 @@ export function getNotificationsSummary() {
   };
 }
 
-function buildEmailHtml(opts: {
-  judgeName: string;
-  eventName: string;
-  dateStr: string;
-  instructions: string;
-  qrDataUrl: string;
-}) {
-  const logoUrl = `${process.env.NEXT_PUBLIC_APP_URL || ""}${PLATFORM_LOGO_PATH}`;
-  return `
-    <div dir="rtl" style="font-family: Tahoma, Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #faf8f5; padding: 24px;">
-      ${logoUrl ? `<p style="text-align:center"><img src="${logoUrl}" alt="شعار الفعالية" width="100" style="border-radius:50%"/></p>` : ""}
-      <h2 style="color: #5c3d1e; text-align: center;">تأكيد حضور الفعالية</h2>
-      <p>السيد/ة <strong>${opts.judgeName}</strong>،</p>
-      <p>تمت الموافقة على تسجيلكم لحضور:</p>
-      <p style="background:#fff;padding:16px;border-radius:8px;border:1px solid #e8dcc8;">
-        <strong>${opts.eventName}</strong><br/>${opts.dateStr}
-      </p>
-      <p>${opts.instructions}</p>
-      <p style="text-align:center; margin: 24px 0;">
-        <img src="${opts.qrDataUrl}" alt="رمز QR" width="280" height="280" style="border:4px solid #5c3d1e;border-radius:8px"/>
-      </p>
-      <p style="color:#666; font-size: 13px; text-align:center;">
-        رمز الاستجابة السريعة للاستخدام مرة واحدة عند الوصول. يرجى إبرازه لطاقم الاستقبال.
-      </p>
-    </div>
-  `;
-}
-
 export async function sendQrEmail(params: {
   to: string;
   judgeName: string;
   eventName: string;
   eventDate: Date;
-  qrDataUrl: string;
+  eventId?: string | null;
+  eventLogoPath?: string | null;
+  qrToken: string;
+  qrScanUrl?: string;
   instructions: string;
 }): Promise<DeliveryResult> {
+  const toCheck = validateRecipientEmail(params.to, "Recipient");
+  if (!toCheck.ok) {
+    return {
+      sent: false,
+      channel: "email",
+      error: formatDeliveryError(toCheck.error, {
+        to: params.to,
+        channel: "email",
+      }),
+    };
+  }
+
   const dateStr = format(params.eventDate, "EEEE d MMMM yyyy", { locale: ar });
-  const html = buildEmailHtml({
+  const qrImageUrl = buildQrImageUrl(params.qrToken);
+  const template = await resolveEmailTemplateForEvent(params.eventId);
+  const { subject, html } = renderEmailTemplate(template, {
     judgeName: params.judgeName,
     eventName: params.eventName,
-    dateStr,
+    eventDate: dateStr,
     instructions: params.instructions,
-    qrDataUrl: params.qrDataUrl,
+    qrImageUrl,
+    qrScanUrl: params.qrScanUrl,
+    eventLogoPath: params.eventLogoPath,
   });
-  const subject = `تأكيد حضور — ${params.eventName}`;
   const from = process.env.EMAIL_FROM;
   const provider = getEmailProvider();
 
@@ -100,36 +167,95 @@ export async function sendQrEmail(params: {
       channel: "email",
       skipped: true,
       error:
-        "Email not configured. Set SENDGRID_API_KEY or RESEND_API_KEY plus EMAIL_FROM.",
+        "Email not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and EMAIL_FROM (or SENDGRID_API_KEY / RESEND_API_KEY).",
     };
   }
 
+  const plainText = [
+    `تأكيد حضور — ${params.eventName} — ${dateStr}`,
+    params.instructions,
+    params.qrScanUrl
+      ? `رمز QR: ${params.qrScanUrl}`
+      : `صورة QR: ${qrImageUrl}`,
+  ].join("\n");
+
   try {
+    if (provider === "twilio") {
+      const result = await sendTwilioCommsEmail({
+        to: toCheck.address,
+        toName: params.judgeName,
+        fromRaw: from,
+        subject,
+        html,
+        text: plainText,
+      });
+      if (!result.ok) {
+        if (
+          process.env.SENDGRID_API_KEY &&
+          isFromFieldError(result.error)
+        ) {
+          const fallback = await sendViaSendGrid({
+            to: toCheck.address,
+            from,
+            subject,
+            html,
+          });
+          if (!fallback.sent && fallback.error) {
+            return {
+              sent: false,
+              channel: "email",
+              error: `${result.error} — SendGrid fallback: ${fallback.error}`,
+            };
+          }
+          return fallback;
+        }
+        return {
+          sent: false,
+          channel: "email",
+          error: formatDeliveryError(result.error, {
+            to: toCheck.address,
+            channel: "email",
+            provider: "Twilio Email",
+          }),
+        };
+      }
+      return { sent: true, channel: "email", provider: "Twilio Email" };
+    }
+
     if (provider === "sendgrid") {
-      sgMail.setApiKey(process.env.SENDGRID_API_KEY!);
-      await sgMail.send({
-        to: params.to,
+      return sendViaSendGrid({
+        to: toCheck.address,
         from,
         subject,
         html,
       });
-      return { sent: true, channel: "email", provider: "Twilio SendGrid" };
     }
 
     const resend = new Resend(process.env.RESEND_API_KEY!);
     const { error } = await resend.emails.send({
       from,
-      to: params.to,
+      to: toCheck.address,
       subject,
       html,
     });
     if (error) {
-      return { sent: false, channel: "email", error: error.message };
+      return {
+        sent: false,
+        channel: "email",
+        error: formatResendError(error.message),
+      };
     }
     return { sent: true, channel: "email", provider: "Resend" };
   } catch (e) {
     const message = e instanceof Error ? e.message : "Email failed";
-    return { sent: false, channel: "email", error: message };
+    return {
+      sent: false,
+      channel: "email",
+      error: formatDeliveryError(message, {
+        to: toCheck.address,
+        channel: "email",
+      }),
+    };
   }
 }
 
@@ -162,7 +288,11 @@ export async function sendQrSms(params: {
     return {
       sent: false,
       channel: "sms",
-      error: result.error,
+      error: formatDeliveryError(result.error, {
+        to: params.to,
+        channel: "sms",
+        provider: "Twilio SMS",
+      }),
       skipped: !process.env.TWILIO_ACCOUNT_SID,
     };
   }
@@ -209,19 +339,28 @@ export async function sendQrWhatsApp(params: {
   });
 
   if (!result.ok) {
-    return { sent: false, channel: "whatsapp", error: result.error };
+    return {
+      sent: false,
+      channel: "whatsapp",
+      error: formatDeliveryError(result.error, {
+        to: params.to,
+        channel: "whatsapp",
+        provider: "Twilio WhatsApp",
+      }),
+    };
   }
   return { sent: true, channel: "whatsapp", provider: "Twilio WhatsApp" };
 }
 
 export async function sendTestEmail(to: string): Promise<DeliveryResult> {
+  const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
   return sendQrEmail({
     to,
     judgeName: "اختبار النظام",
     eventName: "فعالية تجريبية",
     eventDate: new Date(),
-    qrDataUrl:
-      "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Crect fill='%23f5f0e8' width='200' height='200'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.3em' fill='%235c3d1e' font-size='14'%3ETEST%3C/text%3E%3C/svg%3E",
+    qrToken: "test",
+    qrScanUrl: baseUrl ? `${baseUrl}/api/qr/test` : undefined,
     instructions: "هذه رسالة اختبار من نظام تسجيل الحضور.",
   });
 }
@@ -254,7 +393,15 @@ export async function sendTestWhatsApp(to: string): Promise<DeliveryResult> {
   });
 
   if (!result.ok) {
-    return { sent: false, channel: "whatsapp", error: result.error };
+    return {
+      sent: false,
+      channel: "whatsapp",
+      error: formatDeliveryError(result.error, {
+        to,
+        channel: "whatsapp",
+        provider: "Twilio WhatsApp",
+      }),
+    };
   }
   return { sent: true, channel: "whatsapp", provider: "Twilio WhatsApp" };
 }

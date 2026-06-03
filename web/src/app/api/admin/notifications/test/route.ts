@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth, canManageEvents } from "@/lib/auth";
-import { notificationTestSchema } from "@/lib/i18n/schemas";
+import { apiDict } from "@/lib/i18n/api";
+import { createNotificationTestSchema } from "@/lib/i18n/schemas";
 import {
   sendTestEmail,
   sendTestSms,
@@ -21,17 +22,20 @@ export async function POST(req: Request) {
     return jsonInvalidData();
   }
 
-  const parsed = notificationTestSchema.safeParse(body);
+  const dict = await apiDict();
+  const parsed = createNotificationTestSchema(dict).safeParse(body);
   if (!parsed.success) {
     return jsonInvalidData(parsed.error.issues[0]?.message);
   }
 
   const result =
     parsed.data.channel === "email"
-      ? await sendTestEmail(parsed.data.to)
+      ? await sendTestEmail(parsed.data.to.trim())
       : parsed.data.channel === "whatsapp"
-        ? await sendTestWhatsApp(parsed.data.to)
-        : await sendTestSms(parsed.data.to);
+        ? await sendTestWhatsApp(parsed.data.to.trim())
+        : await sendTestSms(parsed.data.to.trim());
 
-  return NextResponse.json(result, { status: result.sent ? 200 : 400 });
+  return NextResponse.json(result, {
+    status: result.sent ? 200 : 400,
+  });
 }

@@ -1,8 +1,9 @@
-import Link from "next/link";
 import { startOfDay } from "date-fns";
 import { LogoHeader } from "@/components/LogoHeader";
 import { EventCard } from "@/components/EventCard";
 import { LocaleSwitcher } from "@/components/LocaleSwitcher";
+import { AdminLoginLink } from "@/components/home/AdminLoginLink";
+import { PastEventsCaret } from "@/components/home/PastEventsCaret";
 import { prisma } from "@/lib/db";
 import { getServerT } from "@/lib/i18n/server";
 
@@ -68,12 +69,7 @@ export default async function HomePage() {
                 <span>
                   {t("home.pastEvents")} ({pastEvents.length})
                 </span>
-                <span
-                  className="text-bronze transition group-open:rotate-180"
-                  aria-hidden
-                >
-                  ▼
-                </span>
+                <PastEventsCaret />
               </span>
             </summary>
             <div className="space-y-3 border-t border-border px-4 pb-4 pt-3">
@@ -92,9 +88,7 @@ export default async function HomePage() {
         )}
 
         <p className="mt-10 text-center text-sm text-bronze">
-          <Link href="/admin/login" className="underline hover:text-gold-dark">
-            {t("home.adminLogin")}
-          </Link>
+          <AdminLoginLink label={t("home.adminLogin")} />
         </p>
       </section>
     </main>

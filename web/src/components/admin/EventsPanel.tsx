@@ -2,7 +2,24 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import Image from "next/image";
+import {
+  ArrowSquareOut,
+  EnvelopeSimple,
+  FloppyDisk,
+  PencilSimple,
+  Plus,
+  Trash,
+} from "@phosphor-icons/react";
+import { EmailTemplateEditor } from "@/components/admin/EmailTemplateEditor";
 import { TextField } from "@/components/ui/Field";
+import { Modal } from "@/components/ui/Modal";
+import { ActionButton } from "@/components/ui/ActionButton";
+import {
+  CancelFormButton,
+  DangerFormButton,
+  PrimaryFormButton,
+} from "@/components/ui/FormActions";
+import { AdminListToolbar } from "@/components/admin/AdminListToolbar";
 import { useI18n } from "@/components/I18nProvider";
 import { PLATFORM_LOGO_PATH } from "@/lib/platform-logo";
 import { format } from "date-fns";
@@ -24,8 +41,12 @@ export function EventsPanel() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<EventRow | null>(null);
   const [clearing, setClearing] = useState<EventRow | null>(null);
+  const [emailTemplateEvent, setEmailTemplateEvent] = useState<EventRow | null>(
+    null
+  );
 
   async function load() {
     setLoading(true);
@@ -37,6 +58,11 @@ export function EventsPanel() {
   useEffect(() => {
     load();
   }, []);
+
+  function openCreate() {
+    setError("");
+    setCreating(true);
+  }
 
   async function onCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -68,7 +94,7 @@ export function EventsPanel() {
     }
 
     setMessage(t("admin.events.created", { url: data.registrationUrl }));
-    (e.target as HTMLFormElement).reset();
+    setCreating(false);
     load();
   }
 
@@ -135,68 +161,64 @@ export function EventsPanel() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4">
       {message && (
-        <p className="rounded-lg bg-green-50 p-3 text-sm text-success">{message}</p>
+        <p className="rounded-lg bg-green-50 px-4 py-3 text-sm text-success">
+          {message}
+        </p>
       )}
-      {error && (
-        <p className="rounded-lg bg-red-50 p-3 text-sm text-error">{error}</p>
+      {error && !creating && !editing && !clearing && (
+        <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-error">{error}</p>
       )}
 
-      <form
-        onSubmit={onCreate}
-        className="max-w-lg space-y-4 rounded-xl border border-border bg-card p-6 shadow-sm"
-      >
-        <h2 className="font-bold text-gold-dark">إنشاء فعالية جديدة</h2>
-        <TextField name="name" label={t("admin.events.name")} required />
-        <TextField name="date" label={t("admin.events.date")} type="date" required />
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium text-gold-dark">
-            شعار / صورة الفعالية (اختياري)
-          </span>
-          <input
-            type="file"
-            name="logo"
-            accept="image/jpeg,image/png,image/webp,image/gif"
-            className="w-full text-sm"
-          />
-        </label>
-        <button
-          type="submit"
-          className="rounded-xl bg-gold-dark px-6 py-2.5 text-white hover:bg-bronze"
-        >
-          إنشاء
-        </button>
-      </form>
+      <AdminListToolbar
+        count={events.length}
+        countLabel={t("admin.common.viewAll")}
+        actionLabel={t("admin.events.createAction")}
+        onAction={openCreate}
+      />
 
       <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
         <table className="w-full min-w-[800px] text-sm">
           <thead className="bg-[#f5f0e8] text-gold-dark">
             <tr>
-              <th className="px-4 py-3 text-right">الشعار</th>
-              <th className="px-4 py-3 text-right">الفعالية</th>
-              <th className="px-4 py-3 text-right">التاريخ</th>
-              <th className="px-4 py-3 text-right">التسجيلات</th>
-              <th className="px-4 py-3 text-right">الحالة</th>
-              <th className="px-4 py-3 text-right">إجراءات</th>
+              <th className="px-4 py-3 text-right">{t("admin.events.colLogo")}</th>
+              <th className="px-4 py-3 text-right">{t("admin.events.colEvent")}</th>
+              <th className="px-4 py-3 text-right">{t("admin.events.colDate")}</th>
+              <th className="px-4 py-3 text-right">
+                {t("admin.events.colRegistrations")}
+              </th>
+              <th className="px-4 py-3 text-right">{t("admin.events.colStatus")}</th>
+              <th className="px-4 py-3 text-right">{t("admin.events.colActions")}</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center">
-                  جاري التحميل...
+                <td colSpan={6} className="px-4 py-8 text-center text-bronze">
+                  {t("admin.registrations.loading")}
                 </td>
               </tr>
             ) : events.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-bronze">
-                  لا توجد فعاليات
+                <td colSpan={6} className="px-4 py-12 text-center">
+                  <p className="text-bronze">{t("admin.events.empty")}</p>
+                  <button
+                    type="button"
+                    onClick={openCreate}
+                    className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-gold-dark underline hover:text-bronze"
+                  >
+                    <Plus size={16} weight="bold" aria-hidden />
+                    {t("admin.events.createAction")}
+                  </button>
                 </td>
               </tr>
             ) : (
               events.map((ev) => (
-                <tr key={ev.id} className="border-t border-border">
+                <tr
+                  key={ev.id}
+                  className="border-t border-border transition hover:bg-[#faf8f5]"
+                >
                   <td className="px-4 py-3">
                     <EventLogoThumb path={ev.logoPath} name={ev.name} />
                   </td>
@@ -204,12 +226,13 @@ export function EventsPanel() {
                     <div className="font-medium">{ev.name}</div>
                     <a
                       href={ev.registrationUrl}
-                      className="text-xs text-gold-dark underline"
+                      className="inline-flex items-center gap-1 text-xs text-gold-dark underline"
                       target="_blank"
                       rel="noreferrer"
                       dir="ltr"
                     >
                       /register/{ev.slug}
+                      <ArrowSquareOut size={12} aria-hidden />
                     </a>
                   </td>
                   <td className="px-4 py-3">
@@ -220,33 +243,46 @@ export function EventsPanel() {
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs ${ev.isActive ? "bg-green-100 text-green-900" : "bg-gray-100 text-gray-700"}`}
                     >
-                      {ev.isActive ? t("admin.events.active") : t("admin.events.inactive")}
+                      {ev.isActive
+                        ? t("admin.events.active")
+                        : t("admin.events.inactive")}
                     </span>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
+                      <ActionButton
+                        icon={PencilSimple}
                         onClick={() => {
                           setEditing(ev);
                           setClearing(null);
                           setError("");
                         }}
-                        className="rounded border border-border px-2 py-1 text-xs hover:bg-[#f5f0e8]"
                       >
-                        تعديل
-                      </button>
-                      <button
-                        type="button"
+                        {t("admin.events.edit")}
+                      </ActionButton>
+                      <ActionButton
+                        icon={EnvelopeSimple}
+                        onClick={() => {
+                          setEmailTemplateEvent(ev);
+                          setEditing(null);
+                          setClearing(null);
+                          setError("");
+                        }}
+                      >
+                        {t("admin.events.emailTemplate")}
+                      </ActionButton>
+                      <ActionButton
+                        icon={Trash}
+                        variant="danger"
                         onClick={() => {
                           setClearing(ev);
                           setEditing(null);
+                          setEmailTemplateEvent(null);
                           setError("");
                         }}
-                        className="rounded border border-error/40 px-2 py-1 text-xs text-error hover:bg-red-50"
                       >
-                        مسح البيانات
-                      </button>
+                        {t("admin.events.clearData")}
+                      </ActionButton>
                     </div>
                   </td>
                 </tr>
@@ -256,45 +292,25 @@ export function EventsPanel() {
         </table>
       </div>
 
-      {editing && (
-        <Modal title={`تعديل: ${editing.name}`} onClose={() => setEditing(null)}>
-          <form onSubmit={onUpdate} className="space-y-4">
-            <TextField
-              name="name"
-              label="اسم الفعالية"
-              defaultValue={editing.name}
-              required
-            />
+      {creating && (
+        <Modal
+          title={t("admin.events.createTitle")}
+          onClose={() => {
+            setCreating(false);
+            setError("");
+          }}
+        >
+          <form onSubmit={onCreate} className="space-y-4">
+            <TextField name="name" label={t("admin.events.name")} required />
             <TextField
               name="date"
-              label="تاريخ الفعالية"
+              label={t("admin.events.date")}
               type="date"
-              defaultValue={format(new Date(editing.date), "yyyy-MM-dd")}
               required
-            />
-            <label className="block space-y-1.5">
-              <span className="text-sm font-medium text-gold-dark">الحالة</span>
-              <select
-                name="isActive"
-                defaultValue={editing.isActive ? "true" : "false"}
-                className="w-full rounded-lg border border-border px-4 py-2.5"
-              >
-                <option value="true">نشطة — التسجيل مفتوح</option>
-                <option value="false">متوقفة — إخفاء نموذج التسجيل</option>
-              </select>
-            </label>
-            <TextField
-              name="logoUrl"
-              label="رابط شعار (اختياري — URL)"
-              defaultValue={
-                editing.logoPath?.startsWith("http") ? editing.logoPath : ""
-              }
-              dir="ltr"
-              className="text-left"
             />
             <label className="block space-y-1.5">
               <span className="text-sm font-medium text-gold-dark">
-                أو رفع صورة جديدة
+                {t("admin.events.logoUpload")}
               </span>
               <input
                 type="file"
@@ -303,20 +319,84 @@ export function EventsPanel() {
                 className="w-full text-sm"
               />
             </label>
-            <div className="flex gap-3">
-              <button
-                type="submit"
-                className="rounded-xl bg-gold-dark px-6 py-2.5 text-white"
+            {error && <p className="text-sm text-error">{error}</p>}
+            <div className="flex gap-3 pt-2">
+              <PrimaryFormButton icon={Plus}>
+                {t("admin.common.create")}
+              </PrimaryFormButton>
+              <CancelFormButton
+                onClick={() => {
+                  setCreating(false);
+                  setError("");
+                }}
               >
-                حفظ
-              </button>
-              <button
-                type="button"
-                onClick={() => setEditing(null)}
-                className="rounded-xl border border-border px-6 py-2.5"
+                {t("admin.common.cancel")}
+              </CancelFormButton>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {editing && (
+        <Modal
+          title={`${t("admin.events.editTitle")}: ${editing.name}`}
+          onClose={() => setEditing(null)}
+        >
+          <form onSubmit={onUpdate} className="space-y-4">
+            <TextField
+              name="name"
+              label={t("admin.events.name")}
+              defaultValue={editing.name}
+              required
+            />
+            <TextField
+              name="date"
+              label={t("admin.events.date")}
+              type="date"
+              defaultValue={format(new Date(editing.date), "yyyy-MM-dd")}
+              required
+            />
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium text-gold-dark">
+                {t("admin.events.colStatus")}
+              </span>
+              <select
+                name="isActive"
+                defaultValue={editing.isActive ? "true" : "false"}
+                className="w-full rounded-lg border border-border px-4 py-2.5"
               >
-                إلغاء
-              </button>
+                <option value="true">{t("admin.events.statusActive")}</option>
+                <option value="false">{t("admin.events.statusInactive")}</option>
+              </select>
+            </label>
+            <TextField
+              name="logoUrl"
+              label={t("admin.events.logoUrl")}
+              defaultValue={
+                editing.logoPath?.startsWith("http") ? editing.logoPath : ""
+              }
+              dir="ltr"
+              className="text-left"
+            />
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium text-gold-dark">
+                {t("admin.events.logoUrlOr")}
+              </span>
+              <input
+                type="file"
+                name="logo"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                className="w-full text-sm"
+              />
+            </label>
+            {error && <p className="text-sm text-error">{error}</p>}
+            <div className="flex gap-3 pt-2">
+              <PrimaryFormButton icon={FloppyDisk}>
+                {t("admin.common.save")}
+              </PrimaryFormButton>
+              <CancelFormButton onClick={() => setEditing(null)}>
+                {t("admin.common.cancel")}
+              </CancelFormButton>
             </div>
           </form>
         </Modal>
@@ -324,17 +404,18 @@ export function EventsPanel() {
 
       {clearing && (
         <Modal
-          title={`مسح بيانات: ${clearing.name}`}
+          title={`${t("admin.events.clearTitle")}: ${clearing.name}`}
           onClose={() => setClearing(null)}
         >
           <p className="mb-4 text-sm text-error">
-            سيتم حذف جميع التسجيلات وسجلات المسح لهذه الفعالية ({clearing.registrationCount}{" "}
-            تسجيل). لا يمكن التراجع. يلزم كلمة مرور <strong>مدير النظام</strong>.
+            {t("admin.events.clearWarning", {
+              count: clearing.registrationCount,
+            })}
           </p>
           <form onSubmit={onClearData} className="space-y-4">
             <TextField
               name="adminPassword"
-              label="كلمة مرور المدير"
+              label={t("admin.events.adminPassword")}
               type="password"
               required
               dir="ltr"
@@ -342,18 +423,29 @@ export function EventsPanel() {
             />
             <TextField
               name="confirmPhrase"
-              label='اكتب "مسح البيانات" للتأكيد'
+              label={t("admin.events.clearConfirmLabel")}
               required
-              placeholder="مسح البيانات"
+              placeholder={t("admin.clearConfirmPhrase")}
             />
-            <button
-              type="submit"
-              className="rounded-xl bg-error px-6 py-2.5 text-white"
-            >
-              مسح كل البيانات
-            </button>
+            {error && <p className="text-sm text-error">{error}</p>}
+            <div className="flex gap-3 pt-2">
+              <DangerFormButton icon={Trash}>
+                {t("admin.events.clearData")}
+              </DangerFormButton>
+              <CancelFormButton onClick={() => setClearing(null)}>
+                {t("admin.common.cancel")}
+              </CancelFormButton>
+            </div>
           </form>
         </Modal>
+      )}
+      {emailTemplateEvent && (
+        <EmailTemplateEditor
+          mode="event"
+          eventId={emailTemplateEvent.id}
+          eventName={emailTemplateEvent.name}
+          onClose={() => setEmailTemplateEvent(null)}
+        />
       )}
     </div>
   );
@@ -376,33 +468,5 @@ function EventLogoThumb({
       className="rounded-full object-cover"
       unoptimized={src.startsWith("http")}
     />
-  );
-}
-
-function Modal({
-  title,
-  children,
-  onClose,
-}: {
-  title: string;
-  children: React.ReactNode;
-  onClose: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-border bg-card p-6 shadow-xl">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="font-bold text-gold-dark">{title}</h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-bronze hover:text-foreground"
-          >
-            ✕
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
   );
 }

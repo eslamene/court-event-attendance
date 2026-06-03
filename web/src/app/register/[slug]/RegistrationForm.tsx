@@ -2,6 +2,12 @@
 
 import { FormEvent, useState } from "react";
 import {
+  CheckCircle,
+  CircleNotch,
+  PaperPlaneTilt,
+  WarningCircle,
+} from "@phosphor-icons/react";
+import {
   TextField,
   SelectField,
   TextAreaField,
@@ -61,8 +67,8 @@ export function RegistrationForm({ slug, eventName, eventDate }: Props) {
   if (success) {
     return (
       <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
-        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-3xl text-success">
-          ✓
+        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-success">
+          <CheckCircle size={48} weight="fill" aria-hidden />
         </div>
         <h2 className="mb-3 text-xl font-bold text-gold-dark">
           {t("register.successTitle")}
@@ -142,15 +148,28 @@ export function RegistrationForm({ slug, eventName, eventDate }: Props) {
       <TextAreaField name="notes" label={t("register.notes")} rows={3} />
 
       {error && (
-        <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-error">{error}</p>
+        <p className="flex items-start gap-2 rounded-lg bg-red-50 px-4 py-3 text-sm text-error">
+          <WarningCircle size={20} className="shrink-0" weight="fill" aria-hidden />
+          {error}
+        </p>
       )}
 
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-xl bg-gold-dark py-3 font-semibold text-white transition hover:bg-bronze disabled:opacity-60"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gold-dark py-3 font-semibold text-white transition hover:bg-bronze disabled:opacity-60"
       >
-        {loading ? t("register.submitting") : t("register.submit")}
+        {loading ? (
+          <>
+            <CircleNotch size={20} className="animate-spin" aria-hidden />
+            {t("register.submitting")}
+          </>
+        ) : (
+          <>
+            <PaperPlaneTilt size={20} weight="fill" aria-hidden />
+            {t("register.submit")}
+          </>
+        )}
       </button>
     </form>
   );

@@ -1,5 +1,5 @@
 import { prisma } from "./db";
-import { buildQrPayload, generateQrDataUrl, generateQrToken } from "./qr";
+import { buildQrPayload, generateQrToken } from "./qr";
 import {
   sendQrEmail,
   sendQrSms,
@@ -32,7 +32,6 @@ export async function approveRegistration(
 
   const qrToken = generateQrToken();
   const payload = buildQrPayload(qrToken, baseUrl);
-  const qrDataUrl = await generateQrDataUrl(payload);
 
   const updated = await prisma.registration.update({
     where: { id: registrationId },
@@ -58,7 +57,10 @@ export async function approveRegistration(
       judgeName: updated.fullName,
       eventName: updated.event.name,
       eventDate: updated.event.date,
-      qrDataUrl,
+      eventId: updated.eventId,
+      eventLogoPath: updated.event.logoPath,
+      qrToken,
+      qrScanUrl: payload,
       instructions,
     }),
     sendQrWhatsApp({
@@ -86,4 +88,55 @@ export async function approveRegistration(
   const notifications = await Promise.all(tasks);
 
   return { registration: updated, notifications };
+}
+
+export type ResendQrEmailResult = {
+  registration: Registration & { event: Event };
+  email: DeliveryResult;
+};
+
+export async function resendQrEmail(
+  registrationId: string
+): Promise<ResendQrEmailResult> {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+  const registration = await prisma.registration.findUnique({
+    where: { id: registrationId },
+    include: { event: true },
+  });
+
+  if (!registration) throw new Error(await apiT("approval.notFound"));
+  if (
+    registration.status !== "APPROVED" &&
+    registration.status !== "ATTENDED"
+  ) {
+    throw new Error(await apiT("approval.cannotResendEmail"));
+  }
+  if (!registration.qrToken) {
+    throw new Error(await apiT("approval.noQrToken"));
+  }
+
+  const payload = buildQrPayload(registration.qrToken, baseUrl);
+  const instructions = await apiT("approval.qrInstructions");
+
+  const email = await sendQrEmail({
+    to: registration.email,
+    judgeName: registration.fullName,
+    eventName: registration.event.name,
+    eventDate: registration.event.date,
+    eventId: registration.eventId,
+    eventLogoPath: registration.event.logoPath,
+    qrToken: registration.qrToken,
+    qrScanUrl: payload,
+    instructions,
+  });
+
+  if (email.sent) {
+    await prisma.registration.update({
+      where: { id: registrationId },
+      data: { qrSentAt: new Date() },
+    });
+  }
+
+  return { registration, email };
 }

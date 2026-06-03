@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { Globe } from "@phosphor-icons/react";
 import { useI18n, useLocales } from "./I18nProvider";
 import { LOCALE_COOKIE } from "@/lib/i18n/constants";
 
@@ -17,7 +18,10 @@ export function LocaleSwitcher({ className = "" }: { className?: string }) {
   }
 
   return (
-    <label className={`inline-flex items-center gap-2 text-sm text-bronze ${className}`}>
+    <label
+      className={`inline-flex items-center gap-2 text-sm text-bronze ${className}`}
+    >
+      <Globe size={18} className="text-gold-dark" aria-hidden />
       <select
         value={locale}
         onChange={(e) => onChange(e.target.value)}

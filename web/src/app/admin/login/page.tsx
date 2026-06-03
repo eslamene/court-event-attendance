@@ -2,6 +2,7 @@
 
 import { signIn } from "next-auth/react";
 import { FormEvent, useState } from "react";
+import { CircleNotch, SignIn } from "@phosphor-icons/react";
 import { useRouter } from "next/navigation";
 import { LogoHeader } from "@/components/LogoHeader";
 import { TextField } from "@/components/ui/Field";
@@ -66,9 +67,19 @@ export default function AdminLoginPage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-xl bg-gold-dark py-3 font-semibold text-white hover:bg-bronze disabled:opacity-60"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gold-dark py-3 font-semibold text-white hover:bg-bronze disabled:opacity-60"
         >
-          {loading ? t("admin.login.submitting") : t("admin.login.submit")}
+          {loading ? (
+            <>
+              <CircleNotch size={20} className="animate-spin" aria-hidden />
+              {t("admin.login.submitting")}
+            </>
+          ) : (
+            <>
+              <SignIn size={20} weight="bold" aria-hidden />
+              {t("admin.login.submit")}
+            </>
+          )}
         </button>
       </form>
     </main>

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import QRCode from "qrcode";
 import { prisma } from "@/lib/db";
-import { buildQrPayload } from "@/lib/qr";
+import { buildQrPayload, generateQrPngBuffer } from "@/lib/qr";
 
 export async function GET(
   _req: Request,
@@ -16,19 +15,13 @@ export async function GET(
     return new NextResponse("Not found", { status: 404 });
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  const payload = buildQrPayload(token, baseUrl);
-  const buffer = await QRCode.toBuffer(payload, {
-    errorCorrectionLevel: "H",
-    margin: 2,
-    width: 400,
-    color: { dark: "#5c3d1e", light: "#ffffff" },
-  });
+  const payload = buildQrPayload(token);
+  const buffer = await generateQrPngBuffer(payload);
 
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "image/png",
-      "Cache-Control": "private, max-age=3600",
+      "Cache-Control": "public, max-age=3600",
     },
   });
 }

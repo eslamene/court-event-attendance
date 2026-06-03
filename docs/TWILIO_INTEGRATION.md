@@ -4,7 +4,7 @@ This app sends the attendance QR code when an admin **approves** a registration:
 
 | Channel | Provider | What the judge receives |
 |---------|----------|-------------------------|
-| **Email** | Twilio **SendGrid** (preferred) or Resend | HTML email with embedded QR image |
+| **Email** | **Twilio Email API** (`TWILIO_ACCOUNT_SID` + `TWILIO_AUTH_TOKEN`) or SendGrid / Resend | HTML email with embedded QR image |
 | **WhatsApp** | Twilio Messaging API | Arabic message + QR image (PNG URL) |
 | **SMS** | Twilio (optional) | Text + link to QR payload |
 
@@ -47,35 +47,43 @@ Example: `https://court-events.flagshipfintech.com/api/qr/QR-abc123.../image`
 
 ---
 
-## Step 2 — Email via Twilio SendGrid
+## Step 2 — Email (Twilio Account SID + Auth Token)
 
-Twilio owns **SendGrid** for transactional email (recommended if you already use Twilio).
+The app uses the **Twilio Email API** when `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `EMAIL_FROM` are set (same credentials as WhatsApp).
 
-### 2.1 Enable SendGrid
+### 2.1 Verify a sender in Twilio Console
 
-1. Twilio Console → **Email** (or https://app.sendgrid.com)  
-2. Create a SendGrid API key with **Mail Send** permission  
-3. Verify a **sender identity** (single sender or domain authentication)
+1. Twilio Console → **Email** → **Sender Identities**  
+2. Add and verify a **domain** or **single sender**  
+3. Use that address in `EMAIL_FROM`
 
-### 2.2 Environment variables
+### 2.2 Environment variables (recommended)
+
+```env
+TWILIO_ACCOUNT_SID=ACxxxxxxxx
+TWILIO_AUTH_TOKEN=xxxxxxxx
+EMAIL_FROM="Court Attendance <noreply@yourdomain.com>"
+```
+
+No separate SendGrid API key is required for this path.
+
+### 2.3 Optional fallbacks
+
+**SendGrid API key** (legacy):
 
 ```env
 SENDGRID_API_KEY=SG.xxxxxxxxxxxxx
 EMAIL_FROM="Court Attendance <noreply@yourdomain.com>"
 ```
 
-`EMAIL_FROM` must match a verified sender in SendGrid.
-
-### 2.3 Alternative: Resend
-
-If you prefer Resend instead of SendGrid:
+**Resend**:
 
 ```env
 RESEND_API_KEY=re_xxxxx
 EMAIL_FROM="Event <onboarding@resend.dev>"
 ```
 
-The app uses **SendGrid first** if `SENDGRID_API_KEY` is set, otherwise Resend.
+Priority: **Twilio Email** (SID + token) → SendGrid key → Resend key.
 
 ---
 
@@ -138,10 +146,10 @@ Vercel → **court-event-attendance** → Settings → Environment Variables →
 
 | Variable | Example |
 |----------|---------|
-| `SENDGRID_API_KEY` | `SG....` |
-| `EMAIL_FROM` | `Attendance <noreply@yourdomain.com>` |
 | `TWILIO_ACCOUNT_SID` | `AC....` |
 | `TWILIO_AUTH_TOKEN` | `....` |
+| `EMAIL_FROM` | `Attendance <noreply@yourdomain.com>` |
+| `SENDGRID_API_KEY` | optional fallback |
 | `TWILIO_WHATSAPP_NUMBER` | `whatsapp:+14155238886` |
 | `TWILIO_PHONE_NUMBER` | optional |
 | `NOTIFY_SMS` | `false` |
@@ -180,10 +188,9 @@ vercel env add TWILIO_WHATSAPP_NUMBER production
 
 ```env
 NEXT_PUBLIC_APP_URL=http://localhost:3000
-SENDGRID_API_KEY=SG...
-EMAIL_FROM=...
 TWILIO_ACCOUNT_SID=AC...
 TWILIO_AUTH_TOKEN=...
+EMAIL_FROM="Court Attendance <noreply@yourdomain.com>"
 TWILIO_WHATSAPP_NUMBER=whatsapp:+14155238886
 ```
 
@@ -201,7 +208,9 @@ cd web && npm run dev
 
 | Issue | Fix |
 |-------|-----|
-| Email not sent | Verify SendGrid sender; check API key scope |
+| Email not sent | Verify **Twilio Email** sender identity; check `EMAIL_FROM` matches verified domain |
+| `Invalid value for field 'from'` | `EMAIL_FROM` must be an address on a **verified** Twilio Email domain (no `@resend.dev`); fix typos in domain; use only one `EMAIL_FROM` in `.env` |
+| `TWILIO_ACCOUNT_SID` starts with `SK` | Use **Account SID** (`AC…`) from the Twilio Console dashboard, not an API Key SID |
 | WhatsApp 63016 / sandbox | Recipient must send `join ...` to sandbox number |
 | WhatsApp media failed | Ensure `NEXT_PUBLIC_APP_URL` is public HTTPS; open `/api/qr/{token}/image` in browser |
 | 21608 invalid From | `TWILIO_WHATSAPP_NUMBER` must include `whatsapp:` prefix |

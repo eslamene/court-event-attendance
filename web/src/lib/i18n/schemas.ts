@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { validateRecipientEmail } from "@/lib/email-address";
 import type { Dictionary } from "./types";
 import { parseJsonStringArray } from "./translate";
 
@@ -111,6 +112,26 @@ export function createUpdateUserSchema(dict: Dictionary) {
   });
 }
 
+export function createNotificationTestSchema(dict: Record<string, string>) {
+  return z
+    .object({
+      channel: z.enum(["email", "sms", "whatsapp"]),
+      to: z.string().min(1, msg(dict, "validation.invalidData")),
+    })
+    .superRefine((data, ctx) => {
+      if (data.channel !== "email") return;
+      const check = validateRecipientEmail(data.to, "Test recipient");
+      if (!check.ok) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: check.error,
+          path: ["to"],
+        });
+      }
+    });
+}
+
+/** @deprecated Prefer createNotificationTestSchema(dict) in API routes */
 export const notificationTestSchema = z.object({
   channel: z.enum(["email", "sms", "whatsapp"]),
   to: z.string().min(5),
