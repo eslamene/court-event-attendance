@@ -1,4 +1,5 @@
 import { put } from "@vercel/blob";
+import { apiT } from "@/lib/i18n/api";
 import { writeFile, mkdir, unlink } from "fs/promises";
 import path from "path";
 
@@ -31,10 +32,10 @@ export async function saveEventLogo(
   file: File
 ): Promise<{ logoPath: string } | { error: string }> {
   if (!ALLOWED_TYPES.has(file.type)) {
-    return { error: "نوع الملف غير مدعوم (JPEG, PNG, WebP, GIF)" };
+    return { error: await apiT("api.unsupportedFileType") };
   }
   if (file.size > MAX_BYTES) {
-    return { error: "حجم الصورة يجب أن لا يتجاوز 2 ميجابايت" };
+    return { error: await apiT("api.fileTooLarge") };
   }
 
   const ext = extensionForMime(file.type);

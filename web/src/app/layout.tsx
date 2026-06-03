@@ -1,6 +1,14 @@
 import type { Metadata } from "next";
 import { Noto_Sans_Arabic } from "next/font/google";
 import "./globals.css";
+import { I18nProvider } from "@/components/I18nProvider";
+import {
+  getActiveLocales,
+  getDictionary,
+  getLocale,
+  getLocaleMeta,
+  getServerT,
+} from "@/lib/i18n/server";
 
 const noto = Noto_Sans_Arabic({
   variable: "--font-noto",
@@ -8,19 +16,36 @@ const noto = Noto_Sans_Arabic({
   weight: ["400", "500", "600", "700"],
 });
 
-export const metadata: Metadata = {
-  title: "تسجيل حضور الفعاليات | محكمة النقض",
-  description: "نظام تسجيل حضور القضاة والنيابة لفعاليات محكمة النقض",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getServerT();
+  return {
+    title: t("meta.title"),
+    description: t("meta.description"),
+  };
+}
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = await getLocale();
+  const meta = await getLocaleMeta(locale);
+  const dict = await getDictionary(locale);
+  const locales = await getActiveLocales();
+
   return (
-    <html lang="ar" dir="rtl" className={`${noto.variable} h-full`}>
-      <body className="min-h-full antialiased">{children}</body>
+    <html lang={locale} dir={meta.direction} className={`${noto.variable} h-full`}>
+      <body className="min-h-full antialiased">
+        <I18nProvider
+          locale={locale}
+          direction={meta.direction}
+          dict={dict}
+          locales={locales}
+        >
+          {children}
+        </I18nProvider>
+      </body>
     </html>
   );
 }

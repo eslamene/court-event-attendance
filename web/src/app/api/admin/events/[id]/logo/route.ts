@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { auth, canManageEvents } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { removeEventLogoFiles, saveEventLogo } from "@/lib/event-logo";
+import { apiT } from "@/lib/i18n/api";
+import { jsonForbidden } from "@/lib/i18n/responses";
 
 export async function POST(
   req: Request,
@@ -9,19 +11,25 @@ export async function POST(
 ) {
   const session = await auth();
   if (!session?.user || !canManageEvents(session.user.role)) {
-    return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+    return jsonForbidden();
   }
 
   const { id } = await params;
   const event = await prisma.event.findUnique({ where: { id } });
   if (!event) {
-    return NextResponse.json({ error: "الفعالية غير موجودة" }, { status: 404 });
+    return NextResponse.json(
+      { error: await apiT("api.eventNotFound") },
+      { status: 404 }
+    );
   }
 
   const form = await req.formData();
   const file = form.get("logo");
   if (!file || !(file instanceof File)) {
-    return NextResponse.json({ error: "لم يتم اختيار صورة" }, { status: 400 });
+    return NextResponse.json(
+      { error: await apiT("api.noImageSelected") },
+      { status: 400 }
+    );
   }
 
   await removeEventLogoFiles(id, event.logoPath);
@@ -44,7 +52,7 @@ export async function DELETE(
 ) {
   const session = await auth();
   if (!session?.user || !canManageEvents(session.user.role)) {
-    return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+    return jsonForbidden();
   }
 
   const { id } = await params;

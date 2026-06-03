@@ -2,14 +2,19 @@ import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { REGISTRATION_STATUS_LABELS } from "@/lib/constants";
+import { apiDict } from "@/lib/i18n/api";
+import { translate } from "@/lib/i18n/translate";
+import { jsonUnauthorized } from "@/lib/i18n/responses";
 import { format } from "date-fns";
 
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) {
-    return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
+    return jsonUnauthorized();
   }
+
+  const dict = await apiDict();
+  const t = (key: string) => translate(dict, key);
 
   const { searchParams } = new URL(req.url);
   const eventId = searchParams.get("eventId") || undefined;
@@ -22,22 +27,24 @@ export async function GET(req: Request) {
   });
 
   const rows = registrations.map((r) => ({
-    "اسم الفعالية": r.event.name,
-    "تاريخ الفعالية": format(r.event.date, "yyyy-MM-dd"),
-    "الاسم الكامل": r.fullName,
-    الرتبة: r.rank,
-    الجهة: r.entity,
-    "البريد الإلكتروني": r.email,
-    "رقم الجوال": r.mobile,
-    ملاحظات: r.notes ?? "",
-    الحالة: REGISTRATION_STATUS_LABELS[r.status] ?? r.status,
-    "تاريخ التسجيل": format(r.createdAt, "yyyy-MM-dd HH:mm"),
-    "تاريخ الحضور": r.attendedAt ? format(r.attendedAt, "yyyy-MM-dd HH:mm") : "",
+    [t("export.eventName")]: r.event.name,
+    [t("export.eventDate")]: format(r.event.date, "yyyy-MM-dd"),
+    [t("export.fullName")]: r.fullName,
+    [t("export.rank")]: r.rank,
+    [t("export.entity")]: r.entity,
+    [t("export.email")]: r.email,
+    [t("export.mobile")]: r.mobile,
+    Notes: r.notes ?? "",
+    [t("export.status")]: t(`status.${r.status}`),
+    [t("export.registeredAt")]: format(r.createdAt, "yyyy-MM-dd HH:mm"),
+    [t("export.attendedAt")]: r.attendedAt
+      ? format(r.attendedAt, "yyyy-MM-dd HH:mm")
+      : "",
   }));
 
   const sheet = XLSX.utils.json_to_sheet(rows);
   const book = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(book, sheet, "التسجيلات");
+  XLSX.utils.book_append_sheet(book, sheet, t("export.sheetName"));
 
   if (formatType === "csv") {
     const csv = XLSX.utils.sheet_to_csv(sheet);

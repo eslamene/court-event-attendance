@@ -3,6 +3,7 @@ import sgMail from "@sendgrid/mail";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import { sendTwilioMessage } from "./twilio-client";
+import { PLATFORM_LOGO_PATH } from "./platform-logo";
 
 export type NotificationChannel = "email" | "sms" | "whatsapp";
 
@@ -49,7 +50,7 @@ function buildEmailHtml(opts: {
   instructions: string;
   qrDataUrl: string;
 }) {
-  const logoUrl = `${process.env.NEXT_PUBLIC_APP_URL || ""}/logo.jpeg`;
+  const logoUrl = `${process.env.NEXT_PUBLIC_APP_URL || ""}${PLATFORM_LOGO_PATH}`;
   return `
     <div dir="rtl" style="font-family: Tahoma, Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #faf8f5; padding: 24px;">
       ${logoUrl ? `<p style="text-align:center"><img src="${logoUrl}" alt="شعار الفعالية" width="100" style="border-radius:50%"/></p>` : ""}

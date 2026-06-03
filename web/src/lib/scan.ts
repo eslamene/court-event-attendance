@@ -1,5 +1,6 @@
 import { prisma } from "./db";
 import type { ScanResult } from "@/generated/prisma/client";
+import { apiT } from "@/lib/i18n/api";
 
 export type ScanResponse = {
   result: ScanResult;
@@ -44,7 +45,7 @@ export async function processScan(params: {
       include: { registration: { include: { event: true } } },
     });
     if (existing) {
-      return logResultFromExisting(existing);
+      return await logResultFromExisting(existing);
     }
   }
 
@@ -57,7 +58,7 @@ export async function processScan(params: {
     return finishScan({
       result: "INVALID",
       success: false,
-      message: "رمز QR غير صالح",
+      message: await apiT("scan.invalidQr"),
       registrationId: null,
       eventId: params.eventId,
       scannedById: params.scannedById,
@@ -71,7 +72,7 @@ export async function processScan(params: {
     return finishScan({
       result: "WRONG_EVENT",
       success: false,
-      message: "هذا الرمز مخصص لفعالية أخرى",
+      message: await apiT("scan.wrongEvent"),
       registrationId: registration.id,
       eventId: params.eventId,
       scannedById: params.scannedById,
@@ -86,7 +87,7 @@ export async function processScan(params: {
     return finishScan({
       result: "INVALID",
       success: false,
-      message: "التسجيل غير معتمد",
+      message: await apiT("scan.notApproved"),
       registrationId: registration.id,
       eventId: params.eventId,
       scannedById: params.scannedById,
@@ -101,7 +102,7 @@ export async function processScan(params: {
     return finishScan({
       result: "ALREADY_USED",
       success: false,
-      message: "تم استخدام هذا الرمز مسبقاً",
+      message: await apiT("scan.alreadyUsed"),
       registrationId: registration.id,
       eventId: params.eventId,
       scannedById: params.scannedById,
@@ -124,7 +125,7 @@ export async function processScan(params: {
   return finishScan({
     result: "SUCCESS",
     success: true,
-    message: "تم تسجيل الحضور بنجاح",
+    message: await apiT("scan.success"),
     registrationId: registration.id,
     eventId: params.eventId,
     scannedById: params.scannedById,
@@ -176,7 +177,7 @@ async function finishScan(args: {
   };
 }
 
-function logResultFromExisting(log: {
+async function logResultFromExisting(log: {
   result: ScanResult;
   judgeName: string | null;
   registration: {
@@ -185,18 +186,18 @@ function logResultFromExisting(log: {
     entity: string;
     event: { name: string };
   } | null;
-}): ScanResponse {
-  const messages: Record<ScanResult, string> = {
-    SUCCESS: "تم تسجيل الحضور بنجاح",
-    INVALID: "رمز QR غير صالح",
-    ALREADY_USED: "تم استخدام هذا الرمز مسبقاً",
-    WRONG_EVENT: "هذا الرمز مخصص لفعالية أخرى",
+}): Promise<ScanResponse> {
+  const keyMap: Record<ScanResult, string> = {
+    SUCCESS: "scan.success",
+    INVALID: "scan.invalidQr",
+    ALREADY_USED: "scan.alreadyUsed",
+    WRONG_EVENT: "scan.wrongEvent",
   };
 
   return {
     result: log.result,
     success: log.result === "SUCCESS",
-    message: messages[log.result],
+    message: await apiT(keyMap[log.result]),
     registration: log.registration
       ? {
           fullName: log.registration.fullName,

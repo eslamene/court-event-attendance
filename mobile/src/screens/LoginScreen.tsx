@@ -42,7 +42,7 @@ export function LoginScreen({ onLogin }: Props) {
   return (
     <View style={styles.container}>
       <Image
-        source={require("../../assets/logo.jpeg")}
+        source={require("../../assets/logo.png")}
         style={styles.logo}
       />
       <Text style={styles.title}>مسح حضور الفعاليات</Text>

@@ -5,8 +5,10 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LogoHeader } from "@/components/LogoHeader";
 import { TextField } from "@/components/ui/Field";
+import { useI18n } from "@/components/I18nProvider";
 
 export default function AdminLoginPage() {
+  const { t } = useI18n();
   const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -25,7 +27,7 @@ export default function AdminLoginPage() {
 
     setLoading(false);
     if (result?.error) {
-      setError("بيانات الدخول غير صحيحة");
+      setError(t("admin.login.error"));
       return;
     }
     router.push("/admin");
@@ -34,15 +36,17 @@ export default function AdminLoginPage() {
 
   return (
     <main className="min-h-screen">
-      <LogoHeader subtitle="لوحة الإدارة" />
+      <LogoHeader subtitle={t("header.adminSubtitle")} />
       <form
         onSubmit={onSubmit}
         className="mx-auto mt-12 max-w-md space-y-5 rounded-2xl border border-border bg-card p-8 shadow-sm"
       >
-        <h2 className="text-center text-lg font-bold text-gold-dark">تسجيل الدخول</h2>
+        <h2 className="text-center text-lg font-bold text-gold-dark">
+          {t("admin.login.title")}
+        </h2>
         <TextField
           name="email"
-          label="البريد الإلكتروني"
+          label={t("register.email")}
           type="email"
           required
           dir="ltr"
@@ -50,7 +54,7 @@ export default function AdminLoginPage() {
         />
         <TextField
           name="password"
-          label="كلمة المرور"
+          label={t("admin.login.password")}
           type="password"
           required
           dir="ltr"
@@ -64,7 +68,7 @@ export default function AdminLoginPage() {
           disabled={loading}
           className="w-full rounded-xl bg-gold-dark py-3 font-semibold text-white hover:bg-bronze disabled:opacity-60"
         >
-          {loading ? "جاري الدخول..." : "دخول"}
+          {loading ? t("admin.login.submitting") : t("admin.login.submit")}
         </button>
       </form>
     </main>

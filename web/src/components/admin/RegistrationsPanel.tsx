@@ -2,11 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import {
-  ENTITY_OPTIONS,
-  RANK_OPTIONS,
-  REGISTRATION_STATUS_LABELS,
-} from "@/lib/constants";
+import { REGISTRATION_STATUSES } from "@/lib/constants";
+import { useI18n } from "@/components/I18nProvider";
+import { parseJsonStringArray } from "@/lib/i18n/translate";
 import { format } from "date-fns";
 
 type Registration = {
@@ -26,6 +24,9 @@ type Registration = {
 type EventItem = { id: string; name: string };
 
 export function RegistrationsPanel() {
+  const { t, dict } = useI18n();
+  const ranks = parseJsonStringArray(dict, "options.ranks");
+  const entities = parseJsonStringArray(dict, "options.entities");
   const { data: session } = useSession();
   const canApprove =
     session?.user?.role === "ADMIN" ||
@@ -71,7 +72,7 @@ export function RegistrationsPanel() {
   }
 
   async function reject(id: string) {
-    if (!confirm("هل أنتم متأكدون من رفض هذا التسجيل؟")) return;
+    if (!confirm(t("admin.registrations.rejectConfirm"))) return;
     setActionId(id);
     await fetch(`/api/admin/registrations/${id}/reject`, { method: "POST" });
     await load();
@@ -99,7 +100,7 @@ export function RegistrationsPanel() {
           onChange={(e) => setEventId(e.target.value)}
           className="rounded-lg border border-border px-3 py-2 text-sm"
         >
-          <option value="">كل الفعاليات</option>
+          <option value="">{t("admin.registrations.allEvents")}</option>
           {events.map((e) => (
             <option key={e.id} value={e.id}>
               {e.name}
@@ -111,10 +112,10 @@ export function RegistrationsPanel() {
           onChange={(e) => setStatus(e.target.value)}
           className="rounded-lg border border-border px-3 py-2 text-sm"
         >
-          <option value="">كل الحالات</option>
-          {Object.entries(REGISTRATION_STATUS_LABELS).map(([k, v]) => (
+          <option value="">{t("admin.registrations.allStatuses")}</option>
+          {REGISTRATION_STATUSES.map((k) => (
             <option key={k} value={k}>
-              {v}
+              {t(`status.${k}`)}
             </option>
           ))}
         </select>
@@ -123,8 +124,8 @@ export function RegistrationsPanel() {
           onChange={(e) => setRank(e.target.value)}
           className="rounded-lg border border-border px-3 py-2 text-sm"
         >
-          <option value="">كل الرتب</option>
-          {RANK_OPTIONS.map((r) => (
+          <option value="">{t("admin.registrations.allRanks")}</option>
+          {ranks.map((r) => (
             <option key={r} value={r}>
               {r}
             </option>
@@ -135,8 +136,8 @@ export function RegistrationsPanel() {
           onChange={(e) => setEntity(e.target.value)}
           className="rounded-lg border border-border px-3 py-2 text-sm"
         >
-          <option value="">كل الجهات</option>
-          {ENTITY_OPTIONS.map((ent) => (
+          <option value="">{t("admin.registrations.allEntities")}</option>
+          {entities.map((ent) => (
             <option key={ent} value={ent}>
               {ent}
             </option>
@@ -147,13 +148,13 @@ export function RegistrationsPanel() {
             onClick={() => exportData("xlsx")}
             className="rounded-lg bg-gold-dark px-4 py-2 text-sm text-white hover:bg-bronze"
           >
-            تصدير Excel
+            {t("admin.registrations.exportExcel")}
           </button>
           <button
             onClick={() => exportData("csv")}
             className="rounded-lg border border-border px-4 py-2 text-sm hover:bg-[#f5f0e8]"
           >
-            تصدير CSV
+            {t("admin.registrations.exportCsv")}
           </button>
         </div>
       </div>
@@ -162,26 +163,28 @@ export function RegistrationsPanel() {
         <table className="w-full min-w-[900px] text-sm">
           <thead className="bg-[#f5f0e8] text-gold-dark">
             <tr>
-              <th className="px-4 py-3 text-right">الاسم</th>
-              <th className="px-4 py-3 text-right">الرتبة</th>
-              <th className="px-4 py-3 text-right">الجهة</th>
-              <th className="px-4 py-3 text-right">الفعالية</th>
-              <th className="px-4 py-3 text-right">الحالة</th>
-              <th className="px-4 py-3 text-right">التاريخ</th>
-              {canApprove && <th className="px-4 py-3 text-right">إجراءات</th>}
+              <th className="px-4 py-3 text-right">{t("admin.registrations.colName")}</th>
+              <th className="px-4 py-3 text-right">{t("admin.registrations.colRank")}</th>
+              <th className="px-4 py-3 text-right">{t("admin.registrations.colEntity")}</th>
+              <th className="px-4 py-3 text-right">{t("admin.registrations.colEvent")}</th>
+              <th className="px-4 py-3 text-right">{t("admin.registrations.colStatus")}</th>
+              <th className="px-4 py-3 text-right">{t("admin.registrations.colDate")}</th>
+              {canApprove && (
+                <th className="px-4 py-3 text-right">{t("admin.registrations.colActions")}</th>
+              )}
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
                 <td colSpan={7} className="px-4 py-8 text-center text-bronze">
-                  جاري التحميل...
+                  {t("admin.registrations.loading")}
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-4 py-8 text-center text-bronze">
-                  لا توجد تسجيلات
+                  {t("admin.registrations.empty")}
                 </td>
               </tr>
             ) : (
@@ -208,7 +211,7 @@ export function RegistrationsPanel() {
                     <span
                       className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusColor[r.status] ?? ""}`}
                     >
-                      {REGISTRATION_STATUS_LABELS[r.status] ?? r.status}
+                      {t(`status.${r.status}`)}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-xs text-bronze">
@@ -223,14 +226,14 @@ export function RegistrationsPanel() {
                             onClick={() => approve(r.id)}
                             className="rounded bg-success px-3 py-1 text-xs text-white disabled:opacity-50"
                           >
-                            موافقة
+                            {t("admin.registrations.approve")}
                           </button>
                           <button
                             disabled={actionId === r.id}
                             onClick={() => reject(r.id)}
                             className="rounded bg-error px-3 py-1 text-xs text-white disabled:opacity-50"
                           >
-                            رفض
+                            {t("admin.registrations.reject")}
                           </button>
                         </div>
                       )}

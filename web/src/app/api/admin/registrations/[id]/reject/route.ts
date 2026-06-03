@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth, canApprove } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { apiT } from "@/lib/i18n/api";
+import { jsonForbidden } from "@/lib/i18n/responses";
 
 export async function POST(
   _req: Request,
@@ -8,19 +10,22 @@ export async function POST(
 ) {
   const session = await auth();
   if (!session?.user || !canApprove(session.user.role)) {
-    return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+    return jsonForbidden();
   }
 
   const { id } = await params;
   const registration = await prisma.registration.findUnique({ where: { id } });
 
   if (!registration) {
-    return NextResponse.json({ error: "التسجيل غير موجود" }, { status: 404 });
+    return NextResponse.json(
+      { error: await apiT("api.registrationNotFound") },
+      { status: 404 }
+    );
   }
 
   if (registration.status !== "PENDING") {
     return NextResponse.json(
-      { error: "لا يمكن رفض هذا التسجيل" },
+      { error: await apiT("api.cannotReject") },
       { status: 400 }
     );
   }

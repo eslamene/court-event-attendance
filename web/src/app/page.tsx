@@ -2,9 +2,12 @@ import Link from "next/link";
 import { startOfDay } from "date-fns";
 import { LogoHeader } from "@/components/LogoHeader";
 import { EventCard } from "@/components/EventCard";
+import { LocaleSwitcher } from "@/components/LocaleSwitcher";
 import { prisma } from "@/lib/db";
+import { getServerT } from "@/lib/i18n/server";
 
 export default async function HomePage() {
+  const { t } = await getServerT();
   const today = startOfDay(new Date());
 
   const allEvents = await prisma.event.findMany({
@@ -26,26 +29,27 @@ export default async function HomePage() {
     (e) => !e.isActive || e.date < today
   );
 
-  // Upcoming first; past most recent first
   pastEvents.sort((a, b) => b.date.getTime() - a.date.getTime());
 
   return (
     <main className="min-h-screen pb-12">
-      <LogoHeader subtitle="اليوبيل الذهبي للنيابة العامة لدى محكمة النقض" />
+      <LogoHeader />
 
       <section className="mx-auto max-w-2xl px-4 py-10">
         <p className="mb-8 text-center leading-relaxed text-bronze">
-          مرحباً بكم في نظام تسجيل حضور الفعاليات. اختروا الفعالية المناسبة
-          لإتمام التسجيل.
+          {t("home.welcome")}
         </p>
 
-        <h2 className="mb-4 text-lg font-bold text-gold-dark">
-          الفعاليات المتاحة للتسجيل
-        </h2>
+        <div className="mb-6 flex items-center justify-between gap-4">
+          <h2 className="text-lg font-bold text-gold-dark">
+            {t("home.activeEvents")}
+          </h2>
+          <LocaleSwitcher />
+        </div>
 
         {activeEvents.length === 0 ? (
           <p className="rounded-xl border border-border bg-card p-6 text-center text-bronze">
-            لا توجد فعاليات مفتوحة للتسجيل حالياً.
+            {t("home.noActiveEvents")}
           </p>
         ) : (
           <ul className="space-y-3">
@@ -61,7 +65,9 @@ export default async function HomePage() {
           <details className="group mt-10 rounded-xl border border-border bg-[#f5f0e8]/50">
             <summary className="cursor-pointer list-none px-5 py-4 font-semibold text-gold-dark marker:content-none [&::-webkit-details-marker]:hidden">
               <span className="flex items-center justify-between gap-2">
-                <span>الفعاليات السابقة ({pastEvents.length})</span>
+                <span>
+                  {t("home.pastEvents")} ({pastEvents.length})
+                </span>
                 <span
                   className="text-bronze transition group-open:rotate-180"
                   aria-hidden
@@ -76,7 +82,7 @@ export default async function HomePage() {
                   <EventCard event={event} />
                   {!event.isActive && (
                     <p className="mt-1 pr-20 text-xs text-bronze">
-                      التسجيل مغلق
+                      {t("home.registrationClosed")}
                     </p>
                   )}
                 </div>
@@ -87,7 +93,7 @@ export default async function HomePage() {
 
         <p className="mt-10 text-center text-sm text-bronze">
           <Link href="/admin/login" className="underline hover:text-gold-dark">
-            دخول الإدارة
+            {t("home.adminLogin")}
           </Link>
         </p>
       </section>

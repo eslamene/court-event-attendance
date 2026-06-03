@@ -5,7 +5,7 @@ import { getNotificationsSummary } from "@/lib/notifications";
 export async function GET() {
   const session = await auth();
   if (!session?.user || !canManageEvents(session.user.role)) {
-    return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+    return (await import("@/lib/i18n/responses")).jsonForbidden();
   }
 
   return NextResponse.json(getNotificationsSummary());

@@ -7,6 +7,7 @@ import {
   type DeliveryResult,
 } from "./notifications";
 import type { Event, Registration } from "@/generated/prisma/client";
+import { apiT } from "@/lib/i18n/api";
 
 export type ApprovalResult = {
   registration: Registration & { event: Event };
@@ -24,9 +25,9 @@ export async function approveRegistration(
     include: { event: true },
   });
 
-  if (!registration) throw new Error("التسجيل غير موجود");
+  if (!registration) throw new Error(await apiT("approval.notFound"));
   if (registration.status !== "PENDING") {
-    throw new Error("لا يمكن الموافقة على هذا التسجيل");
+    throw new Error(await apiT("approval.cannotApprove"));
   }
 
   const qrToken = generateQrToken();
@@ -45,8 +46,7 @@ export async function approveRegistration(
     include: { event: true },
   });
 
-  const instructions =
-    "يرجى إبراز رمز QR عند الوصول إلى مقر الفعالية. الرمز صالح لمرة واحدة فقط.";
+  const instructions = await apiT("approval.qrInstructions");
 
   const sendSms =
     process.env.NOTIFY_SMS === "true" ||

@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { auth, canManageEvents } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { eventSchema } from "@/lib/validators";
+import { apiDict, apiT } from "@/lib/i18n/api";
+import { createEventSchema } from "@/lib/i18n/schemas";
 import { uniqueEventSlug } from "@/lib/slug";
 
 export async function GET() {
   const session = await auth();
   if (!session?.user) {
-    return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
+    return NextResponse.json({ error: await apiT("api.unauthorized") }, { status: 401 });
   }
 
   const events = await prisma.event.findMany({
@@ -34,20 +35,24 @@ export async function GET() {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user || !canManageEvents(session.user.role)) {
-    return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+    return NextResponse.json({ error: await apiT("api.forbidden") }, { status: 403 });
   }
 
+  const dict = await apiDict();
   let body: unknown;
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "بيانات غير صالحة" }, { status: 400 });
+    return NextResponse.json({ error: await apiT("api.invalidData") }, { status: 400 });
   }
 
-  const parsed = eventSchema.safeParse(body);
+  const parsed = createEventSchema(dict).safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "بيانات غير صالحة" },
+      {
+        error:
+          parsed.error.issues[0]?.message ?? (await apiT("api.invalidData")),
+      },
       { status: 400 }
     );
   }

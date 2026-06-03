@@ -22,7 +22,7 @@ export default async function RegisterPage({
   return (
     <main className="min-h-screen pb-12">
       <LogoHeader
-        subtitle="نموذج تسجيل الحضور"
+        subtitle={event.name}
         logoSrc={event.logoPath}
         logoAlt={event.name}
       />

@@ -96,3 +96,31 @@ model ScanLog {
   offlineId      String?       @unique
   syncedAt       DateTime?
 }
+
+model Locale {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  direction String   @default("rtl")
+  isDefault Boolean  @default(false)
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  entries DictionaryEntry[]
+}
+
+model DictionaryEntry {
+  id        String   @id @default(cuid())
+  localeId  String
+  locale    Locale   @relation(fields: [localeId], references: [id], onDelete: Cascade)
+  key       String
+  namespace String   @default("common")
+  value     String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([localeId, key])
+  @@index([localeId, namespace])
+}

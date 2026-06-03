@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { TextField } from "@/components/ui/Field";
+import { useI18n } from "@/components/I18nProvider";
 
 type Status = {
   email: { configured: boolean; provider: string };
@@ -10,6 +11,7 @@ type Status = {
 };
 
 export function SettingsPanel() {
+  const { t } = useI18n();
   const [status, setStatus] = useState<Status | null>(null);
   const [testResult, setTestResult] = useState("");
   const [loading, setLoading] = useState(false);
@@ -36,20 +38,26 @@ export function SettingsPanel() {
     const data = await res.json();
     setLoading(false);
     if (data.sent) {
-      setTestResult(`تم الإرسال بنجاح (${data.provider || data.channel})`);
+      setTestResult(
+        t("admin.settings.testSuccess", {
+          provider: data.provider || data.channel,
+        })
+      );
     } else {
-      setTestResult(data.error || "لم يُرسل — تحقق من الإعدادات");
+      setTestResult(data.error || t("admin.settings.testFailed"));
     }
   }
 
   return (
     <div className="max-w-2xl space-y-8">
       <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
-        <h2 className="mb-4 font-bold text-gold-dark">حالة الإشعارات</h2>
+        <h2 className="mb-4 font-bold text-gold-dark">{t("admin.settings.title")}</h2>
         <div className="space-y-3 text-sm">
           <div className="flex items-center justify-between rounded-lg bg-[#f5f0e8] px-4 py-3">
             <span>
-              البريد ({status?.email.provider ?? "SendGrid / Resend"})
+              {t("admin.settings.email", {
+                provider: status?.email.provider ?? "SendGrid / Resend",
+              })}
             </span>
             <StatusBadge ok={status?.email.configured} />
           </div>
@@ -88,7 +96,7 @@ export function SettingsPanel() {
         </label>
         <TextField
           name="to"
-          label="المستلم (بريد أو +201xxxxxxxxx للواتساب/SMS)"
+          label={t("admin.settings.testRecipient")}
           required
           dir="ltr"
           className="text-left"
@@ -98,7 +106,7 @@ export function SettingsPanel() {
           disabled={loading}
           className="rounded-xl bg-gold-dark px-6 py-2.5 text-white hover:bg-bronze disabled:opacity-60"
         >
-          {loading ? "جاري الإرسال..." : "إرسال اختبار"}
+          {loading ? t("admin.settings.testSending") : t("admin.settings.testSend")}
         </button>
         {testResult && (
           <p
@@ -113,12 +121,13 @@ export function SettingsPanel() {
 }
 
 function StatusBadge({ ok }: { ok?: boolean }) {
+  const { t } = useI18n();
   if (ok === undefined) return <span className="text-bronze">...</span>;
   return (
     <span
       className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${ok ? "bg-green-100 text-green-900" : "bg-amber-100 text-amber-900"}`}
     >
-      {ok ? "مفعّل" : "غير مُعد"}
+      {ok ? t("admin.settings.enabled") : t("admin.settings.disabled")}
     </span>
   );
 }

@@ -7,7 +7,8 @@ import {
   TextAreaField,
   ReadOnlyField,
 } from "@/components/ui/Field";
-import { ENTITY_OPTIONS, RANK_OPTIONS } from "@/lib/constants";
+import { useI18n } from "@/components/I18nProvider";
+import { parseJsonStringArray } from "@/lib/i18n/translate";
 
 type Props = {
   slug: string;
@@ -16,6 +17,9 @@ type Props = {
 };
 
 export function RegistrationForm({ slug, eventName, eventDate }: Props) {
+  const { t, dict } = useI18n();
+  const ranks = parseJsonStringArray(dict, "options.ranks");
+  const entities = parseJsonStringArray(dict, "options.entities");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -43,12 +47,12 @@ export function RegistrationForm({ slug, eventName, eventDate }: Props) {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "حدث خطأ أثناء التسجيل");
+        setError(data.error || t("register.errorGeneric"));
         return;
       }
       setSuccess(true);
     } catch {
-      setError("تعذر الاتصال بالخادم. يرجى المحاولة لاحقاً.");
+      setError(t("register.errorNetwork"));
     } finally {
       setLoading(false);
     }
@@ -60,11 +64,10 @@ export function RegistrationForm({ slug, eventName, eventDate }: Props) {
         <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-3xl text-success">
           ✓
         </div>
-        <h2 className="mb-3 text-xl font-bold text-gold-dark">تم استلام طلبكم</h2>
-        <p className="leading-relaxed text-bronze">
-          شكراً لتسجيلكم. طلبكم قيد المراجعة من قبل الإدارة. سيتم إرسال رمز QR
-          إلى بريدكم الإلكتروني ورقم جوالكم عند الموافقة.
-        </p>
+        <h2 className="mb-3 text-xl font-bold text-gold-dark">
+          {t("register.successTitle")}
+        </h2>
+        <p className="leading-relaxed text-bronze">{t("register.successBody")}</p>
       </div>
     );
   }
@@ -75,33 +78,43 @@ export function RegistrationForm({ slug, eventName, eventDate }: Props) {
       className="space-y-5 rounded-2xl border border-border bg-card p-6 shadow-sm md:p-8"
     >
       <h2 className="border-b border-border pb-4 text-center text-lg font-bold text-gold-dark">
-        بيانات التسجيل
+        {t("register.formTitle")}
       </h2>
 
-      <ReadOnlyField label="اسم الفعالية" value={eventName} />
-      <ReadOnlyField label="تاريخ الفعالية" value={eventDate} />
+      <ReadOnlyField label={t("register.eventName")} value={eventName} />
+      <ReadOnlyField label={t("register.eventDate")} value={eventDate} />
 
       <TextField
         name="fullName"
-        label="الاسم الكامل"
+        label={t("register.fullName")}
         required
         autoComplete="name"
       />
-      <SelectField name="rank" label="الرتبة / الدرجة" required defaultValue="">
+      <SelectField
+        name="rank"
+        label={t("register.rank")}
+        required
+        defaultValue=""
+      >
         <option value="" disabled>
-          — اختر الرتبة —
+          {t("register.selectRank")}
         </option>
-        {RANK_OPTIONS.map((r) => (
+        {ranks.map((r) => (
           <option key={r} value={r}>
             {r}
           </option>
         ))}
       </SelectField>
-      <SelectField name="entity" label="الجهة / الانتماء" required defaultValue="">
+      <SelectField
+        name="entity"
+        label={t("register.entity")}
+        required
+        defaultValue=""
+      >
         <option value="" disabled>
-          — اختر الجهة —
+          {t("register.selectEntity")}
         </option>
-        {ENTITY_OPTIONS.map((e) => (
+        {entities.map((e) => (
           <option key={e} value={e}>
             {e}
           </option>
@@ -109,7 +122,7 @@ export function RegistrationForm({ slug, eventName, eventDate }: Props) {
       </SelectField>
       <TextField
         name="email"
-        label="البريد الإلكتروني"
+        label={t("register.email")}
         type="email"
         required
         dir="ltr"
@@ -118,7 +131,7 @@ export function RegistrationForm({ slug, eventName, eventDate }: Props) {
       />
       <TextField
         name="mobile"
-        label="رقم الجوال"
+        label={t("register.mobile")}
         type="tel"
         required
         dir="ltr"
@@ -126,7 +139,7 @@ export function RegistrationForm({ slug, eventName, eventDate }: Props) {
         placeholder="01xxxxxxxxx"
         autoComplete="tel"
       />
-      <TextAreaField name="notes" label="ملاحظات (اختياري)" rows={3} />
+      <TextAreaField name="notes" label={t("register.notes")} rows={3} />
 
       {error && (
         <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-error">{error}</p>
@@ -137,7 +150,7 @@ export function RegistrationForm({ slug, eventName, eventDate }: Props) {
         disabled={loading}
         className="w-full rounded-xl bg-gold-dark py-3 font-semibold text-white transition hover:bg-bronze disabled:opacity-60"
       >
-        {loading ? "جاري الإرسال..." : "إرسال طلب التسجيل"}
+        {loading ? t("register.submitting") : t("register.submit")}
       </button>
     </form>
   );

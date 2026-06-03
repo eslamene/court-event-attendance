@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { apiT } from "@/lib/i18n/api";
 import { prisma } from "./db";
 
 export async function verifyAdminPassword(
@@ -7,12 +8,12 @@ export async function verifyAdminPassword(
 ): Promise<{ ok: boolean; error?: string }> {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user || !user.isActive || user.role !== "ADMIN") {
-    return { ok: false, error: "يتطلب هذا الإجراء حساب مدير النظام" };
+    return { ok: false, error: await apiT("api.adminRequired") };
   }
 
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) {
-    return { ok: false, error: "كلمة مرور المدير غير صحيحة" };
+    return { ok: false, error: await apiT("api.wrongAdminPassword") };
   }
 
   return { ok: true };

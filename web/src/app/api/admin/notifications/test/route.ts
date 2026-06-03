@@ -1,31 +1,29 @@
 import { NextResponse } from "next/server";
 import { auth, canManageEvents } from "@/lib/auth";
-import { notificationTestSchema } from "@/lib/validators";
+import { notificationTestSchema } from "@/lib/i18n/schemas";
 import {
   sendTestEmail,
   sendTestSms,
   sendTestWhatsApp,
 } from "@/lib/notifications";
+import { jsonForbidden, jsonInvalidData } from "@/lib/i18n/responses";
 
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user || !canManageEvents(session.user.role)) {
-    return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+    return jsonForbidden();
   }
 
   let body: unknown;
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "بيانات غير صالحة" }, { status: 400 });
+    return jsonInvalidData();
   }
 
   const parsed = notificationTestSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "بيانات غير صالحة" },
-      { status: 400 }
-    );
+    return jsonInvalidData(parsed.error.issues[0]?.message);
   }
 
   const result =

@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { auth, canManageEvents } from "@/lib/auth";
 import { verifyAdminPassword } from "@/lib/admin-password";
 import { prisma } from "@/lib/db";
-import { clearEventDataSchema } from "@/lib/validators";
+import { apiDict, apiT } from "@/lib/i18n/api";
+import { createClearEventDataSchema } from "@/lib/i18n/schemas";
 
 export async function POST(
   req: Request,
@@ -10,21 +11,25 @@ export async function POST(
 ) {
   const session = await auth();
   if (!session?.user || !canManageEvents(session.user.role)) {
-    return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+    return NextResponse.json({ error: await apiT("api.forbidden") }, { status: 403 });
   }
 
   const { id } = await params;
+  const dict = await apiDict();
   let body: unknown;
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "بيانات غير صالحة" }, { status: 400 });
+    return NextResponse.json({ error: await apiT("api.invalidData") }, { status: 400 });
   }
 
-  const parsed = clearEventDataSchema.safeParse(body);
+  const parsed = createClearEventDataSchema(dict).safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "بيانات غير صالحة" },
+      {
+        error:
+          parsed.error.issues[0]?.message ?? (await apiT("api.invalidData")),
+      },
       { status: 400 }
     );
   }
@@ -42,7 +47,10 @@ export async function POST(
     include: { _count: { select: { registrations: true } } },
   });
   if (!event) {
-    return NextResponse.json({ error: "الفعالية غير موجودة" }, { status: 404 });
+    return NextResponse.json(
+      { error: await apiT("api.eventNotFound") },
+      { status: 404 }
+    );
   }
 
   const [scanResult, regResult] = await prisma.$transaction([
@@ -54,6 +62,9 @@ export async function POST(
     success: true,
     deletedRegistrations: regResult.count,
     deletedScanLogs: scanResult.count,
-    message: `تم مسح ${regResult.count} تسجيل و ${scanResult.count} سجل مسح`,
+    message: await apiT("api.clearDataSuccess", {
+      registrations: regResult.count,
+      scans: scanResult.count,
+    }),
   });
 }

@@ -1,28 +1,13 @@
-export const RANK_OPTIONS = [
-  "نائب نقض",
-  "قاضي بالنقض",
-  "رئيس نيابة",
-  "قاضي",
+/** Status/role keys — resolve labels via useI18n: t(`status.${status}`) */
+export const REGISTRATION_STATUSES = [
+  "PENDING",
+  "APPROVED",
+  "REJECTED",
+  "ATTENDED",
 ] as const;
 
-export const ENTITY_OPTIONS = [
-  "محكمة النقض",
-  "المكتب الفني لمحكمة النقض",
-  "النيابة العامة لدى محكمة النقض",
+export const USER_ROLE_KEYS = [
+  "ADMIN",
+  "APPROVAL_MANAGER",
+  "EVENT_STAFF",
 ] as const;
-
-export type RankOption = (typeof RANK_OPTIONS)[number];
-export type EntityOption = (typeof ENTITY_OPTIONS)[number];
-
-export const REGISTRATION_STATUS_LABELS: Record<string, string> = {
-  PENDING: "قيد المراجعة",
-  APPROVED: "موافق عليه",
-  REJECTED: "مرفوض",
-  ATTENDED: "تم الحضور",
-};
-
-export const USER_ROLE_LABELS: Record<string, string> = {
-  ADMIN: "مدير النظام",
-  APPROVAL_MANAGER: "مدير الموافقات",
-  EVENT_STAFF: "طاقم الفعالية",
-};

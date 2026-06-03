@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { apiT } from "@/lib/i18n/api";
 
 export async function GET(
   _req: Request,
@@ -12,7 +13,10 @@ export async function GET(
   });
 
   if (!event) {
-    return NextResponse.json({ error: "الفعالية غير موجودة" }, { status: 404 });
+    return NextResponse.json(
+      { error: await apiT("api.eventNotFound") },
+      { status: 404 }
+    );
   }
 
   return NextResponse.json({

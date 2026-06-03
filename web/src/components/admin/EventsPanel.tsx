@@ -3,6 +3,8 @@
 import { FormEvent, useEffect, useState } from "react";
 import Image from "next/image";
 import { TextField } from "@/components/ui/Field";
+import { useI18n } from "@/components/I18nProvider";
+import { PLATFORM_LOGO_PATH } from "@/lib/platform-logo";
 import { format } from "date-fns";
 
 type EventRow = {
@@ -17,6 +19,7 @@ type EventRow = {
 };
 
 export function EventsPanel() {
+  const { t } = useI18n();
   const [events, setEvents] = useState<EventRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
@@ -51,7 +54,7 @@ export function EventsPanel() {
     });
     const data = await res.json();
     if (!res.ok) {
-      setError(data.error || "فشل الإنشاء");
+      setError(data.error || t("admin.events.createFailed"));
       return;
     }
 
@@ -64,7 +67,7 @@ export function EventsPanel() {
       });
     }
 
-    setMessage(`تم إنشاء الفعالية. رابط التسجيل: ${data.registrationUrl}`);
+    setMessage(t("admin.events.created", { url: data.registrationUrl }));
     (e.target as HTMLFormElement).reset();
     load();
   }
@@ -87,7 +90,7 @@ export function EventsPanel() {
     });
     const data = await res.json();
     if (!res.ok) {
-      setError(data.error || "فشل التحديث");
+      setError(data.error || t("admin.events.updateFailed"));
       return;
     }
 
@@ -101,7 +104,7 @@ export function EventsPanel() {
       });
     }
 
-    setMessage("تم تحديث الفعالية");
+    setMessage(t("admin.events.updated"));
     setEditing(null);
     load();
   }
@@ -122,11 +125,11 @@ export function EventsPanel() {
     });
     const data = await res.json();
     if (!res.ok) {
-      setError(data.error || "فشل مسح البيانات");
+      setError(data.error || t("admin.events.clearFailed"));
       return;
     }
 
-    setMessage(data.message || "تم مسح بيانات الفعالية");
+    setMessage(data.message || t("admin.events.cleared"));
     setClearing(null);
     load();
   }
@@ -145,8 +148,8 @@ export function EventsPanel() {
         className="max-w-lg space-y-4 rounded-xl border border-border bg-card p-6 shadow-sm"
       >
         <h2 className="font-bold text-gold-dark">إنشاء فعالية جديدة</h2>
-        <TextField name="name" label="اسم الفعالية" required />
-        <TextField name="date" label="تاريخ الفعالية" type="date" required />
+        <TextField name="name" label={t("admin.events.name")} required />
+        <TextField name="date" label={t("admin.events.date")} type="date" required />
         <label className="block space-y-1.5">
           <span className="text-sm font-medium text-gold-dark">
             شعار / صورة الفعالية (اختياري)
@@ -217,7 +220,7 @@ export function EventsPanel() {
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs ${ev.isActive ? "bg-green-100 text-green-900" : "bg-gray-100 text-gray-700"}`}
                     >
-                      {ev.isActive ? "نشطة" : "متوقفة"}
+                      {ev.isActive ? t("admin.events.active") : t("admin.events.inactive")}
                     </span>
                   </td>
                   <td className="px-4 py-3">
@@ -363,7 +366,7 @@ function EventLogoThumb({
   path: string | null;
   name: string;
 }) {
-  const src = path || "/logo.jpeg";
+  const src = path || PLATFORM_LOGO_PATH;
   return (
     <Image
       src={src}

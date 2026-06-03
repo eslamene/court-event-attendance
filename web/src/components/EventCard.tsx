@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { PLATFORM_LOGO_PATH } from "@/lib/platform-logo";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 
@@ -13,7 +14,7 @@ export type EventListItem = {
 
 export function EventCard({ event }: { event: EventListItem }) {
   const dateStr = format(event.date, "EEEE، d MMMM yyyy", { locale: ar });
-  const logo = event.logoPath || "/logo.jpeg";
+  const logo = event.logoPath || PLATFORM_LOGO_PATH;
 
   return (
     <Link

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth, canManageEvents } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { updateEventSchema } from "@/lib/validators";
+import { apiDict, apiT } from "@/lib/i18n/api";
+import { createUpdateEventSchema } from "@/lib/i18n/schemas";
 
 export async function PATCH(
   req: Request,
@@ -9,28 +10,35 @@ export async function PATCH(
 ) {
   const session = await auth();
   if (!session?.user || !canManageEvents(session.user.role)) {
-    return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+    return NextResponse.json({ error: await apiT("api.forbidden") }, { status: 403 });
   }
 
   const { id } = await params;
+  const dict = await apiDict();
   let body: unknown;
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "بيانات غير صالحة" }, { status: 400 });
+    return NextResponse.json({ error: await apiT("api.invalidData") }, { status: 400 });
   }
 
-  const parsed = updateEventSchema.safeParse(body);
+  const parsed = createUpdateEventSchema(dict).safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "بيانات غير صالحة" },
+      {
+        error:
+          parsed.error.issues[0]?.message ?? (await apiT("api.invalidData")),
+      },
       { status: 400 }
     );
   }
 
   const existing = await prisma.event.findUnique({ where: { id } });
   if (!existing) {
-    return NextResponse.json({ error: "الفعالية غير موجودة" }, { status: 404 });
+    return NextResponse.json(
+      { error: await apiT("api.eventNotFound") },
+      { status: 404 }
+    );
   }
 
   const data: {

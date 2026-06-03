@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { auth, canManageEvents } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { updateUserSchema } from "@/lib/validators";
+import { apiDict, apiT } from "@/lib/i18n/api";
+import { createUpdateUserSchema } from "@/lib/i18n/schemas";
+import { jsonForbidden, jsonInvalidData } from "@/lib/i18n/responses";
 
 export async function PATCH(
   req: Request,
@@ -10,31 +12,29 @@ export async function PATCH(
 ) {
   const session = await auth();
   if (!session?.user || !canManageEvents(session.user.role)) {
-    return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+    return jsonForbidden();
   }
 
   const { id } = await params;
 
   if (id === session.user.id) {
     return NextResponse.json(
-      { error: "لا يمكن تعديل حسابك من هذه الشاشة" },
+      { error: await apiT("api.cannotEditSelf") },
       { status: 400 }
     );
   }
 
+  const dict = await apiDict();
   let body: unknown;
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "بيانات غير صالحة" }, { status: 400 });
+    return jsonInvalidData();
   }
 
-  const parsed = updateUserSchema.safeParse(body);
+  const parsed = createUpdateUserSchema(dict).safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "بيانات غير صالحة" },
-      { status: 400 }
-    );
+    return jsonInvalidData(parsed.error.issues[0]?.message);
   }
 
   const data = parsed.data;
@@ -44,7 +44,7 @@ export async function PATCH(
     });
     if (dup) {
       return NextResponse.json(
-        { error: "البريد الإلكتروني مستخدم مسبقاً" },
+        { error: await apiT("api.emailInUse") },
         { status: 409 }
       );
     }
@@ -83,21 +83,24 @@ export async function DELETE(
 ) {
   const session = await auth();
   if (!session?.user || !canManageEvents(session.user.role)) {
-    return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+    return jsonForbidden();
   }
 
   const { id } = await params;
 
   if (id === session.user.id) {
     return NextResponse.json(
-      { error: "لا يمكن حذف حسابك الحالي" },
+      { error: await apiT("api.cannotDeleteSelf") },
       { status: 400 }
     );
   }
 
   const user = await prisma.user.findUnique({ where: { id } });
   if (!user) {
-    return NextResponse.json({ error: "المستخدم غير موجود" }, { status: 404 });
+    return NextResponse.json(
+      { error: await apiT("api.userNotFound") },
+      { status: 404 }
+    );
   }
 
   await prisma.user.update({

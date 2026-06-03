@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth, canApprove } from "@/lib/auth";
 import { approveRegistration } from "@/lib/approval";
+import { apiT } from "@/lib/i18n/api";
+import { jsonForbidden } from "@/lib/i18n/responses";
 
 export async function POST(
   _req: Request,
@@ -8,7 +10,7 @@ export async function POST(
 ) {
   const session = await auth();
   if (!session?.user || !canApprove(session.user.role)) {
-    return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+    return jsonForbidden();
   }
 
   const { id } = await params;
@@ -21,7 +23,7 @@ export async function POST(
     return NextResponse.json({
       id: registration.id,
       status: registration.status,
-      message: "تمت الموافقة وإرسال رمز QR",
+      message: await apiT("api.approveSuccess"),
       notifications: {
         email: notifications.find((n) => n.channel === "email")?.sent ?? false,
         whatsapp:
@@ -31,7 +33,8 @@ export async function POST(
       },
     });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "فشلت العملية";
+    const message =
+      e instanceof Error ? e.message : await apiT("api.operationFailed");
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }

@@ -6,7 +6,7 @@ import type { RegistrationStatus } from "@/generated/prisma/client";
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) {
-    return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
+    return (await import("@/lib/i18n/responses")).jsonUnauthorized();
   }
 
   const { searchParams } = new URL(req.url);

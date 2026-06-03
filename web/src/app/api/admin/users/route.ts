@@ -2,12 +2,14 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { auth, canManageEvents } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { createUserSchema } from "@/lib/validators";
+import { apiDict, apiT } from "@/lib/i18n/api";
+import { createUserSchema } from "@/lib/i18n/schemas";
+import { jsonForbidden, jsonInvalidData } from "@/lib/i18n/responses";
 
 export async function GET() {
   const session = await auth();
   if (!session?.user || !canManageEvents(session.user.role)) {
-    return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+    return jsonForbidden();
   }
 
   const users = await prisma.user.findMany({
@@ -40,22 +42,20 @@ export async function GET() {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user || !canManageEvents(session.user.role)) {
-    return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+    return jsonForbidden();
   }
 
+  const dict = await apiDict();
   let body: unknown;
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "بيانات غير صالحة" }, { status: 400 });
+    return jsonInvalidData();
   }
 
-  const parsed = createUserSchema.safeParse(body);
+  const parsed = createUserSchema(dict).safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "بيانات غير صالحة" },
-      { status: 400 }
-    );
+    return jsonInvalidData(parsed.error.issues[0]?.message);
   }
 
   const existing = await prisma.user.findUnique({
@@ -63,7 +63,7 @@ export async function POST(req: Request) {
   });
   if (existing) {
     return NextResponse.json(
-      { error: "البريد الإلكتروني مستخدم مسبقاً" },
+      { error: await apiT("api.emailInUse") },
       { status: 409 }
     );
   }
