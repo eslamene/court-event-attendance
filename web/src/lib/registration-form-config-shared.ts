@@ -352,10 +352,17 @@ function zodForField(
     }
     case "number":
       return field.required
-        ? z.coerce
-            .number({ invalid_type_error: req })
-            .refine((n) => Number.isFinite(n), { message: req })
-        : emptyToUndefined.pipe(z.coerce.number().optional());
+        ? z
+            .string()
+            .trim()
+            .min(1, req)
+            .refine((v) => /^-?\d+(\.\d+)?$/.test(v), { message: req })
+        : emptyToUndefined.pipe(
+            z
+              .string()
+              .refine((v) => !v || /^-?\d+(\.\d+)?$/.test(v), { message: req })
+              .optional()
+          );
     case "date":
       return field.required
         ? z
