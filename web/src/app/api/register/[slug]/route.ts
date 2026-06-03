@@ -7,6 +7,7 @@ import {
   mapRegistrationSubmitBody,
   resolveRegistrationFormConfigForEvent,
 } from "@/lib/registration-form-config";
+import { AUDIT_ACTIONS, recordAudit } from "@/lib/audit-log";
 import { isRegistrationOpen } from "@/lib/system-settings";
 
 export async function POST(
@@ -62,7 +63,7 @@ export async function POST(
     );
   }
 
-  const data = mapRegistrationSubmitBody(
+  const { data, customData } = mapRegistrationSubmitBody(
     formConfig,
     parsed.data as Record<string, unknown>
   );
@@ -82,6 +83,7 @@ export async function POST(
     const duplicate = await prisma.registration.findFirst({
       where: {
         eventId: event.id,
+        status: { not: "WITHDRAWN" },
         OR: duplicateOr,
       },
     });
@@ -103,8 +105,23 @@ export async function POST(
       email: data.email,
       mobile: data.mobile,
       notes: data.notes,
+      customData,
       status: "PENDING",
     },
+  });
+
+  await recordAudit({
+    action: AUDIT_ACTIONS.REGISTRATION_CREATE,
+    actorType: "PUBLIC",
+    entityType: "registration",
+    entityId: registration.id,
+    entityLabel: registration.fullName,
+    metadata: {
+      eventId: event.id,
+      eventName: event.name,
+      email: registration.email,
+    },
+    req,
   });
 
   return NextResponse.json({

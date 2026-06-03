@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
+import {
+  AUDIT_ACTIONS,
+  auditActorFromSession,
+  recordAudit,
+} from "@/lib/audit-log";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { namespaceFromKey } from "@/lib/i18n/catalog";
@@ -137,5 +142,16 @@ export async function PUT(req: Request) {
   }
 
   revalidateTag("dictionary", "max");
+
+  await recordAudit({
+    action: AUDIT_ACTIONS.DICTIONARY_UPDATE,
+    actor: auditActorFromSession(session.user),
+    entityType: "dictionary",
+    entityId: locale.id,
+    entityLabel: locale.code,
+    metadata: { keysUpdated: body.entries.length },
+    req,
+  });
+
   return NextResponse.json({ ok: true });
 }

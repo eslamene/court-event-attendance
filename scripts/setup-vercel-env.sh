@@ -7,7 +7,8 @@ cd "$(dirname "$0")/../web"
 
 echo "Add these in Vercel (vercel env add) or paste when prompted:"
 echo ""
-read -rp "DATABASE_URL (postgresql://...): " DATABASE_URL
+read -rp "DATABASE_URL (Neon pooler, postgresql://...-pooler...): " DATABASE_URL
+read -rp "DIRECT_URL (Neon direct, postgresql://... no -pooler): " DIRECT_URL
 read -rp "NEXT_PUBLIC_APP_URL (https://xxx.vercel.app): " APP_URL
 read -rsp "AUTH_SECRET (min 32 chars): " AUTH_SECRET; echo
 read -rsp "STAFF_JWT_SECRET (min 32 chars): " STAFF_JWT; echo
@@ -17,6 +18,7 @@ read -rsp "TWILIO_AUTH_TOKEN: " TWILIO_TOKEN; echo
 read -rp "RESEND_API_KEY (optional fallback): " RESEND_KEY
 
 vercel env add DATABASE_URL production <<< "$DATABASE_URL"
+vercel env add DIRECT_URL production <<< "$DIRECT_URL"
 vercel env add NEXT_PUBLIC_APP_URL production <<< "$APP_URL"
 vercel env add APP_PUBLIC_URL production <<< "$APP_URL"
 vercel env add AUTH_SECRET production <<< "$AUTH_SECRET"
@@ -33,7 +35,7 @@ echo ""
 echo "Deploying and running migrations..."
 vercel --prod --yes
 
-DATABASE_URL="$DATABASE_URL" npx prisma migrate deploy
-DATABASE_URL="$DATABASE_URL" npx prisma db seed
+npx prisma migrate deploy
+npx prisma db seed
 
 echo "Done. Update mobile/eas.json EXPO_PUBLIC_API_URL to: $APP_URL"

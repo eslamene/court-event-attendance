@@ -9,7 +9,7 @@ export async function apiT(
 ) {
   const code = localeCode ?? (await getDefaultLocaleCode());
   const dict = await getDictionary(code);
-  return translate(dict, key, vars);
+  return translate(dict, key, vars, code);
 }
 
 export async function apiDict(localeCode?: string) {

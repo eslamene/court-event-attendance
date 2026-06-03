@@ -2,7 +2,8 @@ import { z } from "zod";
 import { normalizeMobile } from "./i18n/schemas";
 import type { Dictionary } from "./i18n/types";
 
-export const REGISTRATION_FIELD_KEYS = [
+/** Built-in keys mapped to Registration table columns */
+export const REGISTRATION_BUILTIN_KEYS = [
   "fullName",
   "rank",
   "entity",
@@ -11,17 +12,28 @@ export const REGISTRATION_FIELD_KEYS = [
   "notes",
 ] as const;
 
-export type RegistrationFieldKey = (typeof REGISTRATION_FIELD_KEYS)[number];
+export type RegistrationBuiltinKey = (typeof REGISTRATION_BUILTIN_KEYS)[number];
 
-export type RegistrationFieldType =
-  | "text"
-  | "email"
-  | "tel"
-  | "select"
-  | "textarea";
+/** @deprecated Use REGISTRATION_BUILTIN_KEYS */
+export const REGISTRATION_FIELD_KEYS = REGISTRATION_BUILTIN_KEYS;
+
+export type RegistrationFieldKey = RegistrationBuiltinKey;
+
+export const REGISTRATION_FIELD_TYPES = [
+  "text",
+  "email",
+  "tel",
+  "select",
+  "textarea",
+  "number",
+  "date",
+  "url",
+] as const;
+
+export type RegistrationFieldType = (typeof REGISTRATION_FIELD_TYPES)[number];
 
 export type RegistrationFormFieldConfig = {
-  key: RegistrationFieldKey;
+  key: string;
   enabled: boolean;
   required: boolean;
   labelAr: string;
@@ -38,6 +50,9 @@ export type RegistrationFormConfigRecord = {
   source: "builtin" | "default" | "event";
 };
 
+const CUSTOM_KEY_REGEX = /^custom_[a-z0-9][a-z0-9_]{0,47}$/i;
+const MAX_FIELDS = 40;
+
 const DEFAULT_RANKS = [
   "نائب نقض",
   "قاضي بالنقض",
@@ -52,7 +67,7 @@ const DEFAULT_ENTITIES = [
 ];
 
 const DEFAULT_LABELS: Record<
-  RegistrationFieldKey,
+  RegistrationBuiltinKey,
   { ar: string; en: string; type: RegistrationFieldType }
 > = {
   fullName: { ar: "الاسم الكامل", en: "Full name", type: "text" },
@@ -62,6 +77,22 @@ const DEFAULT_LABELS: Record<
   mobile: { ar: "رقم الجوال", en: "Mobile number", type: "tel" },
   notes: { ar: "ملاحظات (اختياري)", en: "Notes (optional)", type: "textarea" },
 };
+
+export function isBuiltinFieldKey(key: string): key is RegistrationBuiltinKey {
+  return (REGISTRATION_BUILTIN_KEYS as readonly string[]).includes(key);
+}
+
+export function isValidFieldKey(key: string): boolean {
+  return isBuiltinFieldKey(key) || CUSTOM_KEY_REGEX.test(key);
+}
+
+export function createCustomFieldKey(): string {
+  const id =
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID().replace(/-/g, "").slice(0, 10)
+      : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  return `custom_${id.toLowerCase()}`;
+}
 
 export function getBuiltinRegistrationFormConfig(): RegistrationFormConfigRecord {
   const fields: RegistrationFormFieldConfig[] = [
@@ -132,12 +163,12 @@ export function getBuiltinRegistrationFormConfig(): RegistrationFormConfigRecord
 }
 
 const fieldSchema = z.object({
-  key: z.enum(REGISTRATION_FIELD_KEYS),
+  key: z.string().min(1).max(64),
   enabled: z.boolean(),
   required: z.boolean(),
   labelAr: z.string().min(1),
   labelEn: z.string().min(1),
-  type: z.enum(["text", "email", "tel", "select", "textarea"]),
+  type: z.enum(REGISTRATION_FIELD_TYPES),
   options: z.array(z.string()).optional(),
   order: z.number().int(),
   placeholderAr: z.string().optional(),
@@ -145,17 +176,22 @@ const fieldSchema = z.object({
 });
 
 const configSchema = z.object({
-  fields: z.array(fieldSchema).min(1),
+  fields: z.array(fieldSchema).min(1).max(MAX_FIELDS),
 });
 
 export function parseRegistrationFormConfigJson(
   json: string
 ): RegistrationFormFieldConfig[] {
-  const parsed = configSchema.safeParse(JSON.parse(json));
-  if (!parsed.success) {
+  try {
+    const parsed = configSchema.safeParse(JSON.parse(json));
+    if (!parsed.success) {
+      return getBuiltinRegistrationFormConfig().fields;
+    }
+    const sanitized = sanitizeRegistrationFormFields(parsed.data.fields);
+    return sanitized.ok ? sanitized.fields : getBuiltinRegistrationFormConfig().fields;
+  } catch {
     return getBuiltinRegistrationFormConfig().fields;
   }
-  return sortFields(parsed.data.fields);
 }
 
 export function sortFields(
@@ -185,34 +221,162 @@ export function getFieldPlaceholder(
   return p?.trim() || undefined;
 }
 
-function normalizeFields(
+export function sanitizeRegistrationFormFields(
   fields: RegistrationFormFieldConfig[]
-): RegistrationFormFieldConfig[] {
-  const byKey = new Map(fields.map((f) => [f.key, f]));
-  const merged = REGISTRATION_FIELD_KEYS.map((key, index) => {
-    const existing = byKey.get(key);
-    const defaults = getBuiltinRegistrationFormConfig().fields.find(
-      (f) => f.key === key
-    )!;
-    return existing
-      ? {
-          ...defaults,
-          ...existing,
-          key,
-          options:
-            existing.type === "select"
-              ? (existing.options ?? defaults.options ?? []).filter(Boolean)
-              : undefined,
-        }
-      : { ...defaults, order: index + 1 };
-  });
-  return sortFields(merged);
+): { ok: true; fields: RegistrationFormFieldConfig[] } | { ok: false; error: string } {
+  const seen = new Set<string>();
+  const normalized: RegistrationFormFieldConfig[] = [];
+
+  for (const raw of sortFields(fields)) {
+    const key = raw.key.trim();
+    if (!isValidFieldKey(key)) {
+      return {
+        ok: false,
+        error: `Invalid field key "${key}". Use a built-in key or custom_<id>.`,
+      };
+    }
+    if (seen.has(key)) {
+      return { ok: false, error: `Duplicate field key "${key}"` };
+    }
+    seen.add(key);
+
+    const type = raw.type;
+    const options =
+      type === "select"
+        ? (raw.options ?? []).map((o) => o.trim()).filter(Boolean)
+        : undefined;
+
+    normalized.push({
+      key,
+      enabled: raw.enabled,
+      required: raw.required,
+      labelAr: raw.labelAr.trim(),
+      labelEn: raw.labelEn.trim(),
+      type,
+      options,
+      order: normalized.length + 1,
+      placeholderAr: raw.placeholderAr?.trim() || undefined,
+      placeholderEn: raw.placeholderEn?.trim() || undefined,
+    });
+  }
+
+  if (normalized.length === 0) {
+    return { ok: false, error: "At least one field is required" };
+  }
+
+  const parsed = configSchema.safeParse({ fields: normalized });
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Invalid config",
+    };
+  }
+
+  return { ok: true, fields: parsed.data.fields };
 }
 
 const egyptMobileRegex = /^(?:\+20|0020|0)?1[0125]\d{8}$/;
 
 function msg(dict: Dictionary, key: string) {
   return dict[key] ?? key;
+}
+
+function requiredMessage(dict: Dictionary, label: string) {
+  return `${label}: ${msg(dict, "validation.fieldRequired")}`;
+}
+
+function zodForField(
+  field: RegistrationFormFieldConfig,
+  dict: Dictionary,
+  locale: string
+): z.ZodTypeAny {
+  const label = getFieldLabel(field, locale);
+  const req = requiredMessage(dict, label);
+
+  const emptyToUndefined = z
+    .union([z.string(), z.undefined(), z.null()])
+    .transform((v) => {
+      const s = v == null ? "" : String(v).trim();
+      return s === "" ? undefined : s;
+    });
+
+  switch (field.type) {
+    case "text":
+      return field.required
+        ? z.string().trim().min(1, req).max(500)
+        : emptyToUndefined.pipe(z.string().max(500).optional());
+    case "textarea":
+      return field.required
+        ? z.string().trim().min(1, req).max(2000)
+        : emptyToUndefined.pipe(z.string().max(2000).optional());
+    case "email":
+      return field.required
+        ? z.string().trim().email(msg(dict, "validation.emailInvalid"))
+        : emptyToUndefined.pipe(
+            z.string().email(msg(dict, "validation.emailInvalid")).optional()
+          );
+    case "tel": {
+      const egyptCheck = (v: string) =>
+        egyptMobileRegex.test(normalizeMobile(v));
+      if (field.key === "mobile") {
+        return field.required
+          ? z
+              .string()
+              .trim()
+              .min(10, msg(dict, "validation.mobileRequired"))
+              .refine(egyptCheck, {
+                message: msg(dict, "validation.mobileInvalid"),
+              })
+          : emptyToUndefined.pipe(
+              z
+                .string()
+                .refine((v) => !v || egyptCheck(v), {
+                  message: msg(dict, "validation.mobileInvalid"),
+                })
+                .optional()
+            );
+      }
+      return field.required
+        ? z.string().trim().min(8, req).max(30)
+        : emptyToUndefined.pipe(z.string().max(30).optional());
+    }
+    case "select": {
+      const opts = field.options ?? [];
+      const selectSchema = z.string().refine(
+        (v) => opts.length === 0 || opts.includes(v),
+        { message: `${label}: ${msg(dict, "validation.selectRequired")}` }
+      );
+      return field.required
+        ? z.string().trim().min(1, req).pipe(selectSchema)
+        : emptyToUndefined.pipe(selectSchema.optional());
+    }
+    case "number":
+      return field.required
+        ? z.coerce
+            .number({ invalid_type_error: req })
+            .refine((n) => Number.isFinite(n), { message: req })
+        : emptyToUndefined.pipe(z.coerce.number().optional());
+    case "date":
+      return field.required
+        ? z
+            .string()
+            .trim()
+            .regex(/^\d{4}-\d{2}-\d{2}$/, req)
+        : emptyToUndefined.pipe(
+            z
+              .string()
+              .regex(/^\d{4}-\d{2}-\d{2}$/)
+              .optional()
+          );
+    case "url":
+      return field.required
+        ? z.string().trim().url(msg(dict, "validation.urlInvalid"))
+        : emptyToUndefined.pipe(
+            z.string().url(msg(dict, "validation.urlInvalid")).optional()
+          );
+    default:
+      return z.string().optional();
+  }
 }
 
 export function createRegistrationSchemaFromConfig(
@@ -222,58 +386,9 @@ export function createRegistrationSchemaFromConfig(
 ) {
   const locale = options?.locale ?? "ar";
   const shape: Record<string, z.ZodTypeAny> = {};
-  const enabled = getEnabledFields(config);
 
-  for (const field of enabled) {
-    const label = getFieldLabel(field, locale);
-    switch (field.key) {
-      case "fullName":
-        shape.fullName = field.required
-          ? z.string().min(3, msg(dict, "validation.fullNameRequired"))
-          : z.string().optional();
-        break;
-      case "rank": {
-        const opts = field.options ?? [];
-        shape.rank = field.required
-          ? z.string().refine((v) => opts.length === 0 || opts.includes(v), {
-              message: `${label}: ${msg(dict, "validation.rankRequired")}`,
-            })
-          : z.string().optional();
-        break;
-      }
-      case "entity": {
-        const opts = field.options ?? [];
-        shape.entity = field.required
-          ? z.string().refine((v) => opts.length === 0 || opts.includes(v), {
-              message: `${label}: ${msg(dict, "validation.entityRequired")}`,
-            })
-          : z.string().optional();
-        break;
-      }
-      case "email":
-        shape.email = field.required
-          ? z.string().email(msg(dict, "validation.emailInvalid"))
-          : z.string().optional();
-        break;
-      case "mobile":
-        shape.mobile = field.required
-          ? z
-              .string()
-              .min(10, msg(dict, "validation.mobileRequired"))
-              .refine((v) => egyptMobileRegex.test(normalizeMobile(v)), {
-                message: msg(dict, "validation.mobileInvalid"),
-              })
-          : z.string().optional();
-        break;
-      case "notes":
-        shape.notes = field.required
-          ? z
-              .string()
-              .min(1, msg(dict, "validation.notesRequired"))
-              .max(1000)
-          : z.string().max(1000).optional();
-        break;
-    }
+  for (const field of getEnabledFields(config)) {
+    shape[field.key] = zodForField(field, dict, locale);
   }
 
   return z.object(shape);
@@ -288,48 +403,70 @@ export type RegistrationSubmitData = {
   notes: string | null;
 };
 
+export type RegistrationSubmitPayload = {
+  data: RegistrationSubmitData;
+  customData: Record<string, string>;
+};
+
 export function mapRegistrationSubmitBody(
   config: RegistrationFormConfigRecord,
   raw: Record<string, unknown>
-): RegistrationSubmitData {
-  const enabled = new Set(getEnabledFields(config).map((f) => f.key));
-  const str = (key: RegistrationFieldKey) =>
-    enabled.has(key) ? String(raw[key] ?? "").trim() : "";
+): RegistrationSubmitPayload {
+  const enabled = getEnabledFields(config);
+  const customData: Record<string, string> = {};
 
-  const email = str("email").toLowerCase();
-  const mobile = enabled.has("mobile")
-    ? normalizeMobile(str("mobile"))
-    : "";
+  const str = (key: string) => {
+    const v = raw[key];
+    if (v == null) return "";
+    return String(v).trim();
+  };
+
+  for (const field of enabled) {
+    if (!isBuiltinFieldKey(field.key)) {
+      const val = str(field.key);
+      if (val) customData[field.key] = val;
+      else if (field.required) customData[field.key] = "";
+    }
+  }
+
+  const has = (key: RegistrationBuiltinKey) =>
+    enabled.some((f) => f.key === key);
+
+  const email = has("email") ? str("email").toLowerCase() : "";
+  const mobile = has("mobile") ? normalizeMobile(str("mobile")) : "";
 
   return {
-    fullName: str("fullName") || "—",
-    rank: str("rank") || "—",
-    entity: str("entity") || "—",
-    email,
-    mobile,
-    notes: enabled.has("notes") ? str("notes") || null : null,
+    data: {
+      fullName: has("fullName") ? str("fullName") || "—" : "—",
+      rank: has("rank") ? str("rank") || "—" : "—",
+      entity: has("entity") ? str("entity") || "—" : "—",
+      email,
+      mobile,
+      notes: has("notes") ? str("notes") || null : null,
+    },
+    customData,
   };
 }
 
 export function validateRegistrationFormConfigPayload(
   fields: RegistrationFormFieldConfig[]
 ): { ok: true; fields: RegistrationFormFieldConfig[] } | { ok: false; error: string } {
-  const normalized = normalizeFields(fields);
-  const parsed = configSchema.safeParse({ fields: normalized });
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid config" };
-  }
+  const sanitized = sanitizeRegistrationFormFields(fields);
+  if (!sanitized.ok) return sanitized;
 
-  const enabled = normalized.filter((f) => f.enabled);
+  const enabled = sanitized.fields.filter((f) => f.enabled);
   if (enabled.length === 0) {
     return { ok: false, error: "At least one field must be enabled" };
   }
 
   for (const field of enabled) {
     if (field.type === "select" && (!field.options || field.options.length === 0)) {
-      return { ok: false, error: `Select field "${field.key}" needs options` };
+      return {
+        ok: false,
+        error: `Select field "${field.key}" needs at least one option`,
+      };
     }
   }
 
-  return { ok: true, fields: normalized };
+  return { ok: true, fields: sanitized.fields };
 }

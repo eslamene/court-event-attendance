@@ -45,7 +45,8 @@ Set environment variables in Vercel dashboard (Settings → Environment Variable
 
 | Variable | Example |
 |----------|---------|
-| `DATABASE_URL` | `postgresql://...?sslmode=require` |
+| `DATABASE_URL` | Neon **pooler** URL (`…-pooler…`) — runtime queries |
+| `DIRECT_URL` | Neon **direct** URL (no `-pooler`) — Prisma migrations |
 | `AUTH_SECRET` | `openssl rand -base64 32` |
 | `STAFF_JWT_SECRET` | `openssl rand -base64 32` |
 | `NEXT_PUBLIC_APP_URL` | `https://court-events.flagshipfintech.com` |
@@ -71,11 +72,12 @@ npx prisma db seed
 # Remove SEED_* vars from Vercel after seeding
 ```
 
-`vercel.json` runs `prisma generate` at build time. Run migrations **once** after setting `DATABASE_URL`:
+`vercel.json` runs `prisma generate` at build time. Run migrations **once** after setting `DATABASE_URL` and `DIRECT_URL` (see `web/.env.example`). `prisma.config.ts` uses `DIRECT_URL` for the CLI:
 
 ```bash
-DATABASE_URL="postgresql://..." npx prisma migrate deploy
-DATABASE_URL="postgresql://..." npx prisma db seed
+cd web
+npx prisma migrate deploy
+npx prisma db seed
 ```
 
 Or use `./scripts/setup-vercel-env.sh` for an interactive setup.

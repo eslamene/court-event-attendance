@@ -3,6 +3,11 @@ import bcrypt from "bcryptjs";
 import { auth, canManageEvents } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { apiDict, apiT } from "@/lib/i18n/api";
+import {
+  AUDIT_ACTIONS,
+  auditActorFromSession,
+  recordAudit,
+} from "@/lib/audit-log";
 import { createUpdateUserSchema } from "@/lib/i18n/schemas";
 import { jsonForbidden, jsonInvalidData } from "@/lib/i18n/responses";
 
@@ -50,17 +55,19 @@ export async function PATCH(
     }
   }
 
+  const updateData = {
+    ...(data.name ? { name: data.name.trim() } : {}),
+    ...(data.email ? { email: data.email.toLowerCase().trim() } : {}),
+    ...(data.role ? { role: data.role } : {}),
+    ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
+    ...(data.password
+      ? { passwordHash: await bcrypt.hash(data.password, 12) }
+      : {}),
+  };
+
   const updated = await prisma.user.update({
     where: { id },
-    data: {
-      ...(data.name ? { name: data.name.trim() } : {}),
-      ...(data.email ? { email: data.email.toLowerCase().trim() } : {}),
-      ...(data.role ? { role: data.role } : {}),
-      ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
-      ...(data.password
-        ? { passwordHash: await bcrypt.hash(data.password, 12) }
-        : {}),
-    },
+    data: updateData,
     select: {
       id: true,
       email: true,
@@ -69,6 +76,22 @@ export async function PATCH(
       isActive: true,
       createdAt: true,
     },
+  });
+
+  await recordAudit({
+    action: AUDIT_ACTIONS.USER_UPDATE,
+    actor: auditActorFromSession(session.user),
+    entityType: "user",
+    entityId: updated.id,
+    entityLabel: updated.name,
+    metadata: {
+      name: data.name,
+      email: data.email,
+      role: data.role,
+      isActive: data.isActive,
+      passwordChanged: Boolean(data.password),
+    },
+    req,
   });
 
   return NextResponse.json({

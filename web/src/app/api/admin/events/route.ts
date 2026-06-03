@@ -3,6 +3,11 @@ import { auth, canManageEvents } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { apiDict, apiT } from "@/lib/i18n/api";
 import { createEventSchema } from "@/lib/i18n/schemas";
+import {
+  AUDIT_ACTIONS,
+  auditActorFromSession,
+  recordAudit,
+} from "@/lib/audit-log";
 import { buildRegistrationUrl } from "@/lib/app-url";
 import { uniqueEventSlug } from "@/lib/slug";
 
@@ -67,6 +72,16 @@ export async function POST(req: Request) {
       date: new Date(parsed.data.date),
       slug,
     },
+  });
+
+  await recordAudit({
+    action: AUDIT_ACTIONS.EVENT_CREATE,
+    actor: auditActorFromSession(session.user),
+    entityType: "event",
+    entityId: event.id,
+    entityLabel: event.name,
+    metadata: { slug: event.slug, date: event.date.toISOString() },
+    req,
   });
 
   return NextResponse.json({

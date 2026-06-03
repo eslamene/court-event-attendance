@@ -24,7 +24,7 @@ export function I18nProvider({
       locale,
       direction,
       dict,
-      t: (key, vars) => translate(dict, key, vars),
+      t: (key, vars) => translate(dict, key, vars, locale),
     }),
     [locale, direction, dict]
   );

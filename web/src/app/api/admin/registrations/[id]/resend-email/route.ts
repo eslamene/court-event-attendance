@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server";
 import { auth, canApprove } from "@/lib/auth";
+import {
+  AUDIT_ACTIONS,
+  auditActorFromSession,
+  recordAudit,
+} from "@/lib/audit-log";
 import { resendQrEmail } from "@/lib/approval";
+import { prisma } from "@/lib/db";
 import { apiT } from "@/lib/i18n/api";
 import { jsonForbidden } from "@/lib/i18n/responses";
 
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
@@ -31,6 +37,22 @@ export async function POST(
         { status: isValidation ? 400 : email.skipped ? 503 : 502 }
       );
     }
+    const reg = await prisma.registration.findUnique({
+      where: { id },
+      include: { event: true },
+    });
+    await recordAudit({
+      action: AUDIT_ACTIONS.REGISTRATION_RESEND_EMAIL,
+      actor: auditActorFromSession(session.user),
+      entityType: "registration",
+      entityId: id,
+      entityLabel: reg?.fullName,
+      metadata: {
+        eventName: reg?.event.name,
+        provider: email.provider,
+      },
+      req,
+    });
     return NextResponse.json({
       sent: true,
       message: await apiT("api.resendEmailSuccess"),

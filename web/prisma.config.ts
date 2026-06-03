@@ -10,6 +10,8 @@ export default defineConfig({
     seed: "npx tsx prisma/seed.ts",
   },
   datasource: {
-    url: process.env["DATABASE_URL"],
+    // CLI (migrate, db push, studio): direct connection — required for Neon pooler.
+    // Falls back to DATABASE_URL for local Docker Postgres (no pooler).
+    url: process.env["DIRECT_URL"] ?? process.env["DATABASE_URL"],
   },
 });

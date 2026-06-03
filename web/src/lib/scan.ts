@@ -1,3 +1,7 @@
+import {
+  AUDIT_ACTIONS,
+  recordAudit,
+} from "./audit-log";
 import { prisma } from "./db";
 import type { ScanResult } from "@/generated/prisma/client";
 import { apiT } from "@/lib/i18n/api";
@@ -166,6 +170,29 @@ async function finishScan(args: {
       offlineId: args.offlineId,
       scannedAt: args.scannedAt,
       syncedAt: args.offlineId ? new Date() : null,
+    },
+  });
+
+  const scanner = await prisma.user.findUnique({
+    where: { id: args.scannedById },
+    select: { id: true, name: true, email: true },
+  });
+
+  await recordAudit({
+    action:
+      args.result === "SUCCESS"
+        ? AUDIT_ACTIONS.SCAN_SUCCESS
+        : AUDIT_ACTIONS.SCAN_INVALID,
+    actor: scanner
+      ? { id: scanner.id, name: scanner.name, email: scanner.email }
+      : null,
+    entityType: "registration",
+    entityId: args.registrationId ?? undefined,
+    entityLabel: args.judgeName,
+    metadata: {
+      eventId: args.eventId,
+      result: args.result,
+      qrToken: args.qrToken,
     },
   });
 

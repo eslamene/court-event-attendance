@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "./db";
+import { AUDIT_ACTIONS, recordAudit } from "./audit-log";
 import { authConfig } from "./auth.config";
 import type { UserRole } from "@/generated/prisma/client";
 
@@ -21,6 +22,23 @@ declare module "next-auth" {
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
+  events: {
+    async signIn({ user }) {
+      if (user?.id) {
+        await recordAudit({
+          action: AUDIT_ACTIONS.AUTH_SIGN_IN,
+          actor: {
+            id: user.id,
+            name: user.name ?? "",
+            email: user.email ?? "",
+          },
+          entityType: "user",
+          entityId: user.id,
+          entityLabel: user.name ?? user.email ?? undefined,
+        });
+      }
+    },
+  },
   providers: [
     Credentials({
       credentials: {

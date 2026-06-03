@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AdminAppSidebar } from "@/components/admin/AdminAppSidebar";
-import { AdminLogoutButton } from "@/components/admin/AdminLogoutButton";
+import { AdminNotificationsBell } from "@/components/admin/AdminNotificationsBell";
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession();
@@ -24,7 +24,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       <TooltipProvider delay={0}>
         <SidebarProvider defaultOpen>
           <AdminAppSidebar />
-          <SidebarInset dir={direction}>
+          <SidebarInset dir={direction} className="max-h-svh min-h-0 overflow-hidden">
             <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
               <SidebarTrigger className="-ms-1" />
               <Separator
@@ -39,11 +39,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                   {roleLabel || role}
                 </p>
               </div>
-              {session?.user && (
-                <AdminLogoutButton className="shrink-0" />
-              )}
+              <AdminNotificationsBell />
             </header>
-            <div className="flex flex-1 flex-col gap-4 p-4 md:p-6">{children}</div>
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4 md:p-6">
+              {children}
+            </div>
           </SidebarInset>
         </SidebarProvider>
       </TooltipProvider>

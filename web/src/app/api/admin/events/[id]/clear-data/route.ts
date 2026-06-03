@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import { auth, canManageEvents } from "@/lib/auth";
+import {
+  AUDIT_ACTIONS,
+  auditActorFromSession,
+  recordAudit,
+} from "@/lib/audit-log";
 import { verifyAdminPassword } from "@/lib/admin-password";
 import { prisma } from "@/lib/db";
 import { apiDict, apiT } from "@/lib/i18n/api";
@@ -57,6 +62,19 @@ export async function POST(
     prisma.scanLog.deleteMany({ where: { eventId: id } }),
     prisma.registration.deleteMany({ where: { eventId: id } }),
   ]);
+
+  await recordAudit({
+    action: AUDIT_ACTIONS.EVENT_CLEAR_DATA,
+    actor: auditActorFromSession(session.user),
+    entityType: "event",
+    entityId: id,
+    entityLabel: event.name,
+    metadata: {
+      deletedRegistrations: regResult.count,
+      deletedScanLogs: scanResult.count,
+    },
+    req,
+  });
 
   return NextResponse.json({
     success: true,

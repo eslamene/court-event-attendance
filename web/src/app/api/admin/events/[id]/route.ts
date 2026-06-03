@@ -3,6 +3,11 @@ import { auth, canManageEvents } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { removeEventLogoFiles } from "@/lib/event-logo";
 import { apiDict, apiT } from "@/lib/i18n/api";
+import {
+  AUDIT_ACTIONS,
+  auditActorFromSession,
+  recordAudit,
+} from "@/lib/audit-log";
 import { buildRegistrationUrl } from "@/lib/app-url";
 import { createUpdateEventSchema } from "@/lib/i18n/schemas";
 
@@ -77,6 +82,16 @@ export async function PATCH(
     include: { _count: { select: { registrations: true } } },
   });
 
+  await recordAudit({
+    action: AUDIT_ACTIONS.EVENT_UPDATE,
+    actor: auditActorFromSession(session.user),
+    entityType: "event",
+    entityId: updated.id,
+    entityLabel: updated.name,
+    metadata: { changes: data, slug: updated.slug },
+    req,
+  });
+
   return NextResponse.json({
     id: updated.id,
     name: updated.name,
@@ -90,7 +105,7 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
@@ -126,6 +141,16 @@ export async function DELETE(
     prisma.scanLog.deleteMany({ where: { eventId: id } }),
     prisma.event.delete({ where: { id } }),
   ]);
+
+  await recordAudit({
+    action: AUDIT_ACTIONS.EVENT_DELETE,
+    actor: auditActorFromSession(session.user),
+    entityType: "event",
+    entityId: id,
+    entityLabel: event.name,
+    metadata: { slug: event.slug },
+    req,
+  });
 
   return NextResponse.json({
     success: true,

@@ -10,23 +10,23 @@ import {
   Calendar,
   ChevronsUpDown,
   ClipboardList,
+  LayoutDashboard,
   LogOut,
   ListChecks,
   Mail,
   Radio,
+  ScrollText,
   SlidersHorizontal,
   Users,
 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Sidebar,
   SidebarContent,
@@ -46,9 +46,14 @@ import { PLATFORM_LOGO_PATH } from "@/lib/platform-logo";
 const mainNavItems = [
   {
     href: "/admin",
+    icon: LayoutDashboard,
+    labelKey: "admin.nav.dashboard" as const,
+    exact: true,
+  },
+  {
+    href: "/admin/registrations",
     icon: ClipboardList,
     labelKey: "admin.nav.registrations" as const,
-    exact: true,
   },
   {
     href: "/admin/events",
@@ -60,6 +65,12 @@ const mainNavItems = [
     href: "/admin/users",
     icon: Users,
     labelKey: "admin.nav.users" as const,
+    adminOnly: true,
+  },
+  {
+    href: "/admin/audit",
+    icon: ScrollText,
+    labelKey: "admin.nav.audit" as const,
     adminOnly: true,
   },
 ] as const;
@@ -208,12 +219,13 @@ export function AdminAppSidebar() {
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <DropdownMenu>
-              <DropdownMenuTrigger
+            <Popover>
+              <PopoverTrigger
                 render={
                   <SidebarMenuButton
+                    type="button"
                     size="lg"
-                    className="data-[state=open]:bg-sidebar-accent"
+                    className="w-full data-[popup-open]:bg-sidebar-accent"
                   />
                 }
               >
@@ -231,28 +243,31 @@ export function AdminAppSidebar() {
                   </span>
                 </div>
                 <ChevronsUpDown className="ms-auto size-4 group-data-[collapsible=icon]:hidden" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                className="w-(--radix-dropdown-menu-trigger-width) min-w-56"
+              </PopoverTrigger>
+              <PopoverContent
+                className="min-w-56 p-2"
                 side={side === "right" ? "left" : "right"}
                 align="end"
                 sideOffset={4}
               >
-                <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col gap-1">
-                    <p className="text-sm font-medium">{session?.user?.name}</p>
-                    <p className="text-xs text-muted-foreground" dir="ltr">
-                      {session?.user?.email}
-                    </p>
-                  </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive" onClick={adminSignOut}>
-                  <LogOut />
+                <div className="border-b border-border px-2 pb-2">
+                  <p className="text-sm font-medium">{session?.user?.name}</p>
+                  <p className="text-xs text-muted-foreground" dir="ltr">
+                    {session?.user?.email}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  className="mt-2 w-full justify-center gap-2"
+                  onClick={adminSignOut}
+                >
+                  <LogOut className="size-4" aria-hidden />
                   {t("admin.nav.logout")}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                </Button>
+              </PopoverContent>
+            </Popover>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>

@@ -7,7 +7,8 @@ function isPrismaClientComplete(client: PrismaClient): boolean {
   return (
     "emailTemplate" in client &&
     "systemSettings" in client &&
-    "registrationFormConfig" in client
+    "registrationFormConfig" in client &&
+    "auditLog" in client
   );
 }
 

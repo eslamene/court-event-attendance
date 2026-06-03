@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { auth, canManageEvents } from "@/lib/auth";
 import { apiT } from "@/lib/i18n/api";
 import {
+  AUDIT_ACTIONS,
+  auditActorFromSession,
+  recordAudit,
+} from "@/lib/audit-log";
+import {
   EMAIL_PROVIDER_PREFERENCES,
   getSystemEnvironmentInfo,
   getSystemSettings,
@@ -53,6 +58,16 @@ export async function PUT(req: Request) {
   }
 
   const settings = await updateSystemSettings(input);
+
+  await recordAudit({
+    action: AUDIT_ACTIONS.SETTINGS_UPDATE,
+    actor: auditActorFromSession(session.user),
+    entityType: "settings",
+    entityId: "global",
+    entityLabel: settings.platformName,
+    metadata: { changes: input },
+    req,
+  });
 
   return NextResponse.json({
     settings,

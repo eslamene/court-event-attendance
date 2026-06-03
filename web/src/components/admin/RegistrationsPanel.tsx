@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   CheckCircle,
   EnvelopeSimple,
@@ -31,12 +32,14 @@ type Registration = {
   status: string;
   eventName: string;
   eventDate: string;
+  withdrawalNote?: string | null;
   createdAt: string;
 };
 
 type EventItem = { id: string; name: string };
 
 export function RegistrationsPanel() {
+  const searchParams = useSearchParams();
   const { t, dict } = useI18n();
   const { toastSuccess, toastError, confirm } = useFeedback();
   const ranks = parseJsonStringArray(dict, "options.ranks");
@@ -79,6 +82,18 @@ export function RegistrationsPanel() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    const urlStatus = searchParams.get("status");
+    if (
+      urlStatus &&
+      REGISTRATION_STATUSES.includes(
+        urlStatus as (typeof REGISTRATION_STATUSES)[number]
+      )
+    ) {
+      setStatus(urlStatus);
+    }
+  }, [searchParams]);
 
   async function approve(id: string) {
     setActionId(id);
@@ -315,6 +330,14 @@ export function RegistrationsPanel() {
                   </td>
                   <td className="px-4 py-3">
                     <VisualStatusBadge kind="registration" status={r.status} />
+                    {r.status === "WITHDRAWN" && r.withdrawalNote && (
+                      <p
+                        className="mt-1 max-w-[200px] text-xs text-bronze line-clamp-2"
+                        title={r.withdrawalNote}
+                      >
+                        {r.withdrawalNote}
+                      </p>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-xs text-bronze">
                     {format(new Date(r.createdAt), "yyyy-MM-dd HH:mm")}

@@ -95,6 +95,44 @@ function renderField(
           placeholder={placeholder ?? "01xxxxxxxxx"}
         />
       );
+    case "number":
+      return (
+        <TextField
+          key={field.key}
+          name={field.key}
+          label={label}
+          type="number"
+          required={field.required}
+          dir="ltr"
+          className="text-left"
+          placeholder={placeholder}
+        />
+      );
+    case "date":
+      return (
+        <TextField
+          key={field.key}
+          name={field.key}
+          label={label}
+          type="date"
+          required={field.required}
+          dir="ltr"
+          className="text-left"
+        />
+      );
+    case "url":
+      return (
+        <TextField
+          key={field.key}
+          name={field.key}
+          label={label}
+          type="url"
+          required={field.required}
+          dir="ltr"
+          className="text-left"
+          placeholder={placeholder ?? "https://"}
+        />
+      );
     default:
       return (
         <TextField
@@ -162,6 +200,7 @@ export function RegistrationForm({
           {t("register.successTitle")}
         </h2>
         <p className="leading-relaxed text-bronze">{t("register.successBody")}</p>
+        <p className="mt-4 text-sm text-bronze">{t("register.withdraw.afterRegisterHint")}</p>
       </div>
     );
   }

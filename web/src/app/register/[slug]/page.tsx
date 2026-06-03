@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { LogoHeader } from "@/components/LogoHeader";
 import { RegistrationForm } from "./RegistrationForm";
+import { WithdrawRegistrationPanel } from "./WithdrawRegistrationPanel";
 import { isRegistrationOpen } from "@/lib/system-settings";
 import { resolveRegistrationFormConfigForEvent } from "@/lib/registration-form-config";
 import { format } from "date-fns";
@@ -46,12 +47,15 @@ export default async function RegisterPage({
             )}
           </div>
         ) : (
-          <RegistrationForm
-            slug={slug}
-            eventName={event.name}
-            eventDate={eventDate}
-            formConfig={formConfig}
-          />
+          <>
+            <RegistrationForm
+              slug={slug}
+              eventName={event.name}
+              eventDate={eventDate}
+              formConfig={formConfig}
+            />
+            <WithdrawRegistrationPanel slug={slug} formConfig={formConfig} />
+          </>
         )}
       </div>
     </main>

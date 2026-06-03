@@ -19,18 +19,15 @@ async function loadDictionaryFromDb(localeCode: string): Promise<Dictionary> {
 
   if (locale) {
     for (const entry of locale.entries) {
-      dict[entry.key] = entry.value;
+      const value = entry.value?.trim();
+      if (value && value !== entry.key) {
+        dict[entry.key] = value;
+      }
     }
   }
 
   return dict;
 }
-
-const cachedLoad = unstable_cache(
-  async (localeCode: string) => loadDictionaryFromDb(localeCode),
-  ["dictionary"],
-  { tags: ["dictionary"], revalidate: 30 }
-);
 
 export async function getActiveLocales(): Promise<LocaleInfo[]> {
   const rows = await prisma.locale.findMany({
@@ -84,7 +81,11 @@ export async function getLocaleMeta(code: string) {
 
 export async function getDictionary(localeCode?: string): Promise<Dictionary> {
   const code = localeCode ?? (await getLocale());
-  return cachedLoad(code);
+  return unstable_cache(
+    async () => loadDictionaryFromDb(code),
+    ["dictionary", code],
+    { tags: ["dictionary"], revalidate: 30 }
+  )();
 }
 
 export async function getServerT(localeCode?: string) {
@@ -94,7 +95,7 @@ export async function getServerT(localeCode?: string) {
     locale,
     dict,
     t: (key: string, vars?: Record<string, string | number>) =>
-      translate(dict, key, vars),
+      translate(dict, key, vars, locale),
   };
 }
 

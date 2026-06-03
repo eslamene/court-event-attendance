@@ -18,6 +18,7 @@ enum RegistrationStatus {
   APPROVED
   REJECTED
   ATTENDED
+  WITHDRAWN
 }
 
 enum ScanResult {
@@ -25,6 +26,12 @@ enum ScanResult {
   INVALID
   ALREADY_USED
   WRONG_EVENT
+}
+
+enum AuditActorType {
+  USER
+  SYSTEM
+  PUBLIC
 }
 
 model User {
@@ -39,6 +46,7 @@ model User {
 
   approvedRegistrations Registration[] @relation("ApprovedBy")
   scanLogs              ScanLog[]
+  auditLogs             AuditLog[]
 }
 
 model Event {
@@ -103,14 +111,17 @@ model Registration {
   email        String
   mobile       String
   notes        String?
+  customData   Json               @default("{}")
   status       RegistrationStatus @default(PENDING)
   qrToken      String?            @unique
   qrSentAt     DateTime?
   qrUsedAt     DateTime?
   attendedAt   DateTime?
   approvedAt   DateTime?
-  rejectedAt   DateTime?
-  approvedById String?
+  rejectedAt     DateTime?
+  withdrawnAt    DateTime?
+  withdrawalNote String?            @db.Text
+  approvedById   String?
   approvedBy   User?              @relation("ApprovedBy", fields: [approvedById], references: [id])
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
@@ -148,6 +159,28 @@ model Locale {
   updatedAt DateTime @updatedAt
 
   entries DictionaryEntry[]
+}
+
+model AuditLog {
+  id          String         @id @default(cuid())
+  action      String
+  entityType  String?
+  entityId    String?
+  entityLabel String?
+  actorType   AuditActorType @default(USER)
+  actorUserId String?
+  actorUser   User?          @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  actorName   String?
+  actorEmail  String?
+  metadata    Json?
+  ipAddress   String?
+  userAgent   String?        @db.Text
+  createdAt   DateTime       @default(now())
+
+  @@index([createdAt(sort: Desc)])
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([actorUserId])
 }
 
 model DictionaryEntry {

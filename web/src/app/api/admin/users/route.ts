@@ -3,6 +3,11 @@ import bcrypt from "bcryptjs";
 import { auth, canManageEvents } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { apiDict, apiT } from "@/lib/i18n/api";
+import {
+  AUDIT_ACTIONS,
+  auditActorFromSession,
+  recordAudit,
+} from "@/lib/audit-log";
 import { createUserSchema } from "@/lib/i18n/schemas";
 import { jsonForbidden, jsonInvalidData } from "@/lib/i18n/responses";
 
@@ -84,6 +89,16 @@ export async function POST(req: Request) {
       isActive: true,
       createdAt: true,
     },
+  });
+
+  await recordAudit({
+    action: AUDIT_ACTIONS.USER_CREATE,
+    actor: auditActorFromSession(session.user),
+    entityType: "user",
+    entityId: user.id,
+    entityLabel: user.name,
+    metadata: { email: user.email, role: user.role },
+    req,
   });
 
   return NextResponse.json({

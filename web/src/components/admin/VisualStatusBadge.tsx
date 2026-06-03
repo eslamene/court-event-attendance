@@ -3,6 +3,7 @@
 import {
   CheckCircle,
   Clock,
+  HandWaving,
   PauseCircle,
   Prohibit,
   SealCheck,
@@ -16,6 +17,7 @@ const REGISTRATION_STATUS = [
   "APPROVED",
   "REJECTED",
   "ATTENDED",
+  "WITHDRAWN",
 ] as const;
 
 type RegistrationStatus = (typeof REGISTRATION_STATUS)[number];
@@ -51,6 +53,13 @@ const registrationStyles: Record<
     bg: "bg-emerald-50",
     text: "text-emerald-950",
     dot: "bg-emerald-500",
+  },
+  WITHDRAWN: {
+    icon: HandWaving,
+    ring: "ring-violet-200/80",
+    bg: "bg-violet-50",
+    text: "text-violet-950",
+    dot: "bg-violet-500",
   },
 };
 

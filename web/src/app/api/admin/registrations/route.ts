@@ -57,6 +57,8 @@ export async function GET(req: Request) {
       approvedBy: r.approvedBy?.name,
       approvedAt: r.approvedAt?.toISOString(),
       attendedAt: r.attendedAt?.toISOString(),
+      withdrawnAt: r.withdrawnAt?.toISOString(),
+      withdrawalNote: r.withdrawalNote,
       createdAt: r.createdAt.toISOString(),
     }))
   );

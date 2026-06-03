@@ -4,6 +4,7 @@ export const REGISTRATION_STATUSES = [
   "APPROVED",
   "REJECTED",
   "ATTENDED",
+  "WITHDRAWN",
 ] as const;
 
 export const USER_ROLE_KEYS = [

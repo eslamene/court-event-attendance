@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { auth, canManageEvents } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import {
+  AUDIT_ACTIONS,
+  auditActorFromSession,
+  recordAudit,
+} from "@/lib/audit-log";
 import { removeEventLogoFiles, saveEventLogo } from "@/lib/event-logo";
 import { apiT } from "@/lib/i18n/api";
 import { jsonForbidden } from "@/lib/i18n/responses";
@@ -43,11 +48,20 @@ export async function POST(
     data: { logoPath: saved.logoPath },
   });
 
+  await recordAudit({
+    action: AUDIT_ACTIONS.EVENT_LOGO_UPLOAD,
+    actor: auditActorFromSession(session.user),
+    entityType: "event",
+    entityId: id,
+    entityLabel: event.name,
+    req,
+  });
+
   return NextResponse.json({ logoPath: updated.logoPath });
 }
 
 export async function DELETE(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
@@ -61,6 +75,15 @@ export async function DELETE(
   await prisma.event.update({
     where: { id },
     data: { logoPath: null },
+  });
+
+  await recordAudit({
+    action: AUDIT_ACTIONS.EVENT_LOGO_REMOVE,
+    actor: auditActorFromSession(session.user),
+    entityType: "event",
+    entityId: id,
+    entityLabel: existing?.name,
+    req,
   });
 
   return NextResponse.json({ success: true });
