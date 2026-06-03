@@ -22,7 +22,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://web-nu-lilac-21.vercel.app"
+        "EXPO_PUBLIC_API_URL": "https://court-events.flagshipfintech.com"
       }
     },
     "production": {
@@ -35,7 +35,7 @@
         "resourceClass": "m-medium"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://web-nu-lilac-21.vercel.app"
+        "EXPO_PUBLIC_API_URL": "https://court-events.flagshipfintech.com"
       }
     }
   },
