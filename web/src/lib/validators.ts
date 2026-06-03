@@ -30,6 +30,27 @@ export const eventSchema = z.object({
   date: z.string().min(1, "تاريخ الفعالية مطلوب"),
 });
 
+export const updateEventSchema = z.object({
+  name: z.string().min(3).optional(),
+  date: z.string().min(1).optional(),
+  isActive: z.boolean().optional(),
+  logoUrl: z
+    .string()
+    .optional()
+    .refine((v) => !v || v === "" || /^https?:\/\//.test(v), {
+      message: "رابط الشعار يجب أن يبدأ بـ http:// أو https://",
+    }),
+});
+
+export const clearEventDataSchema = z.object({
+  adminPassword: z.string().min(6, "كلمة مرور المدير مطلوبة"),
+  confirmPhrase: z
+    .string()
+    .refine((v) => v === "مسح البيانات", {
+      message: 'اكتب "مسح البيانات" للتأكيد',
+    }),
+});
+
 export const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
@@ -62,6 +83,6 @@ export const updateUserSchema = z.object({
 });
 
 export const notificationTestSchema = z.object({
-  channel: z.enum(["email", "sms"]),
+  channel: z.enum(["email", "sms", "whatsapp"]),
   to: z.string().min(5),
 });

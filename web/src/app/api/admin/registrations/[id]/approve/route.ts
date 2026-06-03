@@ -18,15 +18,15 @@ export async function POST(
       id,
       session.user.id
     );
-    const emailSent = notifications.find((n) => n.channel === "email")?.sent;
-    const smsSent = notifications.find((n) => n.channel === "sms")?.sent;
     return NextResponse.json({
       id: registration.id,
       status: registration.status,
       message: "تمت الموافقة وإرسال رمز QR",
       notifications: {
-        email: emailSent ?? false,
-        sms: smsSent ?? false,
+        email: notifications.find((n) => n.channel === "email")?.sent ?? false,
+        whatsapp:
+          notifications.find((n) => n.channel === "whatsapp")?.sent ?? false,
+        sms: notifications.find((n) => n.channel === "sms")?.sent ?? false,
         details: notifications,
       },
     });

@@ -15,14 +15,18 @@ export async function GET() {
     include: { _count: { select: { registrations: true } } },
   });
 
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
   return NextResponse.json(
     events.map((e) => ({
       id: e.id,
       name: e.name,
       date: e.date.toISOString(),
       slug: e.slug,
+      logoPath: e.logoPath,
       isActive: e.isActive,
       registrationCount: e._count.registrations,
+      registrationUrl: `${baseUrl}/register/${e.slug}`,
     }))
   );
 }

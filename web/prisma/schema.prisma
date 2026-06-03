@@ -46,6 +46,7 @@ model Event {
   name      String
   date      DateTime
   slug      String   @unique
+  logoPath  String?
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

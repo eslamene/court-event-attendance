@@ -1,6 +1,11 @@
 import { prisma } from "./db";
 import { buildQrPayload, generateQrDataUrl, generateQrToken } from "./qr";
-import { sendQrEmail, sendQrSms, type DeliveryResult } from "./notifications";
+import {
+  sendQrEmail,
+  sendQrSms,
+  sendQrWhatsApp,
+  type DeliveryResult,
+} from "./notifications";
 import type { Event, Registration } from "@/generated/prisma/client";
 
 export type ApprovalResult = {
@@ -43,7 +48,11 @@ export async function approveRegistration(
   const instructions =
     "يرجى إبراز رمز QR عند الوصول إلى مقر الفعالية. الرمز صالح لمرة واحدة فقط.";
 
-  const notifications = await Promise.all([
+  const sendSms =
+    process.env.NOTIFY_SMS === "true" ||
+    (!process.env.TWILIO_WHATSAPP_NUMBER && process.env.TWILIO_PHONE_NUMBER);
+
+  const tasks: Promise<DeliveryResult>[] = [
     sendQrEmail({
       to: updated.email,
       judgeName: updated.fullName,
@@ -52,14 +61,29 @@ export async function approveRegistration(
       qrDataUrl,
       instructions,
     }),
-    sendQrSms({
+    sendQrWhatsApp({
       to: updated.mobile,
       judgeName: updated.fullName,
       eventName: updated.event.name,
       eventDate: updated.event.date,
+      qrToken,
       qrUrl: payload,
     }),
-  ]);
+  ];
+
+  if (sendSms) {
+    tasks.push(
+      sendQrSms({
+        to: updated.mobile,
+        judgeName: updated.fullName,
+        eventName: updated.event.name,
+        eventDate: updated.event.date,
+        qrUrl: payload,
+      })
+    );
+  }
+
+  const notifications = await Promise.all(tasks);
 
   return { registration: updated, notifications };
 }

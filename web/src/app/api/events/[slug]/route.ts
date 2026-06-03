@@ -8,7 +8,7 @@ export async function GET(
   const { slug } = await params;
   const event = await prisma.event.findUnique({
     where: { slug, isActive: true },
-    select: { id: true, name: true, date: true, slug: true },
+    select: { id: true, name: true, date: true, slug: true, logoPath: true },
   });
 
   if (!event) {

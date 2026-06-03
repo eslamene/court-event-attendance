@@ -6,10 +6,13 @@ const envSchema = z.object({
   STAFF_JWT_SECRET: z.string().min(16).optional(),
   NEXT_PUBLIC_APP_URL: z.string().url().optional(),
   RESEND_API_KEY: z.string().min(1).optional(),
+  SENDGRID_API_KEY: z.string().min(1).optional(),
   EMAIL_FROM: z.string().min(5).optional(),
   TWILIO_ACCOUNT_SID: z.string().optional(),
   TWILIO_AUTH_TOKEN: z.string().optional(),
   TWILIO_PHONE_NUMBER: z.string().optional(),
+  TWILIO_WHATSAPP_NUMBER: z.string().optional(),
+  NOTIFY_SMS: z.enum(["true", "false"]).optional(),
   NODE_ENV: z.enum(["development", "production", "test"]).optional(),
 });
 
@@ -19,32 +22,7 @@ export function getEnv(): AppEnv {
   return envSchema.parse(process.env);
 }
 
-export type NotificationStatus = {
-  email: { configured: boolean; provider: string };
-  sms: { configured: boolean; provider: string };
-};
-
-export function getNotificationStatus(): NotificationStatus {
-  const emailConfigured = Boolean(
-    process.env.RESEND_API_KEY && process.env.EMAIL_FROM
-  );
-  const smsConfigured = Boolean(
-    process.env.TWILIO_ACCOUNT_SID &&
-      process.env.TWILIO_AUTH_TOKEN &&
-      process.env.TWILIO_PHONE_NUMBER
-  );
-
-  return {
-    email: {
-      configured: emailConfigured,
-      provider: "Resend",
-    },
-    sms: {
-      configured: smsConfigured,
-      provider: "Twilio",
-    },
-  };
-}
+export { getNotificationsSummary as getNotificationStatus } from "./notifications";
 
 export function assertProductionSecrets() {
   if (process.env.NODE_ENV !== "production") return;

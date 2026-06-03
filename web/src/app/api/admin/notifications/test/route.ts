@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { auth, canManageEvents } from "@/lib/auth";
 import { notificationTestSchema } from "@/lib/validators";
-import { sendTestEmail, sendTestSms } from "@/lib/notifications";
+import {
+  sendTestEmail,
+  sendTestSms,
+  sendTestWhatsApp,
+} from "@/lib/notifications";
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -27,7 +31,9 @@ export async function POST(req: Request) {
   const result =
     parsed.data.channel === "email"
       ? await sendTestEmail(parsed.data.to)
-      : await sendTestSms(parsed.data.to);
+      : parsed.data.channel === "whatsapp"
+        ? await sendTestWhatsApp(parsed.data.to)
+        : await sendTestSms(parsed.data.to);
 
   return NextResponse.json(result, { status: result.sent ? 200 : 400 });
 }

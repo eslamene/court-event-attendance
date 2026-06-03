@@ -6,6 +6,7 @@ import { TextField } from "@/components/ui/Field";
 type Status = {
   email: { configured: boolean; provider: string };
   sms: { configured: boolean; provider: string };
+  whatsapp: { configured: boolean; provider: string };
 };
 
 export function SettingsPanel() {
@@ -35,9 +36,9 @@ export function SettingsPanel() {
     const data = await res.json();
     setLoading(false);
     if (data.sent) {
-      setTestResult("تم الإرسال بنجاح");
+      setTestResult(`تم الإرسال بنجاح (${data.provider || data.channel})`);
     } else {
-      setTestResult(data.error || data.skipped ? "لم يُرسل — تحقق من الإعدادات" : "فشل الإرسال");
+      setTestResult(data.error || "لم يُرسل — تحقق من الإعدادات");
     }
   }
 
@@ -47,19 +48,24 @@ export function SettingsPanel() {
         <h2 className="mb-4 font-bold text-gold-dark">حالة الإشعارات</h2>
         <div className="space-y-3 text-sm">
           <div className="flex items-center justify-between rounded-lg bg-[#f5f0e8] px-4 py-3">
-            <span>البريد الإلكتروني (Resend)</span>
+            <span>
+              البريد ({status?.email.provider ?? "SendGrid / Resend"})
+            </span>
             <StatusBadge ok={status?.email.configured} />
           </div>
           <div className="flex items-center justify-between rounded-lg bg-[#f5f0e8] px-4 py-3">
-            <span>الرسائل النصية (Twilio)</span>
+            <span>WhatsApp (Twilio)</span>
+            <StatusBadge ok={status?.whatsapp.configured} />
+          </div>
+          <div className="flex items-center justify-between rounded-lg bg-[#f5f0e8] px-4 py-3">
+            <span>SMS (Twilio — اختياري)</span>
             <StatusBadge ok={status?.sms.configured} />
           </div>
         </div>
         <p className="mt-4 text-xs text-bronze leading-relaxed">
-          أضف المفاتيح في متغيرات البيئة على Vercel أو Railway:{" "}
-          <code className="text-gold-dark">RESEND_API_KEY</code>,{" "}
-          <code className="text-gold-dark">EMAIL_FROM</code>,{" "}
-          <code className="text-gold-dark">TWILIO_*</code>
+          دليل الإعداد الكامل:{" "}
+          <code className="text-gold-dark">docs/TWILIO_INTEGRATION.md</code> في
+          المستودع
         </p>
       </section>
 
@@ -76,12 +82,13 @@ export function SettingsPanel() {
             defaultValue="email"
           >
             <option value="email">بريد إلكتروني</option>
-            <option value="sms">رسالة نصية</option>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="sms">SMS</option>
           </select>
         </label>
         <TextField
           name="to"
-          label="المستلم (بريد أو +20xxxxxxxxxx)"
+          label="المستلم (بريد أو +201xxxxxxxxx للواتساب/SMS)"
           required
           dir="ltr"
           className="text-left"
@@ -94,7 +101,9 @@ export function SettingsPanel() {
           {loading ? "جاري الإرسال..." : "إرسال اختبار"}
         </button>
         {testResult && (
-          <p className={`text-sm ${testResult.includes("نجاح") ? "text-success" : "text-error"}`}>
+          <p
+            className={`text-sm ${testResult.includes("نجاح") ? "text-success" : "text-error"}`}
+          >
             {testResult}
           </p>
         )}
