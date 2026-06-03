@@ -20,6 +20,11 @@ flowchart LR
   API --> DB
 ```
 
+## URLs
+
+- **[BUSINESS_GUIDE.md](./BUSINESS_GUIDE.md)** — دليل الأعمال، الروابط، وبيانات الدخول ([court-events.flagshipfintech.com](https://court-events.flagshipfintech.com))
+- **[URLS.md](./URLS.md)** — full technical URL list (admin, API, mobile)
+
 ## GitHub
 
 Repository name: **`court-event-attendance`**
