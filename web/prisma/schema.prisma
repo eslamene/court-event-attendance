@@ -1,0 +1,97 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  ADMIN
+  APPROVAL_MANAGER
+  EVENT_STAFF
+}
+
+enum RegistrationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ATTENDED
+}
+
+enum ScanResult {
+  SUCCESS
+  INVALID
+  ALREADY_USED
+  WRONG_EVENT
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         UserRole @default(APPROVAL_MANAGER)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  approvedRegistrations Registration[] @relation("ApprovedBy")
+  scanLogs              ScanLog[]
+}
+
+model Event {
+  id        String   @id @default(cuid())
+  name      String
+  date      DateTime
+  slug      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  registrations Registration[]
+}
+
+model Registration {
+  id           String             @id @default(cuid())
+  eventId      String
+  event        Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  fullName     String
+  rank         String
+  entity       String
+  email        String
+  mobile       String
+  notes        String?
+  status       RegistrationStatus @default(PENDING)
+  qrToken      String?            @unique
+  qrSentAt     DateTime?
+  qrUsedAt     DateTime?
+  attendedAt   DateTime?
+  approvedAt   DateTime?
+  rejectedAt   DateTime?
+  approvedById String?
+  approvedBy   User?              @relation("ApprovedBy", fields: [approvedById], references: [id])
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  scanLogs ScanLog[]
+
+  @@unique([eventId, email])
+  @@unique([eventId, mobile])
+}
+
+model ScanLog {
+  id             String        @id @default(cuid())
+  registrationId String?
+  registration   Registration? @relation(fields: [registrationId], references: [id], onDelete: SetNull)
+  eventId        String
+  scannedById    String
+  scannedBy      User          @relation(fields: [scannedById], references: [id])
+  qrToken        String
+  result         ScanResult
+  judgeName      String?
+  scannedAt      DateTime      @default(now())
+  offlineId      String?       @unique
+  syncedAt       DateTime?
+}

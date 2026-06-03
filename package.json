@@ -1,0 +1,12 @@
+{
+  "name": "court-event-attendance",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Judge event attendance registration — web portal, admin dashboard, and QR scanner app for Court of Cassation events",
+  "scripts": {
+    "dev:web": "npm run dev --prefix web",
+    "build:web": "npm run build --prefix web",
+    "dev:mobile": "npm run start --prefix mobile",
+    "db:setup": "npm run db:setup --prefix web"
+  }
+}
