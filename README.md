@@ -20,6 +20,23 @@ flowchart LR
   API --> DB
 ```
 
+## GitHub
+
+Repository name: **`court-event-attendance`**
+
+After [GitHub CLI](https://cli.github.com/) login (`gh auth login`), push from the project root:
+
+```bash
+gh repo create court-event-attendance --public --description "Judge event attendance registration for Court of Cassation" --source=. --remote=origin --push
+```
+
+Or create the repo on github.com, then:
+
+```bash
+git remote add origin https://github.com/YOUR_USERNAME/court-event-attendance.git
+git push -u origin main
+```
+
 ## Project structure
 
 | Folder | Purpose |
