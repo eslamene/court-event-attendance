@@ -7,6 +7,7 @@ import {
   getBuiltinDefaultEmailTemplate,
   getDefaultEmailTemplateFromDb,
 } from "@/lib/email-template";
+import { repairCorruptedTemplateHtml } from "@/lib/email-template-placeholders";
 import { apiT } from "@/lib/i18n/api";
 
 export async function GET() {
@@ -21,7 +22,7 @@ export async function GET() {
 
   return NextResponse.json({
     subject: template.subject,
-    htmlBody: template.htmlBody,
+    htmlBody: repairCorruptedTemplateHtml(template.htmlBody),
     source: template.source,
     placeholders: EMAIL_TEMPLATE_PLACEHOLDERS,
   });
@@ -50,7 +51,10 @@ export async function PUT(req: Request) {
     where: { eventId: null },
   });
 
-  const data = { subject: subject.trim(), htmlBody: htmlBody.trim() };
+  const data = {
+    subject: subject.trim(),
+    htmlBody: repairCorruptedTemplateHtml(htmlBody.trim()),
+  };
   const saved = existing
     ? await prisma.emailTemplate.update({ where: { id: existing.id }, data })
     : await prisma.emailTemplate.create({ data: { ...data, eventId: null } });

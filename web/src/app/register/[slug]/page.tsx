@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { LogoHeader } from "@/components/LogoHeader";
 import { RegistrationForm } from "./RegistrationForm";
+import { isRegistrationOpen } from "@/lib/system-settings";
+import { resolveRegistrationFormConfigForEvent } from "@/lib/registration-form-config";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 
@@ -18,6 +20,10 @@ export default async function RegisterPage({
   if (!event) notFound();
 
   const eventDate = format(event.date, "EEEE، d MMMM yyyy", { locale: ar });
+  const [registrationGate, formConfig] = await Promise.all([
+    isRegistrationOpen(),
+    resolveRegistrationFormConfigForEvent(event.id),
+  ]);
 
   return (
     <main className="min-h-screen pb-12">
@@ -27,11 +33,26 @@ export default async function RegisterPage({
         logoAlt={event.name}
       />
       <div className="mx-auto max-w-2xl px-4 py-8">
-        <RegistrationForm
-          slug={slug}
-          eventName={event.name}
-          eventDate={eventDate}
-        />
+        {!registrationGate.open ? (
+          <div
+            className="rounded-xl border border-amber-200 bg-amber-50 px-6 py-8 text-center text-amber-950"
+            role="alert"
+          >
+            <p className="text-lg font-semibold">التسجيل غير متاح حالياً</p>
+            {registrationGate.message && (
+              <p className="mt-3 text-sm leading-relaxed">
+                {registrationGate.message}
+              </p>
+            )}
+          </div>
+        ) : (
+          <RegistrationForm
+            slug={slug}
+            eventName={event.name}
+            eventDate={eventDate}
+            formConfig={formConfig}
+          />
+        )}
       </div>
     </main>
   );

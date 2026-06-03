@@ -8,6 +8,11 @@ import {
 } from "./notifications";
 import type { Event, Registration } from "@/generated/prisma/client";
 import { apiT } from "@/lib/i18n/api";
+import {
+  getSystemSettings,
+  resolveQrInstructions,
+  shouldSendSmsOnApprove,
+} from "@/lib/system-settings";
 
 export type ApprovalResult = {
   registration: Registration & { event: Event };
@@ -45,33 +50,42 @@ export async function approveRegistration(
     include: { event: true },
   });
 
-  const instructions = await apiT("approval.qrInstructions");
+  const [instructions, systemSettings, sendSms] = await Promise.all([
+    resolveQrInstructions(),
+    getSystemSettings(),
+    shouldSendSmsOnApprove(),
+  ]);
 
-  const sendSms =
-    process.env.NOTIFY_SMS === "true" ||
-    (!process.env.TWILIO_WHATSAPP_NUMBER && process.env.TWILIO_PHONE_NUMBER);
+  const tasks: Promise<DeliveryResult>[] = [];
 
-  const tasks: Promise<DeliveryResult>[] = [
-    sendQrEmail({
-      to: updated.email,
-      judgeName: updated.fullName,
-      eventName: updated.event.name,
-      eventDate: updated.event.date,
-      eventId: updated.eventId,
-      eventLogoPath: updated.event.logoPath,
-      qrToken,
-      qrScanUrl: payload,
-      instructions,
-    }),
-    sendQrWhatsApp({
-      to: updated.mobile,
-      judgeName: updated.fullName,
-      eventName: updated.event.name,
-      eventDate: updated.event.date,
-      qrToken,
-      qrUrl: payload,
-    }),
-  ];
+  if (systemSettings.notifyEmailOnApprove) {
+    tasks.push(
+      sendQrEmail({
+        to: updated.email,
+        judgeName: updated.fullName,
+        eventName: updated.event.name,
+        eventDate: updated.event.date,
+        eventId: updated.eventId,
+        eventLogoPath: updated.event.logoPath,
+        qrToken,
+        qrScanUrl: payload,
+        instructions,
+      })
+    );
+  }
+
+  if (systemSettings.notifyWhatsAppOnApprove) {
+    tasks.push(
+      sendQrWhatsApp({
+        to: updated.mobile,
+        judgeName: updated.fullName,
+        eventName: updated.event.name,
+        eventDate: updated.event.date,
+        qrToken,
+        qrUrl: payload,
+      })
+    );
+  }
 
   if (sendSms) {
     tasks.push(
@@ -117,7 +131,7 @@ export async function resendQrEmail(
   }
 
   const payload = buildQrPayload(registration.qrToken, baseUrl);
-  const instructions = await apiT("approval.qrInstructions");
+  const instructions = await resolveQrInstructions();
 
   const email = await sendQrEmail({
     to: registration.email,

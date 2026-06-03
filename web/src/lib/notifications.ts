@@ -20,6 +20,7 @@ import {
   resolveEmailTemplateForEvent,
 } from "./email-template";
 import { buildQrImageUrl } from "./qr";
+import type { EmailProviderPreference } from "./system-settings";
 
 export type NotificationChannel = "email" | "sms" | "whatsapp";
 
@@ -40,12 +41,25 @@ function isFromFieldError(error?: string): boolean {
   );
 }
 
-export function getEmailProvider(): EmailProvider {
+export function getEmailProvider(
+  preference: EmailProviderPreference = "auto"
+): EmailProvider {
   if (!process.env.EMAIL_FROM) return null;
-  const forced = process.env.EMAIL_PROVIDER?.trim().toLowerCase();
-  if (forced === "sendgrid" && process.env.SENDGRID_API_KEY) return "sendgrid";
-  if (forced === "resend" && process.env.RESEND_API_KEY) return "resend";
-  if (forced === "twilio" && isTwilioEmailConfigured()) return "twilio";
+
+  const envForced = process.env.EMAIL_PROVIDER?.trim().toLowerCase();
+  const pref =
+    preference !== "auto"
+      ? preference
+      : envForced && ["twilio", "sendgrid", "resend"].includes(envForced)
+        ? envForced
+        : "auto";
+
+  if (pref === "sendgrid" && process.env.SENDGRID_API_KEY) return "sendgrid";
+  if (pref === "resend" && process.env.RESEND_API_KEY) return "resend";
+  if (pref === "twilio" && isTwilioEmailConfigured()) return "twilio";
+
+  if (pref !== "auto") return null;
+
   if (isTwilioEmailConfigured()) return "twilio";
   if (process.env.SENDGRID_API_KEY) return "sendgrid";
   if (process.env.RESEND_API_KEY) return "resend";
@@ -89,7 +103,9 @@ function emailProviderLabel(provider: EmailProvider): string {
 }
 
 export async function getNotificationsSummary() {
-  const emailProvider = getEmailProvider();
+  const { getSystemSettings } = await import("./system-settings");
+  const settings = await getSystemSettings();
+  const emailProvider = getEmailProvider(settings.emailProviderPreference);
   const twilioBase = Boolean(
     process.env.TWILIO_ACCOUNT_SID?.startsWith("AC") &&
       process.env.TWILIO_AUTH_TOKEN
@@ -156,7 +172,9 @@ export async function sendQrEmail(params: {
     eventLogoPath: params.eventLogoPath,
   });
   const from = process.env.EMAIL_FROM;
-  const provider = getEmailProvider();
+  const { getSystemSettings } = await import("./system-settings");
+  const settings = await getSystemSettings();
+  const provider = getEmailProvider(settings.emailProviderPreference);
 
   if (!provider || !from) {
     if (process.env.NODE_ENV === "development") {

@@ -1,3 +1,8 @@
+/** Normalize admin-entered registration path segment (event slug). */
+export function normalizeEventSlug(text: string): string {
+  return slugify(text);
+}
+
 export function slugify(text: string): string {
   return text
     .trim()

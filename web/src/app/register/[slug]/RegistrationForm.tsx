@@ -14,18 +14,109 @@ import {
   ReadOnlyField,
 } from "@/components/ui/Field";
 import { useI18n } from "@/components/I18nProvider";
-import { parseJsonStringArray } from "@/lib/i18n/translate";
+import {
+  getEnabledFields,
+  getFieldLabel,
+  getFieldPlaceholder,
+  type RegistrationFormConfigRecord,
+  type RegistrationFormFieldConfig,
+} from "@/lib/registration-form-config-shared";
 
 type Props = {
   slug: string;
   eventName: string;
   eventDate: string;
+  formConfig: RegistrationFormConfigRecord;
 };
 
-export function RegistrationForm({ slug, eventName, eventDate }: Props) {
-  const { t, dict } = useI18n();
-  const ranks = parseJsonStringArray(dict, "options.ranks");
-  const entities = parseJsonStringArray(dict, "options.entities");
+function renderField(
+  field: RegistrationFormFieldConfig,
+  locale: string
+) {
+  const label = getFieldLabel(field, locale);
+  const placeholder = getFieldPlaceholder(field, locale);
+
+  switch (field.type) {
+    case "select":
+      return (
+        <SelectField
+          key={field.key}
+          name={field.key}
+          label={label}
+          required={field.required}
+          defaultValue=""
+        >
+          <option value="" disabled>
+            {placeholder ?? "—"}
+          </option>
+          {(field.options ?? []).map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
+          ))}
+        </SelectField>
+      );
+    case "textarea":
+      return (
+        <TextAreaField
+          key={field.key}
+          name={field.key}
+          label={label}
+          required={field.required}
+          rows={3}
+          placeholder={placeholder}
+        />
+      );
+    case "email":
+      return (
+        <TextField
+          key={field.key}
+          name={field.key}
+          label={label}
+          type="email"
+          required={field.required}
+          dir="ltr"
+          className="text-left"
+          autoComplete="email"
+          placeholder={placeholder}
+        />
+      );
+    case "tel":
+      return (
+        <TextField
+          key={field.key}
+          name={field.key}
+          label={label}
+          type="tel"
+          required={field.required}
+          dir="ltr"
+          className="text-left"
+          autoComplete="tel"
+          placeholder={placeholder ?? "01xxxxxxxxx"}
+        />
+      );
+    default:
+      return (
+        <TextField
+          key={field.key}
+          name={field.key}
+          label={label}
+          required={field.required}
+          autoComplete={field.key === "fullName" ? "name" : undefined}
+          placeholder={placeholder}
+        />
+      );
+  }
+}
+
+export function RegistrationForm({
+  slug,
+  eventName,
+  eventDate,
+  formConfig,
+}: Props) {
+  const { t, locale } = useI18n();
+  const fields = getEnabledFields(formConfig);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -36,14 +127,11 @@ export function RegistrationForm({ slug, eventName, eventDate }: Props) {
     setLoading(true);
 
     const form = new FormData(e.currentTarget);
-    const body = {
-      fullName: form.get("fullName"),
-      rank: form.get("rank"),
-      entity: form.get("entity"),
-      email: form.get("email"),
-      mobile: form.get("mobile"),
-      notes: form.get("notes") || undefined,
-    };
+    const body: Record<string, FormDataEntryValue | null> = {};
+    for (const field of fields) {
+      const val = form.get(field.key);
+      body[field.key] = val;
+    }
 
     try {
       const res = await fetch(`/api/register/${slug}`, {
@@ -90,62 +178,7 @@ export function RegistrationForm({ slug, eventName, eventDate }: Props) {
       <ReadOnlyField label={t("register.eventName")} value={eventName} />
       <ReadOnlyField label={t("register.eventDate")} value={eventDate} />
 
-      <TextField
-        name="fullName"
-        label={t("register.fullName")}
-        required
-        autoComplete="name"
-      />
-      <SelectField
-        name="rank"
-        label={t("register.rank")}
-        required
-        defaultValue=""
-      >
-        <option value="" disabled>
-          {t("register.selectRank")}
-        </option>
-        {ranks.map((r) => (
-          <option key={r} value={r}>
-            {r}
-          </option>
-        ))}
-      </SelectField>
-      <SelectField
-        name="entity"
-        label={t("register.entity")}
-        required
-        defaultValue=""
-      >
-        <option value="" disabled>
-          {t("register.selectEntity")}
-        </option>
-        {entities.map((e) => (
-          <option key={e} value={e}>
-            {e}
-          </option>
-        ))}
-      </SelectField>
-      <TextField
-        name="email"
-        label={t("register.email")}
-        type="email"
-        required
-        dir="ltr"
-        className="text-left"
-        autoComplete="email"
-      />
-      <TextField
-        name="mobile"
-        label={t("register.mobile")}
-        type="tel"
-        required
-        dir="ltr"
-        className="text-left"
-        placeholder="01xxxxxxxxx"
-        autoComplete="tel"
-      />
-      <TextAreaField name="notes" label={t("register.notes")} rows={3} />
+      {fields.map((field) => renderField(field, locale))}
 
       {error && (
         <p className="flex items-start gap-2 rounded-lg bg-red-50 px-4 py-3 text-sm text-error">

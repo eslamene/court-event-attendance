@@ -8,40 +8,51 @@ import {
   getDefaultEmailTemplateFromDb,
   getEventEmailTemplateFromDb,
 } from "@/lib/email-template";
+import { repairCorruptedTemplateHtml } from "@/lib/email-template-placeholders";
 import { apiT } from "@/lib/i18n/api";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
 export async function GET(_req: Request, { params }: RouteParams) {
-  const session = await auth();
-  if (!session?.user || !canManageEvents(session.user.role)) {
-    return NextResponse.json({ error: await apiT("api.forbidden") }, { status: 403 });
-  }
+  try {
+    const session = await auth();
+    if (!session?.user || !canManageEvents(session.user.role)) {
+      return NextResponse.json({ error: await apiT("api.forbidden") }, { status: 403 });
+    }
 
-  const { id } = await params;
-  const event = await prisma.event.findUnique({ where: { id } });
-  if (!event) {
+    const { id } = await params;
+    const event = await prisma.event.findUnique({ where: { id } });
+    if (!event) {
+      return NextResponse.json(
+        { error: await apiT("api.eventNotFound") },
+        { status: 404 }
+      );
+    }
+
+    await ensureDefaultEmailTemplateSeeded();
+    const defaultTemplate =
+      (await getDefaultEmailTemplateFromDb()) ?? getBuiltinDefaultEmailTemplate();
+    const override = await getEventEmailTemplateFromDb(id);
+
+    return NextResponse.json({
+      eventId: id,
+      eventName: event.name,
+      hasOverride: Boolean(override),
+      subject: override?.subject ?? defaultTemplate.subject,
+      htmlBody: repairCorruptedTemplateHtml(
+        override?.htmlBody ?? defaultTemplate.htmlBody
+      ),
+      defaultSubject: defaultTemplate.subject,
+      defaultHtmlBody: repairCorruptedTemplateHtml(defaultTemplate.htmlBody),
+      placeholders: EMAIL_TEMPLATE_PLACEHOLDERS,
+    });
+  } catch (e) {
+    console.error("[email-template GET]", e);
     return NextResponse.json(
-      { error: await apiT("api.eventNotFound") },
-      { status: 404 }
+      { error: await apiT("api.operationFailed") },
+      { status: 500 }
     );
   }
-
-  await ensureDefaultEmailTemplateSeeded();
-  const defaultTemplate =
-    (await getDefaultEmailTemplateFromDb()) ?? getBuiltinDefaultEmailTemplate();
-  const override = await getEventEmailTemplateFromDb(id);
-
-  return NextResponse.json({
-    eventId: id,
-    eventName: event.name,
-    hasOverride: Boolean(override),
-    subject: override?.subject ?? defaultTemplate.subject,
-    htmlBody: override?.htmlBody ?? defaultTemplate.htmlBody,
-    defaultSubject: defaultTemplate.subject,
-    defaultHtmlBody: defaultTemplate.htmlBody,
-    placeholders: EMAIL_TEMPLATE_PLACEHOLDERS,
-  });
 }
 
 export async function PUT(req: Request, { params }: RouteParams) {
@@ -71,7 +82,10 @@ export async function PUT(req: Request, { params }: RouteParams) {
     return NextResponse.json({ error: await apiT("api.invalidData") }, { status: 400 });
   }
 
-  const data = { subject: subject.trim(), htmlBody: htmlBody.trim() };
+  const data = {
+    subject: subject.trim(),
+    htmlBody: repairCorruptedTemplateHtml(htmlBody.trim()),
+  };
   const saved = await prisma.emailTemplate.upsert({
     where: { eventId: id },
     create: { eventId: id, ...data },

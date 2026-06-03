@@ -10,7 +10,6 @@ import {
 import { TextField } from "@/components/ui/Field";
 import { PrimaryFormButton } from "@/components/ui/FormActions";
 import { useI18n } from "@/components/I18nProvider";
-import { EmailTemplateEditor } from "@/components/admin/EmailTemplateEditor";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 
 type Status = {
@@ -28,7 +27,7 @@ type Status = {
   whatsapp: { configured: boolean; provider: string };
 };
 
-export function SettingsPanel() {
+export function DeliveryChannelsPanel() {
   const { t } = useI18n();
   const { toastSuccess, toastError } = useFeedback();
   const [status, setStatus] = useState<Status | null>(null);
@@ -69,7 +68,7 @@ export function SettingsPanel() {
   }
 
   return (
-    <div className="max-w-4xl space-y-8">
+    <div className="w-full max-w-5xl space-y-8">
       <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
         <h2 className="mb-4 font-bold text-gold-dark">{t("admin.settings.title")}</h2>
         <div className="space-y-3 text-sm">
@@ -142,9 +141,7 @@ export function SettingsPanel() {
           </div>
         </div>
         <p className="mt-4 text-xs text-bronze leading-relaxed">
-          دليل الإعداد الكامل:{" "}
-          <code className="text-gold-dark">docs/TWILIO_INTEGRATION.md</code> في
-          المستودع
+          {t("admin.settings.advancedHint")}
         </p>
       </section>
 
@@ -152,15 +149,17 @@ export function SettingsPanel() {
         onSubmit={onTest}
         className="space-y-4 rounded-xl border border-border bg-card p-6 shadow-sm"
       >
-        <h2 className="font-bold text-gold-dark">إرسال رسالة اختبار</h2>
+        <h2 className="font-bold text-gold-dark">{t("admin.settings.testTitle")}</h2>
         <label className="block space-y-1.5">
-          <span className="text-sm font-medium text-gold-dark">القناة</span>
+          <span className="text-sm font-medium text-gold-dark">
+            {t("admin.settings.testChannel")}
+          </span>
           <select
             name="channel"
             className="w-full rounded-lg border border-border bg-card px-4 py-2.5"
             defaultValue="email"
           >
-            <option value="email">بريد إلكتروني</option>
+            <option value="email">{t("admin.settings.channelEmail")}</option>
             <option value="whatsapp">WhatsApp</option>
             <option value="sms">SMS</option>
           </select>
@@ -176,8 +175,6 @@ export function SettingsPanel() {
           {loading ? t("admin.settings.testSending") : t("admin.settings.testSend")}
         </PrimaryFormButton>
       </form>
-
-      <EmailTemplateEditor mode="default" embedded />
     </div>
   );
 }

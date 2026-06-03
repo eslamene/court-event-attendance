@@ -72,6 +72,42 @@ export function TextAreaField({
   );
 }
 
+export function CheckboxField({
+  label,
+  description,
+  checked,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  description?: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <label
+      className={`flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card px-4 py-3 transition hover:border-gold/40 ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.checked)}
+        className="mt-1 h-4 w-4 rounded border-border text-gold-dark focus:ring-gold"
+      />
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-medium text-gold-dark">{label}</span>
+        {description && (
+          <span className="mt-0.5 block text-xs text-bronze leading-relaxed">
+            {description}
+          </span>
+        )}
+      </span>
+    </label>
+  );
+}
+
 export function ReadOnlyField({ label, value }: { label: string; value: string }) {
   return (
     <div className="space-y-1.5">

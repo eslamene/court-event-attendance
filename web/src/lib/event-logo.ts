@@ -3,14 +3,10 @@ import { apiT } from "@/lib/i18n/api";
 import { writeFile, mkdir, unlink } from "fs/promises";
 import path from "path";
 
-const ALLOWED_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-]);
-
-const MAX_BYTES = 2 * 1024 * 1024;
+import {
+  EVENT_LOGO_ALLOWED_TYPES,
+  EVENT_LOGO_MAX_BYTES,
+} from "./event-logo-constants";
 
 export function isExternalLogoUrl(path: string) {
   return path.startsWith("http://") || path.startsWith("https://");
@@ -31,10 +27,10 @@ export async function saveEventLogo(
   eventId: string,
   file: File
 ): Promise<{ logoPath: string } | { error: string }> {
-  if (!ALLOWED_TYPES.has(file.type)) {
+  if (!EVENT_LOGO_ALLOWED_TYPES.has(file.type)) {
     return { error: await apiT("api.unsupportedFileType") };
   }
-  if (file.size > MAX_BYTES) {
+  if (file.size > EVENT_LOGO_MAX_BYTES) {
     return { error: await apiT("api.fileTooLarge") };
   }
 

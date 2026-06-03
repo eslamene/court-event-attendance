@@ -9,6 +9,7 @@ import {
   getLocaleMeta,
   getServerT,
 } from "@/lib/i18n/server";
+import { cn } from "@/lib/utils";
 
 const noto = Noto_Sans_Arabic({
   variable: "--font-noto",
@@ -35,8 +36,13 @@ export default async function RootLayout({
   const locales = await getActiveLocales();
 
   return (
-    <html lang={locale} dir={meta.direction} className={`${noto.variable} h-full`}>
-      <body className="min-h-full antialiased">
+    <html
+      lang={locale}
+      dir={meta.direction}
+      className={cn("h-full", noto.variable, "font-sans")}
+      suppressHydrationWarning
+    >
+      <body className="min-h-full antialiased" suppressHydrationWarning>
         <I18nProvider
           locale={locale}
           direction={meta.direction}

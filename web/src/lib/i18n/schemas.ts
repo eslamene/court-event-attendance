@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { validateRecipientEmail } from "@/lib/email-address";
+import { normalizeEventSlug } from "@/lib/slug";
 import type { Dictionary } from "./types";
 import { parseJsonStringArray } from "./translate";
 
@@ -19,9 +20,19 @@ function msg(dict: Dictionary, key: string) {
   return dict[key] ?? key;
 }
 
-export function createRegistrationSchema(dict: Dictionary) {
+export function createRegistrationSchema(
+  dict: Dictionary,
+  options?: { requireNotes?: boolean }
+) {
   const ranks = parseJsonStringArray(dict, "options.ranks");
   const entities = parseJsonStringArray(dict, "options.entities");
+
+  const notesSchema = options?.requireNotes
+    ? z
+        .string()
+        .min(1, msg(dict, "validation.notesRequired"))
+        .max(1000)
+    : z.string().max(1000).optional();
 
   return z.object({
     fullName: z.string().min(3, msg(dict, "validation.fullNameRequired")),
@@ -42,7 +53,7 @@ export function createRegistrationSchema(dict: Dictionary) {
       .refine((v) => egyptMobileRegex.test(normalizeMobile(v)), {
         message: msg(dict, "validation.mobileInvalid"),
       }),
-    notes: z.string().max(1000).optional(),
+    notes: notesSchema,
   });
 }
 
@@ -57,6 +68,17 @@ export function createUpdateEventSchema(dict: Dictionary) {
   return z.object({
     name: z.string().min(3).optional(),
     date: z.string().min(1).optional(),
+    slug: z
+      .string()
+      .min(1, msg(dict, "validation.eventSlugRequired"))
+      .optional()
+      .transform((v) => (v === undefined ? undefined : normalizeEventSlug(v)))
+      .refine(
+        (v) =>
+          v === undefined ||
+          (v.length >= 2 && v.length <= 80 && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(v)),
+        { message: msg(dict, "validation.eventSlugInvalid") }
+      ),
     isActive: z.boolean().optional(),
     logoUrl: z
       .string()

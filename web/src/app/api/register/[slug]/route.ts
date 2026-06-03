@@ -2,9 +2,12 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { apiDict, apiT } from "@/lib/i18n/api";
 import {
-  createRegistrationSchema,
-  normalizeMobile,
-} from "@/lib/i18n/schemas";
+  createRegistrationSchemaFromConfig,
+  getEnabledFields,
+  mapRegistrationSubmitBody,
+  resolveRegistrationFormConfigForEvent,
+} from "@/lib/registration-form-config";
+import { isRegistrationOpen } from "@/lib/system-settings";
 
 export async function POST(
   req: Request,
@@ -23,6 +26,18 @@ export async function POST(
     );
   }
 
+  const registrationGate = await isRegistrationOpen();
+  if (!registrationGate.open) {
+    return NextResponse.json(
+      {
+        error:
+          registrationGate.message ??
+          (await apiT("system.registrationClosed")),
+      },
+      { status: 503 }
+    );
+  }
+
   let body: unknown;
   try {
     body = await req.json();
@@ -33,7 +48,10 @@ export async function POST(
     );
   }
 
-  const parsed = createRegistrationSchema(dict).safeParse(body);
+  const formConfig = await resolveRegistrationFormConfigForEvent(event.id);
+  const parsed = createRegistrationSchemaFromConfig(formConfig, dict).safeParse(
+    body
+  );
   if (!parsed.success) {
     return NextResponse.json(
       {
@@ -44,33 +62,47 @@ export async function POST(
     );
   }
 
-  const data = parsed.data;
-  const email = data.email.toLowerCase().trim();
-  const mobile = normalizeMobile(data.mobile);
+  const data = mapRegistrationSubmitBody(
+    formConfig,
+    parsed.data as Record<string, unknown>
+  );
 
-  const duplicate = await prisma.registration.findFirst({
-    where: {
-      eventId: event.id,
-      OR: [{ email }, { mobile }],
-    },
-  });
+  const enabledKeys = new Set(
+    getEnabledFields(formConfig).map((f) => f.key)
+  );
+  const duplicateOr: { email?: string; mobile?: string }[] = [];
+  if (enabledKeys.has("email") && data.email) {
+    duplicateOr.push({ email: data.email });
+  }
+  if (enabledKeys.has("mobile") && data.mobile) {
+    duplicateOr.push({ mobile: data.mobile });
+  }
 
-  if (duplicate) {
-    return NextResponse.json(
-      { error: await apiT("api.duplicateRegistration") },
-      { status: 409 }
-    );
+  if (duplicateOr.length > 0) {
+    const duplicate = await prisma.registration.findFirst({
+      where: {
+        eventId: event.id,
+        OR: duplicateOr,
+      },
+    });
+
+    if (duplicate) {
+      return NextResponse.json(
+        { error: await apiT("api.duplicateRegistration") },
+        { status: 409 }
+      );
+    }
   }
 
   const registration = await prisma.registration.create({
     data: {
       eventId: event.id,
-      fullName: data.fullName.trim(),
+      fullName: data.fullName,
       rank: data.rank,
       entity: data.entity,
-      email,
-      mobile,
-      notes: data.notes?.trim() || null,
+      email: data.email,
+      mobile: data.mobile,
+      notes: data.notes,
       status: "PENDING",
     },
   });

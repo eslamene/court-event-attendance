@@ -15,6 +15,7 @@ import { REGISTRATION_STATUSES } from "@/lib/constants";
 import { useI18n } from "@/components/I18nProvider";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { AdminListToolbar } from "@/components/admin/AdminListToolbar";
+import { VisualStatusBadge } from "@/components/admin/VisualStatusBadge";
 import { ActionButton } from "@/components/ui/ActionButton";
 import { parseJsonStringArray } from "@/lib/i18n/translate";
 import { format } from "date-fns";
@@ -151,13 +152,6 @@ export function RegistrationsPanel() {
   }
 
   const hasFilters = Boolean(eventId || status || rank || entity);
-
-  const statusColor: Record<string, string> = {
-    PENDING: "bg-amber-100 text-amber-900",
-    APPROVED: "bg-blue-100 text-blue-900",
-    REJECTED: "bg-red-100 text-red-900",
-    ATTENDED: "bg-green-100 text-green-900",
-  };
 
   const colSpan = canApprove ? 7 : 6;
 
@@ -320,11 +314,7 @@ export function RegistrationsPanel() {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <span
-                      className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusColor[r.status] ?? ""}`}
-                    >
-                      {t(`status.${r.status}`)}
-                    </span>
+                    <VisualStatusBadge kind="registration" status={r.status} />
                   </td>
                   <td className="px-4 py-3 text-xs text-bronze">
                     {format(new Date(r.createdAt), "yyyy-MM-dd HH:mm")}

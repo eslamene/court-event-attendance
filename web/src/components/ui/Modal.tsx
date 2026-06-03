@@ -7,7 +7,13 @@ type Props = {
   title: string;
   children: React.ReactNode;
   onClose: () => void;
-  size?: "md" | "lg";
+  size?: "md" | "lg" | "xl";
+};
+
+const sizeClass = {
+  md: "max-w-lg",
+  lg: "max-w-2xl",
+  xl: "max-w-6xl",
 };
 
 export function Modal({ title, children, onClose, size = "md" }: Props) {
@@ -33,9 +39,7 @@ export function Modal({ title, children, onClose, size = "md" }: Props) {
       onClick={onClose}
     >
       <div
-        className={`max-h-[90vh] w-full overflow-y-auto rounded-2xl border border-border bg-card p-6 shadow-xl ${
-          size === "lg" ? "max-w-2xl" : "max-w-lg"
-        }`}
+        className={`max-h-[92vh] w-full overflow-y-auto rounded-2xl border border-border bg-card p-6 shadow-xl ${sizeClass[size]}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-start justify-between gap-4">

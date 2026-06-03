@@ -1,10 +1,5 @@
-import { SettingsPanel } from "@/components/admin/SettingsPanel";
+import { redirect } from "next/navigation";
 
-export default function AdminSettingsPage() {
-  return (
-    <div>
-      <h1 className="mb-6 text-2xl font-bold text-gold-dark">إعدادات الإشعارات</h1>
-      <SettingsPanel />
-    </div>
-  );
+export default function AdminSettingsIndexPage() {
+  redirect("/admin/settings/channels");
 }

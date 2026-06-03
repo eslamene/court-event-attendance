@@ -51,8 +51,9 @@ model Event {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  registrations  Registration[]
-  emailTemplate  EmailTemplate?
+  registrations           Registration[]
+  emailTemplate           EmailTemplate?
+  registrationFormConfig  RegistrationFormConfig?
 }
 
 model EmailTemplate {
@@ -63,6 +64,33 @@ model EmailTemplate {
   htmlBody  String   @db.Text
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model RegistrationFormConfig {
+  id         String   @id @default(cuid())
+  eventId    String?  @unique
+  event      Event?   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  fieldsJson String   @db.Text
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model SystemSettings {
+  id                         String   @id @default("global")
+  platformName               String   @default("Court Events")
+  supportEmail               String?
+  supportPhone               String?
+  qrInstructionsOverride     String?  @db.Text
+  notifyEmailOnApprove       Boolean  @default(true)
+  notifyWhatsAppOnApprove    Boolean  @default(true)
+  notifySmsOnApprove         Boolean  @default(false)
+  smsWhenWhatsAppUnavailable Boolean  @default(true)
+  emailProviderPreference    String   @default("auto")
+  maintenanceMode            Boolean  @default(false)
+  maintenanceMessage         String?  @db.Text
+  requireRegistrationNotes   Boolean  @default(false)
+  allowPublicRegistration    Boolean  @default(true)
+  updatedAt                  DateTime @updatedAt
 }
 
 model Registration {

@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Key, Plus, UserMinus, UserPlus } from "@phosphor-icons/react";
 import { TextField, SelectField } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
+import { VisualStatusBadge } from "@/components/admin/VisualStatusBadge";
 import { ActionButton } from "@/components/ui/ActionButton";
 import {
   CancelFormButton,
@@ -163,13 +164,7 @@ export function UsersPanel() {
                   </td>
                   <td className="px-4 py-3">{t(`roles.${u.role}`)}</td>
                   <td className="px-4 py-3">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs ${u.isActive ? "bg-green-100 text-green-900" : "bg-red-100 text-red-900"}`}
-                    >
-                      {u.isActive
-                        ? t("admin.users.active")
-                        : t("admin.users.inactive")}
-                    </span>
+                    <VisualStatusBadge kind="user" active={u.isActive} />
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-2">

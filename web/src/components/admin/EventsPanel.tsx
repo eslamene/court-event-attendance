@@ -2,18 +2,17 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import Image from "next/image";
+import { FloppyDisk, Plus, Trash } from "@phosphor-icons/react";
 import {
-  ArrowSquareOut,
-  EnvelopeSimple,
-  FloppyDisk,
-  PencilSimple,
-  Plus,
-  Trash,
-} from "@phosphor-icons/react";
+  EventRowActionsCommand,
+  type EventRowAction,
+} from "@/components/admin/EventRowActionsCommand";
+import { VisualStatusBadge } from "@/components/admin/VisualStatusBadge";
 import { EmailTemplateEditor } from "@/components/admin/EmailTemplateEditor";
+import { EventLogoUploader } from "@/components/admin/EventLogoUploader";
+import { RegistrationFormConfigEditor } from "@/components/admin/RegistrationFormConfigEditor";
 import { TextField } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
-import { ActionButton } from "@/components/ui/ActionButton";
 import {
   CancelFormButton,
   DangerFormButton,
@@ -21,6 +20,7 @@ import {
 } from "@/components/ui/FormActions";
 import { AdminListToolbar } from "@/components/admin/AdminListToolbar";
 import { useI18n } from "@/components/I18nProvider";
+import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { PLATFORM_LOGO_PATH } from "@/lib/platform-logo";
 import { format } from "date-fns";
 
@@ -37,6 +37,7 @@ type EventRow = {
 
 export function EventsPanel() {
   const { t } = useI18n();
+  const { confirm, toastError } = useFeedback();
   const [events, setEvents] = useState<EventRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
@@ -47,6 +48,9 @@ export function EventsPanel() {
   const [emailTemplateEvent, setEmailTemplateEvent] = useState<EventRow | null>(
     null
   );
+  const [registrationFormEvent, setRegistrationFormEvent] =
+    useState<EventRow | null>(null);
+  const [createLogoFile, setCreateLogoFile] = useState<File | null>(null);
 
   async function load() {
     setLoading(true);
@@ -71,8 +75,6 @@ export function EventsPanel() {
     const form = new FormData(e.currentTarget);
     const name = form.get("name") as string;
     const date = form.get("date") as string;
-    const logoFile = form.get("logo") as File | null;
-
     const res = await fetch("/api/admin/events", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -84,9 +86,9 @@ export function EventsPanel() {
       return;
     }
 
-    if (logoFile && logoFile.size > 0) {
+    if (createLogoFile) {
       const fd = new FormData();
-      fd.append("logo", logoFile);
+      fd.append("logo", createLogoFile);
       await fetch(`/api/admin/events/${data.id}/logo`, {
         method: "POST",
         body: fd,
@@ -95,6 +97,7 @@ export function EventsPanel() {
 
     setMessage(t("admin.events.created", { url: data.registrationUrl }));
     setCreating(false);
+    setCreateLogoFile(null);
     load();
   }
 
@@ -110,6 +113,7 @@ export function EventsPanel() {
       body: JSON.stringify({
         name: form.get("name"),
         date: form.get("date"),
+        slug: form.get("slug"),
         isActive: form.get("isActive") === "true",
         logoUrl: form.get("logoUrl") || "",
       }),
@@ -118,16 +122,6 @@ export function EventsPanel() {
     if (!res.ok) {
       setError(data.error || t("admin.events.updateFailed"));
       return;
-    }
-
-    const logoFile = form.get("logo") as File | null;
-    if (logoFile && logoFile.size > 0) {
-      const fd = new FormData();
-      fd.append("logo", logoFile);
-      await fetch(`/api/admin/events/${editing.id}/logo`, {
-        method: "POST",
-        body: fd,
-      });
     }
 
     setMessage(t("admin.events.updated"));
@@ -160,6 +154,68 @@ export function EventsPanel() {
     load();
   }
 
+  async function onDeleteEvent(ev: EventRow) {
+    const ok = await confirm({
+      title: t("admin.events.deleteTitle"),
+      message: t("admin.events.deleteConfirm", { name: ev.name }),
+      destructive: true,
+      confirmLabel: t("admin.events.deleteEvent"),
+    });
+    if (!ok) return;
+
+    setError("");
+    setMessage("");
+    const res = await fetch(`/api/admin/events/${ev.id}`, { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) {
+      const msg = data.error || t("admin.events.deleteFailed");
+      setError(msg);
+      toastError(msg);
+      return;
+    }
+
+    setMessage(data.message || t("admin.events.deleted"));
+    load();
+  }
+
+  function handleEventAction(ev: EventRow, action: EventRowAction) {
+    setError("");
+    switch (action) {
+      case "edit":
+        setEditing(ev);
+        setClearing(null);
+        setEmailTemplateEvent(null);
+        setRegistrationFormEvent(null);
+        break;
+      case "emailTemplate":
+        setEmailTemplateEvent(ev);
+        setRegistrationFormEvent(null);
+        setEditing(null);
+        setClearing(null);
+        break;
+      case "registrationForm":
+        setRegistrationFormEvent(ev);
+        setEmailTemplateEvent(null);
+        setEditing(null);
+        setClearing(null);
+        break;
+      case "clearData":
+        setClearing(ev);
+        setEditing(null);
+        setEmailTemplateEvent(null);
+        setRegistrationFormEvent(null);
+        break;
+      case "deleteEvent":
+        void onDeleteEvent(ev);
+        setEditing(null);
+        setEmailTemplateEvent(null);
+        setRegistrationFormEvent(null);
+        break;
+      default:
+        break;
+    }
+  }
+
   return (
     <div className="space-y-4">
       {message && (
@@ -179,7 +235,7 @@ export function EventsPanel() {
       />
 
       <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
-        <table className="w-full min-w-[800px] text-sm">
+        <table className="w-full min-w-[640px] text-sm">
           <thead className="bg-[#f5f0e8] text-gold-dark">
             <tr>
               <th className="px-4 py-3 text-right">{t("admin.events.colLogo")}</th>
@@ -224,66 +280,22 @@ export function EventsPanel() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="font-medium">{ev.name}</div>
-                    <a
-                      href={ev.registrationUrl}
-                      className="inline-flex items-center gap-1 text-xs text-gold-dark underline"
-                      target="_blank"
-                      rel="noreferrer"
-                      dir="ltr"
-                    >
+                    <span className="text-xs text-bronze" dir="ltr">
                       /register/{ev.slug}
-                      <ArrowSquareOut size={12} aria-hidden />
-                    </a>
+                    </span>
                   </td>
                   <td className="px-4 py-3">
                     {format(new Date(ev.date), "yyyy-MM-dd")}
                   </td>
                   <td className="px-4 py-3">{ev.registrationCount}</td>
                   <td className="px-4 py-3">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs ${ev.isActive ? "bg-green-100 text-green-900" : "bg-gray-100 text-gray-700"}`}
-                    >
-                      {ev.isActive
-                        ? t("admin.events.active")
-                        : t("admin.events.inactive")}
-                    </span>
+                    <VisualStatusBadge kind="event" active={ev.isActive} />
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-2">
-                      <ActionButton
-                        icon={PencilSimple}
-                        onClick={() => {
-                          setEditing(ev);
-                          setClearing(null);
-                          setError("");
-                        }}
-                      >
-                        {t("admin.events.edit")}
-                      </ActionButton>
-                      <ActionButton
-                        icon={EnvelopeSimple}
-                        onClick={() => {
-                          setEmailTemplateEvent(ev);
-                          setEditing(null);
-                          setClearing(null);
-                          setError("");
-                        }}
-                      >
-                        {t("admin.events.emailTemplate")}
-                      </ActionButton>
-                      <ActionButton
-                        icon={Trash}
-                        variant="danger"
-                        onClick={() => {
-                          setClearing(ev);
-                          setEditing(null);
-                          setEmailTemplateEvent(null);
-                          setError("");
-                        }}
-                      >
-                        {t("admin.events.clearData")}
-                      </ActionButton>
-                    </div>
+                  <td className="min-w-[7.5rem] px-3 py-3 text-end">
+                    <EventRowActionsCommand
+                      event={ev}
+                      onAction={(action) => handleEventAction(ev, action)}
+                    />
                   </td>
                 </tr>
               ))
@@ -297,6 +309,7 @@ export function EventsPanel() {
           title={t("admin.events.createTitle")}
           onClose={() => {
             setCreating(false);
+            setCreateLogoFile(null);
             setError("");
           }}
         >
@@ -308,17 +321,10 @@ export function EventsPanel() {
               type="date"
               required
             />
-            <label className="block space-y-1.5">
-              <span className="text-sm font-medium text-gold-dark">
-                {t("admin.events.logoUpload")}
-              </span>
-              <input
-                type="file"
-                name="logo"
-                accept="image/jpeg,image/png,image/webp,image/gif"
-                className="w-full text-sm"
-              />
-            </label>
+            <EventLogoUploader
+              label={t("admin.events.logoUpload")}
+              onPendingFile={setCreateLogoFile}
+            />
             {error && <p className="text-sm text-error">{error}</p>}
             <div className="flex gap-3 pt-2">
               <PrimaryFormButton icon={Plus}>
@@ -356,19 +362,66 @@ export function EventsPanel() {
               defaultValue={format(new Date(editing.date), "yyyy-MM-dd")}
               required
             />
-            <label className="block space-y-1.5">
-              <span className="text-sm font-medium text-gold-dark">
+            <div className="space-y-1.5">
+              <TextField
+                name="slug"
+                label={t("admin.events.registrationSlug")}
+                defaultValue={editing.slug}
+                required
+                dir="ltr"
+                className="text-left font-mono"
+                placeholder="golden-jubilee-2026"
+              />
+              <p className="text-xs text-bronze" dir="ltr">
+                {t("admin.events.registrationUrlPreview")}:{" "}
+                <a
+                  href={editing.registrationUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium text-gold-dark underline break-all"
+                >
+                  {editing.registrationUrl}
+                </a>
+              </p>
+              <p className="text-xs text-bronze">
+                {t("admin.events.slugHint")}
+              </p>
+            </div>
+            <fieldset className="block space-y-2">
+              <legend className="text-sm font-medium text-gold-dark">
                 {t("admin.events.colStatus")}
-              </span>
-              <select
-                name="isActive"
-                defaultValue={editing.isActive ? "true" : "false"}
-                className="w-full rounded-lg border border-border px-4 py-2.5"
-              >
-                <option value="true">{t("admin.events.statusActive")}</option>
-                <option value="false">{t("admin.events.statusInactive")}</option>
-              </select>
-            </label>
+              </legend>
+              <div className="flex flex-wrap gap-3">
+                <label className="inline-flex cursor-pointer rounded-full ring-offset-2 has-[:checked]:ring-2 has-[:checked]:ring-gold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-gold/50">
+                  <input
+                    type="radio"
+                    name="isActive"
+                    value="true"
+                    defaultChecked={editing.isActive}
+                    className="sr-only"
+                  />
+                  <VisualStatusBadge kind="event" active />
+                </label>
+                <label className="inline-flex cursor-pointer rounded-full ring-offset-2 has-[:checked]:ring-2 has-[:checked]:ring-gold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-gold/50">
+                  <input
+                    type="radio"
+                    name="isActive"
+                    value="false"
+                    defaultChecked={!editing.isActive}
+                    className="sr-only"
+                  />
+                  <VisualStatusBadge kind="event" active={false} />
+                </label>
+              </div>
+            </fieldset>
+            <EventLogoUploader
+              label={t("admin.events.logoUpload")}
+              eventId={editing.id}
+              currentLogoUrl={editing.logoPath}
+              onLogoChange={(logoPath) =>
+                setEditing((prev) => (prev ? { ...prev, logoPath } : null))
+              }
+            />
             <TextField
               name="logoUrl"
               label={t("admin.events.logoUrl")}
@@ -378,17 +431,9 @@ export function EventsPanel() {
               dir="ltr"
               className="text-left"
             />
-            <label className="block space-y-1.5">
-              <span className="text-sm font-medium text-gold-dark">
-                {t("admin.events.logoUrlOr")}
-              </span>
-              <input
-                type="file"
-                name="logo"
-                accept="image/jpeg,image/png,image/webp,image/gif"
-                className="w-full text-sm"
-              />
-            </label>
+            <p className="-mt-2 text-xs text-bronze">
+              {t("admin.events.logoUrlOr")}
+            </p>
             {error && <p className="text-sm text-error">{error}</p>}
             <div className="flex gap-3 pt-2">
               <PrimaryFormButton icon={FloppyDisk}>
@@ -445,6 +490,14 @@ export function EventsPanel() {
           eventId={emailTemplateEvent.id}
           eventName={emailTemplateEvent.name}
           onClose={() => setEmailTemplateEvent(null)}
+        />
+      )}
+      {registrationFormEvent && (
+        <RegistrationFormConfigEditor
+          mode="event"
+          eventId={registrationFormEvent.id}
+          eventName={registrationFormEvent.name}
+          onClose={() => setRegistrationFormEvent(null)}
         />
       )}
     </div>

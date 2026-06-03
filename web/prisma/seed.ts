@@ -2,6 +2,8 @@ import "dotenv/config";
 import bcrypt from "bcryptjs";
 import { createPrismaClient } from "../src/lib/prisma-factory";
 import { ensureDefaultEmailTemplateSeeded } from "../src/lib/email-template";
+import { ensureDefaultRegistrationFormConfigSeeded } from "../src/lib/registration-form-config";
+import { ensureSystemSettingsSeeded } from "../src/lib/system-settings";
 import { seedDictionary } from "../src/lib/i18n/seed";
 
 const prisma = createPrismaClient();
@@ -59,8 +61,12 @@ async function main() {
 
   await seedDictionary();
   await ensureDefaultEmailTemplateSeeded();
+  await ensureDefaultRegistrationFormConfigSeeded();
+  await ensureSystemSettingsSeeded();
   console.log("Dictionary seeded (ar, en).");
   console.log("Default email template seeded.");
+  console.log("Default registration form seeded.");
+  console.log("System settings seeded.");
   console.log("Seed complete.");
   console.log("Admin:", admin.email);
   console.log("Manager: manager@court.local");
