@@ -2,11 +2,12 @@
 
 import { FormEvent, useState } from "react";
 import {
-  CheckCircle,
-  CircleNotch,
-  PaperPlaneTilt,
-  WarningCircle,
-} from "@phosphor-icons/react";
+  CheckCircle2,
+  Loader2,
+  Send,
+  AlertCircle,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   TextField,
   SelectField,
@@ -27,6 +28,7 @@ type Props = {
   eventName: string;
   eventDate: string;
   formConfig: RegistrationFormConfigRecord;
+  seatTiers?: { id: string; name: string; seatCount: number }[];
 };
 
 function renderField(
@@ -42,6 +44,8 @@ function renderField(
         <SelectField
           key={field.key}
           name={field.key}
+          fieldKey={field.key}
+          fieldType={field.type}
           label={label}
           required={field.required}
           defaultValue=""
@@ -61,6 +65,8 @@ function renderField(
         <TextAreaField
           key={field.key}
           name={field.key}
+          fieldKey={field.key}
+          fieldType={field.type}
           label={label}
           required={field.required}
           rows={3}
@@ -72,6 +78,8 @@ function renderField(
         <TextField
           key={field.key}
           name={field.key}
+          fieldKey={field.key}
+          fieldType={field.type}
           label={label}
           type="email"
           required={field.required}
@@ -86,6 +94,8 @@ function renderField(
         <TextField
           key={field.key}
           name={field.key}
+          fieldKey={field.key}
+          fieldType={field.type}
           label={label}
           type="tel"
           required={field.required}
@@ -100,6 +110,8 @@ function renderField(
         <TextField
           key={field.key}
           name={field.key}
+          fieldKey={field.key}
+          fieldType={field.type}
           label={label}
           type="number"
           required={field.required}
@@ -113,6 +125,8 @@ function renderField(
         <TextField
           key={field.key}
           name={field.key}
+          fieldKey={field.key}
+          fieldType={field.type}
           label={label}
           type="date"
           required={field.required}
@@ -125,6 +139,8 @@ function renderField(
         <TextField
           key={field.key}
           name={field.key}
+          fieldKey={field.key}
+          fieldType={field.type}
           label={label}
           type="url"
           required={field.required}
@@ -138,6 +154,8 @@ function renderField(
         <TextField
           key={field.key}
           name={field.key}
+          fieldKey={field.key}
+          fieldType={field.type}
           label={label}
           required={field.required}
           autoComplete={field.key === "fullName" ? "name" : undefined}
@@ -152,9 +170,11 @@ export function RegistrationForm({
   eventName,
   eventDate,
   formConfig,
+  seatTiers = [],
 }: Props) {
   const { t, locale } = useI18n();
   const fields = getEnabledFields(formConfig);
+  const showTierSelect = seatTiers.length > 0;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -169,6 +189,9 @@ export function RegistrationForm({
     for (const field of fields) {
       const val = form.get(field.key);
       body[field.key] = val;
+    }
+    if (showTierSelect) {
+      body.seatTierId = form.get("seatTierId");
     }
 
     try {
@@ -194,7 +217,7 @@ export function RegistrationForm({
     return (
       <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
         <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-success">
-          <CheckCircle size={48} weight="fill" aria-hidden />
+          <CheckCircle2 className="size-12 text-success" aria-hidden />
         </div>
         <h2 className="mb-3 text-xl font-bold text-gold-dark">
           {t("register.successTitle")}
@@ -214,35 +237,65 @@ export function RegistrationForm({
         {t("register.formTitle")}
       </h2>
 
-      <ReadOnlyField label={t("register.eventName")} value={eventName} />
-      <ReadOnlyField label={t("register.eventDate")} value={eventDate} />
+      <ReadOnlyField
+        fieldKey="eventName"
+        label={t("register.eventName")}
+        value={eventName}
+      />
+      <ReadOnlyField
+        fieldKey="eventDate"
+        label={t("register.eventDate")}
+        value={eventDate}
+      />
 
       {fields.map((field) => renderField(field, locale))}
 
+      {showTierSelect && (
+        <SelectField
+          name="seatTierId"
+          label={t("register.seatTier")}
+          required={seatTiers.length > 1}
+          defaultValue={seatTiers.length === 1 ? seatTiers[0].id : ""}
+        >
+          {seatTiers.length > 1 && (
+            <option value="" disabled>
+              {t("register.seatTierPlaceholder")}
+            </option>
+          )}
+          {seatTiers.map((tier) => (
+            <option key={tier.id} value={tier.id}>
+              {tier.name}
+            </option>
+          ))}
+        </SelectField>
+      )}
+
       {error && (
         <p className="flex items-start gap-2 rounded-lg bg-red-50 px-4 py-3 text-sm text-error">
-          <WarningCircle size={20} className="shrink-0" weight="fill" aria-hidden />
+          <AlertCircle className="size-5 shrink-0" aria-hidden />
           {error}
         </p>
       )}
 
-      <button
+      <Button
         type="submit"
+        variant="brand"
+        size="lg"
         disabled={loading}
-        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gold-dark py-3 font-semibold text-white transition hover:bg-bronze disabled:opacity-60"
+        className="w-full rounded-xl"
       >
         {loading ? (
           <>
-            <CircleNotch size={20} className="animate-spin" aria-hidden />
+            <Loader2 className="size-4 animate-spin" aria-hidden />
             {t("register.submitting")}
           </>
         ) : (
           <>
-            <PaperPlaneTilt size={20} weight="fill" aria-hidden />
+            <Send className="size-4" aria-hidden />
             {t("register.submit")}
           </>
         )}
-      </button>
+      </Button>
     </form>
   );
 }

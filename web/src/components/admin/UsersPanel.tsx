@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { Key, Plus, UserMinus, UserPlus } from "@phosphor-icons/react";
+import { KeyRound, Plus, UserMinus, UserPlus } from "lucide-react";
 import { TextField, SelectField } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
 import { VisualStatusBadge } from "@/components/admin/VisualStatusBadge";
@@ -197,7 +197,7 @@ export function UsersPanel() {
                     : t("admin.users.enable")}
                 </ActionButton>
                 <ActionButton
-                  icon={Key}
+                  icon={KeyRound}
                   onClick={() => resetPassword(u.id)}
                 >
                   {t("admin.users.resetPassword")}

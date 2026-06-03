@@ -2,6 +2,7 @@
 
 import { CaretDown, CaretUp, FunnelX } from "@phosphor-icons/react";
 import { useI18n } from "@/components/I18nProvider";
+import { IconSelect } from "@/components/ui/icon-select";
 import { cn } from "@/lib/utils";
 import { MAX_PAGE_SIZE } from "@/lib/admin-table-query";
 
@@ -73,17 +74,18 @@ function AdminTablePagination({
       <div className="flex flex-wrap items-center gap-3">
         <label className="inline-flex items-center gap-2 text-bronze">
           <span>{t("admin.table.rowsPerPage")}</span>
-          <select
-            value={pageSize}
-            onChange={(e) => onPageSizeChange(Number(e.target.value))}
-            className="rounded-lg border border-border bg-white px-2 py-1 text-gold-dark"
-          >
-            {PAGE_SIZE_OPTIONS.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
+          <IconSelect
+            fieldKey="pageSize"
+            size="sm"
+            value={String(pageSize)}
+            onValueChange={(v) => onPageSizeChange(Number(v))}
+            triggerClassName="w-20"
+            options={PAGE_SIZE_OPTIONS.map((n) => ({
+              value: String(n),
+              label: n,
+            }))}
+            aria-label={t("admin.table.rowsPerPage")}
+          />
         </label>
         <div className="inline-flex items-center gap-1">
           <button
@@ -216,22 +218,24 @@ export function AdminDataTable({
                   >
                     {col.filterable ? (
                       col.filterType === "select" ? (
-                        <select
+                        <IconSelect
+                          fieldKey="filter"
+                          size="sm"
                           value={columnFilters[col.id] ?? ""}
-                          onChange={(e) =>
-                            onFilterChange(col.id, e.target.value)
-                          }
-                          className="w-full rounded-lg border border-border bg-white px-2 py-1.5 text-sm text-gold-dark"
-                        >
-                          <option value="">
-                            {t("admin.table.filterPlaceholder")}
-                          </option>
-                          {col.filterOptions?.map((opt) => (
-                            <option key={opt.value} value={opt.value}>
-                              {opt.label}
-                            </option>
-                          ))}
-                        </select>
+                          onValueChange={(v) => onFilterChange(col.id, v)}
+                          placeholder={t("admin.table.filterPlaceholder")}
+                          options={[
+                            {
+                              value: "",
+                              label: t("admin.table.filterPlaceholder"),
+                            },
+                            ...(col.filterOptions?.map((opt) => ({
+                              value: opt.value,
+                              label: opt.label,
+                            })) ?? []),
+                          ]}
+                          aria-label={col.label}
+                        />
                       ) : (
                         <input
                           type="search"

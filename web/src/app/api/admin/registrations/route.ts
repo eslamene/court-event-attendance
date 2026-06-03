@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { formatSeatLabel } from "@/lib/seating";
 import type { Prisma, RegistrationStatus } from "@/generated/prisma/client";
 import {
   paginatedResponse,
@@ -46,9 +47,16 @@ function mapRegistration(r: {
   withdrawnAt: Date | null;
   withdrawalNote: string | null;
   createdAt: Date;
-  event: { name: string; date: Date; slug: string };
+  seatTierId: string | null;
+  seatNumber: number | null;
+  seatTier: { name: string } | null;
+  event: { name: string; date: Date; slug: string; seatingEnabled: boolean };
   approvedBy: { name: string } | null;
 }) {
+  const seatLabel =
+    r.seatTier && r.seatNumber != null
+      ? formatSeatLabel(r.seatTier.name, r.seatNumber)
+      : null;
   return {
     id: r.id,
     fullName: r.fullName,
@@ -62,6 +70,13 @@ function mapRegistration(r: {
     eventName: r.event.name,
     eventDate: r.event.date.toISOString(),
     eventSlug: r.event.slug,
+    eventSeatingEnabled: r.event.seatingEnabled,
+    seatTierId: r.seatTierId,
+    seatNumber: r.seatNumber,
+    seatTierName: r.seatTier?.name ?? null,
+    seatLabel,
+    preferredTierName:
+      r.status === "PENDING" && r.seatTier ? r.seatTier.name : null,
     approvedBy: r.approvedBy?.name,
     approvedAt: r.approvedAt?.toISOString(),
     attendedAt: r.attendedAt?.toISOString(),
@@ -124,7 +139,10 @@ export async function GET(req: Request) {
       skip,
       take,
       include: {
-        event: { select: { name: true, date: true, slug: true } },
+        event: {
+          select: { name: true, date: true, slug: true, seatingEnabled: true },
+        },
+        seatTier: { select: { name: true } },
         approvedBy: { select: { name: true } },
       },
     }),

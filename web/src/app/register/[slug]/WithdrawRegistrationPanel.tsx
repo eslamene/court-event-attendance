@@ -134,6 +134,7 @@ export function WithdrawRegistrationPanel({ slug, formConfig }: Props) {
 
           <TextAreaField
             name="withdrawalNote"
+            fieldKey="withdrawalNote"
             label={t("register.withdraw.noteLabel")}
             rows={3}
             placeholder={t("register.withdraw.notePlaceholder")}

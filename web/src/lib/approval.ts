@@ -7,22 +7,28 @@ import {
   sendQrWhatsApp,
   type DeliveryResult,
 } from "./notifications";
-import type { Event, Registration } from "@/generated/prisma/client";
+import type { Event, Registration, SeatTier } from "@/generated/prisma/client";
 import { apiT } from "@/lib/i18n/api";
 import {
   getSystemSettings,
   resolveQrInstructions,
   shouldSendSmsOnApprove,
 } from "@/lib/system-settings";
+import { assignSeatForRegistration, formatSeatLabel } from "./seating";
 
 export type ApprovalResult = {
-  registration: Registration & { event: Event };
+  registration: Registration & {
+    event: Event;
+    seatTier: SeatTier | null;
+  };
   notifications: DeliveryResult[];
+  seatLabel?: string;
 };
 
 export async function approveRegistration(
   registrationId: string,
-  approvedById: string
+  approvedById: string,
+  options?: { seatTierId?: string | null }
 ): Promise<ApprovalResult> {
   const baseUrl = getPublicAppBaseUrl();
 
@@ -39,6 +45,14 @@ export async function approveRegistration(
     throw new Error(await apiT("approval.cannotApprove"));
   }
 
+  let seatLabel: string | undefined;
+  if (registration.event.seatingEnabled) {
+    const assigned = await assignSeatForRegistration(registrationId, {
+      seatTierId: options?.seatTierId ?? registration.seatTierId,
+    });
+    seatLabel = assigned.seatLabel;
+  }
+
   const qrToken = generateQrToken();
   const payload = buildQrPayload(qrToken, baseUrl);
 
@@ -52,8 +66,14 @@ export async function approveRegistration(
       qrSentAt: new Date(),
       rejectedAt: null,
     },
-    include: { event: true },
+    include: { event: true, seatTier: true },
   });
+
+  if (!seatLabel && updated.seatTier && updated.seatNumber) {
+    seatLabel = formatSeatLabel(updated.seatTier.name, updated.seatNumber);
+  }
+
+  const tierName = updated.seatTier?.name;
 
   const [instructions, systemSettings, sendSms] = await Promise.all([
     resolveQrInstructions(),
@@ -61,15 +81,21 @@ export async function approveRegistration(
     shouldSendSmsOnApprove(),
   ]);
 
+  const notifyBase = {
+    judgeName: updated.fullName,
+    eventName: updated.event.name,
+    eventDate: updated.event.date,
+    seatLabel,
+    tierName,
+  };
+
   const tasks: Promise<DeliveryResult>[] = [];
 
   if (systemSettings.notifyEmailOnApprove) {
     tasks.push(
       sendQrEmail({
         to: updated.email,
-        judgeName: updated.fullName,
-        eventName: updated.event.name,
-        eventDate: updated.event.date,
+        ...notifyBase,
         eventId: updated.eventId,
         eventLogoPath: updated.event.logoPath,
         qrToken,
@@ -83,9 +109,7 @@ export async function approveRegistration(
     tasks.push(
       sendQrWhatsApp({
         to: updated.mobile,
-        judgeName: updated.fullName,
-        eventName: updated.event.name,
-        eventDate: updated.event.date,
+        ...notifyBase,
         qrToken,
         qrUrl: payload,
       })
@@ -96,9 +120,7 @@ export async function approveRegistration(
     tasks.push(
       sendQrSms({
         to: updated.mobile,
-        judgeName: updated.fullName,
-        eventName: updated.event.name,
-        eventDate: updated.event.date,
+        ...notifyBase,
         qrUrl: payload,
       })
     );
@@ -106,7 +128,7 @@ export async function approveRegistration(
 
   const notifications = await Promise.all(tasks);
 
-  return { registration: updated, notifications };
+  return { registration: updated, notifications, seatLabel };
 }
 
 export async function rejectRegistration(
@@ -141,7 +163,7 @@ export async function resendQrEmail(
 
   const registration = await prisma.registration.findUnique({
     where: { id: registrationId },
-    include: { event: true },
+    include: { event: true, seatTier: true },
   });
 
   if (!registration) throw new Error(await apiT("approval.notFound"));
@@ -157,6 +179,10 @@ export async function resendQrEmail(
 
   const payload = buildQrPayload(registration.qrToken, baseUrl);
   const instructions = await resolveQrInstructions();
+  const seatLabel =
+    registration.seatTier && registration.seatNumber
+      ? formatSeatLabel(registration.seatTier.name, registration.seatNumber)
+      : undefined;
 
   const email = await sendQrEmail({
     to: registration.email,
@@ -168,6 +194,8 @@ export async function resendQrEmail(
     qrToken: registration.qrToken,
     qrScanUrl: payload,
     instructions,
+    seatLabel,
+    tierName: registration.seatTier?.name,
   });
 
   if (email.sent) {

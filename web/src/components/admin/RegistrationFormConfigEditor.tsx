@@ -6,29 +6,27 @@ import {
   useEffect,
   useMemo,
   useState,
-  type ComponentType,
 } from "react";
 import {
-  ArrowCounterClockwise,
   ArrowDown,
   ArrowUp,
   Calendar,
-  CaretDown,
+  ChevronDown,
   Copy,
-  DotsSixVertical,
-  Envelope,
   Eye,
-  EyeSlash,
-  FloppyDisk,
+  EyeOff,
+  GripVertical,
   Hash,
-  Link as LinkIcon,
+  Link2,
+  Mail,
   Phone,
   Plus,
-  TextAlignLeft,
-  TextT,
-  Trash,
-  type IconProps,
-} from "@phosphor-icons/react";
+  RotateCcw,
+  AlignLeft,
+  Type,
+  Trash2,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { RegistrationFormEditorPreview } from "@/components/admin/RegistrationFormEditorPreview";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
@@ -44,6 +42,8 @@ import {
 } from "@/components/ui/FormActions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
+import { Tag } from "@/components/ui/tag";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
@@ -80,18 +80,15 @@ const FIELD_TYPE_LABEL_KEYS: Record<RegistrationFieldType, string> = {
   url: "admin.registrationForm.typeUrl",
 };
 
-const FIELD_TYPE_ICONS: Record<
-  RegistrationFieldType,
-  ComponentType<IconProps>
-> = {
-  text: TextT,
-  email: Envelope,
+const FIELD_TYPE_ICONS: Record<RegistrationFieldType, LucideIcon> = {
+  text: Type,
+  email: Mail,
   tel: Phone,
-  select: CaretDown,
-  textarea: TextAlignLeft,
+  select: ChevronDown,
+  textarea: AlignLeft,
   number: Hash,
   date: Calendar,
-  url: LinkIcon,
+  url: Link2,
 };
 
 const PREVIEW_ON_SAVE_KEY = "registration-form-preview-on-save";
@@ -498,7 +495,7 @@ export function RegistrationFormConfigEditor({
                         className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-card text-gold-dark shadow-sm"
                         aria-hidden
                       >
-                        <TypeIcon size={18} weight="duotone" />
+                        <TypeIcon className="size-4 shrink-0" />
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-1.5">
@@ -507,7 +504,7 @@ export function RegistrationFormConfigEditor({
                           </p>
                           {!field.enabled && (
                             <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
-                              <EyeSlash size={10} className="me-0.5" />
+                              <EyeOff className="me-0.5 size-2.5" />
                               {t("admin.registrationForm.hidden")}
                             </Badge>
                           )}
@@ -565,7 +562,7 @@ export function RegistrationFormConfigEditor({
                               />
                             }
                           >
-                            <ArrowUp size={14} />
+                            <ArrowUp className="size-3.5" />
                           </TooltipTrigger>
                           <TooltipContent>
                             {t("admin.registrationForm.moveUp")}
@@ -587,7 +584,7 @@ export function RegistrationFormConfigEditor({
                               />
                             }
                           >
-                            <ArrowDown size={14} />
+                            <ArrowDown className="size-3.5" />
                           </TooltipTrigger>
                           <TooltipContent>
                             {t("admin.registrationForm.moveDown")}
@@ -600,7 +597,7 @@ export function RegistrationFormConfigEditor({
                       className="absolute start-1.5 top-1/2 hidden -translate-y-1/2 text-bronze/40 lg:block"
                       aria-hidden
                     >
-                      <DotsSixVertical size={14} />
+                      <GripVertical className="size-3.5" />
                     </span>
                   </div>
                 );
@@ -614,7 +611,7 @@ export function RegistrationFormConfigEditor({
                 className="w-full border-dashed border-gold/40 text-gold-dark hover:border-gold hover:bg-[#f5f0e8]"
                 onClick={addField}
               >
-                <Plus size={18} weight="bold" />
+                <Plus className="size-4" />
                 {t("admin.registrationForm.addField")}
               </Button>
             </div>
@@ -646,7 +643,7 @@ export function RegistrationFormConfigEditor({
                     disabled={fields.length <= 1}
                     onClick={() => removeField(selectedIndex)}
                   >
-                    <Trash size={16} />
+                    <Trash2 className="size-4" />
                     {t("admin.registrationForm.removeAction")}
                   </Button>
                 </div>
@@ -673,33 +670,24 @@ export function RegistrationFormConfigEditor({
                   <p className="mb-2 text-sm font-medium text-gold-dark">
                     {t("admin.registrationForm.fieldType")}
                   </p>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div className="flex flex-wrap gap-2">
                     {REGISTRATION_FIELD_TYPES.map((type) => {
                       const Icon = FIELD_TYPE_ICONS[type];
                       const active = selectedField.type === type;
                       return (
-                        <button
+                        <Chip
                           key={type}
-                          type="button"
+                          icon={Icon}
+                          selected={active}
                           onClick={() =>
                             updateField(selectedIndex, { type })
                           }
-                          className={cn(
-                            "flex flex-col items-center gap-1.5 rounded-xl border px-2 py-3 text-center transition",
-                            active
-                              ? "border-gold-dark bg-gold/10 shadow-sm ring-2 ring-gold/25"
-                              : "border-border bg-[#faf8f5] hover:border-gold/40 hover:bg-card"
-                          )}
+                          className="flex-col gap-1 py-2.5 h-auto min-w-[4.5rem]"
                         >
-                          <Icon
-                            size={20}
-                            weight={active ? "fill" : "duotone"}
-                            className="text-gold-dark"
-                          />
-                          <span className="text-[11px] font-medium leading-tight text-foreground">
+                          <span className="text-[11px] leading-tight">
                             {t(FIELD_TYPE_LABEL_KEYS[type])}
                           </span>
-                        </button>
+                        </Chip>
                       );
                     })}
                   </div>
@@ -707,6 +695,7 @@ export function RegistrationFormConfigEditor({
 
                 <div className="grid gap-3 sm:grid-cols-2">
                   <TextField
+                    fieldKey="labelAr"
                     label={t("admin.registrationForm.labelAr")}
                     value={selectedField.labelAr}
                     onChange={(e) =>
@@ -715,6 +704,7 @@ export function RegistrationFormConfigEditor({
                     required
                   />
                   <TextField
+                    fieldKey="labelEn"
                     label={t("admin.registrationForm.labelEn")}
                     value={selectedField.labelEn}
                     onChange={(e) =>
@@ -728,6 +718,7 @@ export function RegistrationFormConfigEditor({
 
                 <div className="grid gap-3 sm:grid-cols-2">
                   <TextField
+                    fieldKey="placeholderAr"
                     label={t("admin.registrationForm.placeholderAr")}
                     value={selectedField.placeholderAr ?? ""}
                     onChange={(e) =>
@@ -738,6 +729,7 @@ export function RegistrationFormConfigEditor({
                     placeholder={t("admin.registrationForm.placeholderOptional")}
                   />
                   <TextField
+                    fieldKey="placeholderEn"
                     label={t("admin.registrationForm.placeholderEn")}
                     value={selectedField.placeholderEn ?? ""}
                     onChange={(e) =>
@@ -754,6 +746,8 @@ export function RegistrationFormConfigEditor({
                 {selectedField.type === "select" && (
                   <div className="rounded-xl border border-border bg-[#faf8f5] p-4">
                     <TextAreaField
+                      fieldKey="options"
+                      fieldType="select"
                       label={t("admin.registrationForm.options")}
                       value={optionsToText(selectedField.options)}
                       onChange={(e) =>
@@ -767,12 +761,9 @@ export function RegistrationFormConfigEditor({
                     {(selectedField.options?.length ?? 0) > 0 && (
                       <div className="mt-3 flex flex-wrap gap-1.5">
                         {selectedField.options!.map((opt) => (
-                          <span
-                            key={opt}
-                            className="rounded-full border border-border bg-card px-2.5 py-0.5 text-xs text-foreground"
-                          >
+                          <Tag key={opt} variant="outline">
                             {opt}
-                          </span>
+                          </Tag>
                         ))}
                       </div>
                     )}
@@ -811,7 +802,7 @@ export function RegistrationFormConfigEditor({
       )}
 
       <div className="sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card/95 px-4 py-3 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-card/80">
-        <PrimaryFormButton icon={FloppyDisk} disabled={saving || loading}>
+        <PrimaryFormButton disabled={saving || loading}>
           {saving
             ? t("admin.registrationForm.saving")
             : t("admin.registrationForm.save")}
@@ -823,7 +814,7 @@ export function RegistrationFormConfigEditor({
           disabled={loading}
           onClick={() => openPreview(true)}
         >
-          <Eye size={18} weight="duotone" />
+          <Eye className="size-4" />
           {t("admin.registrationForm.previewButton")}
         </Button>
 
@@ -838,14 +829,14 @@ export function RegistrationFormConfigEditor({
 
         {mode === "event" && (
           <Button type="button" variant="outline" onClick={copyFromDefault}>
-            <Copy size={18} />
+            <Copy className="size-4" />
             {t("admin.registrationForm.copyFromDefault")}
           </Button>
         )}
 
         {mode === "default" && (
           <Button type="button" variant="outline" onClick={onResetDefault}>
-            <ArrowCounterClockwise size={18} />
+            <RotateCcw className="size-4" />
             {t("admin.registrationForm.resetAction")}
           </Button>
         )}

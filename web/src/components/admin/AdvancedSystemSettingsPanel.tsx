@@ -4,12 +4,12 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import {
   Cloud,
   Database,
-  EnvelopeSimple,
-  FloppyDisk,
-  GearSix,
   Globe,
-  type IconProps,
-} from "@phosphor-icons/react";
+  Mail,
+  Save,
+  Settings,
+  type LucideIcon,
+} from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import {
@@ -104,6 +104,7 @@ export function AdvancedSystemSettingsPanel() {
         </p>
         <div className="space-y-4">
           <TextField
+            fieldKey="platformName"
             label={t("admin.systemSettings.platformName")}
             value={settings.platformName}
             onChange={(e) => patch({ platformName: e.target.value })}
@@ -111,6 +112,7 @@ export function AdvancedSystemSettingsPanel() {
           />
           <div className="grid gap-4 sm:grid-cols-2">
             <TextField
+              fieldKey="supportEmail"
               label={t("admin.systemSettings.supportEmail")}
               value={settings.supportEmail ?? ""}
               onChange={(e) =>
@@ -121,6 +123,7 @@ export function AdvancedSystemSettingsPanel() {
               type="email"
             />
             <TextField
+              fieldKey="supportPhone"
               label={t("admin.systemSettings.supportPhone")}
               value={settings.supportPhone ?? ""}
               onChange={(e) =>
@@ -134,6 +137,7 @@ export function AdvancedSystemSettingsPanel() {
             {t("admin.systemSettings.qrInstructionsHint")}
           </p>
           <TextAreaField
+            fieldKey="qrInstructions"
             label={t("admin.systemSettings.qrInstructions")}
             value={settings.qrInstructionsOverride ?? ""}
             onChange={(e) =>
@@ -146,7 +150,7 @@ export function AdvancedSystemSettingsPanel() {
 
       <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
         <SectionTitle
-          icon={EnvelopeSimple}
+          icon={Mail}
           title={t("admin.systemSettings.notificationsTitle")}
         />
         <div className="space-y-3">
@@ -177,6 +181,7 @@ export function AdvancedSystemSettingsPanel() {
             {t("admin.systemSettings.emailProviderHint")}
           </p>
           <SelectField
+            fieldKey="emailProvider"
             label={t("admin.systemSettings.emailProvider")}
             value={settings.emailProviderPreference}
             onChange={(e) =>
@@ -197,7 +202,7 @@ export function AdvancedSystemSettingsPanel() {
 
       <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
         <SectionTitle
-          icon={GearSix}
+          icon={Settings}
           title={t("admin.systemSettings.registrationTitle")}
         />
         <div className="space-y-3">
@@ -213,6 +218,7 @@ export function AdvancedSystemSettingsPanel() {
             onChange={(v) => patch({ maintenanceMode: v })}
           />
           <TextAreaField
+            fieldKey="maintenanceMessage"
             label={t("admin.systemSettings.maintenanceMessage")}
             value={settings.maintenanceMessage ?? ""}
             onChange={(e) =>
@@ -266,10 +272,12 @@ export function AdvancedSystemSettingsPanel() {
           </div>
           <div className="mt-4 space-y-3">
             <ReadOnlyField
+              fieldKey="appUrl"
               label={t("admin.systemSettings.env.appUrl")}
               value={environment.appUrl ?? "—"}
             />
             <ReadOnlyField
+              fieldKey="version"
               label={t("admin.systemSettings.env.version")}
               value={environment.appVersion}
             />
@@ -281,7 +289,7 @@ export function AdvancedSystemSettingsPanel() {
         </section>
       )}
 
-      <PrimaryFormButton icon={FloppyDisk} disabled={saving}>
+      <PrimaryFormButton icon={Save} disabled={saving}>
         {saving
           ? t("admin.systemSettings.saving")
           : t("admin.systemSettings.save")}
@@ -294,12 +302,12 @@ function SectionTitle({
   icon: Icon,
   title,
 }: {
-  icon: React.ComponentType<IconProps>;
+  icon: LucideIcon;
   title: string;
 }) {
   return (
     <h3 className="mb-3 inline-flex items-center gap-2 font-bold text-gold-dark">
-      <Icon size={22} aria-hidden />
+      <Icon className="size-5 shrink-0" aria-hidden />
       {title}
     </h3>
   );

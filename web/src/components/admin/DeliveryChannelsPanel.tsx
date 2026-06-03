@@ -1,13 +1,8 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import {
-  ChatCircle,
-  DeviceMobile,
-  EnvelopeSimple,
-  PaperPlaneTilt,
-} from "@phosphor-icons/react";
-import { TextField } from "@/components/ui/Field";
+import { Mail, MessageCircle, Phone, Send } from "lucide-react";
+import { SelectField, TextField } from "@/components/ui/Field";
 import { PrimaryFormButton } from "@/components/ui/FormActions";
 import { useI18n } from "@/components/I18nProvider";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
@@ -75,7 +70,7 @@ export function DeliveryChannelsPanel() {
         <div className="space-y-3 text-sm">
           <div className="flex items-center justify-between rounded-lg bg-[#f5f0e8] px-4 py-3">
             <span className="inline-flex items-center gap-2">
-              <EnvelopeSimple size={20} className="text-gold-dark" aria-hidden />
+              <Mail className="size-5 text-gold-dark" aria-hidden />
               {t("admin.settings.email", {
                 provider: status?.email.provider ?? "SendGrid / Resend",
               })}
@@ -134,14 +129,14 @@ export function DeliveryChannelsPanel() {
             )}
           <div className="flex items-center justify-between rounded-lg bg-[#f5f0e8] px-4 py-3">
             <span className="inline-flex items-center gap-2">
-              <ChatCircle size={20} className="text-gold-dark" aria-hidden />
+              <MessageCircle className="size-5 text-gold-dark" aria-hidden />
               WhatsApp (Twilio)
             </span>
             <StatusBadge ok={status?.whatsapp.configured} />
           </div>
           <div className="flex items-center justify-between rounded-lg bg-[#f5f0e8] px-4 py-3">
             <span className="inline-flex items-center gap-2">
-              <DeviceMobile size={20} className="text-gold-dark" aria-hidden />
+              <Phone className="size-5 text-gold-dark" aria-hidden />
               SMS (Twilio — اختياري)
             </span>
             <StatusBadge ok={status?.sms.configured} />
@@ -157,20 +152,17 @@ export function DeliveryChannelsPanel() {
         className="space-y-4 rounded-xl border border-border bg-card p-6 shadow-sm"
       >
         <h2 className="font-bold text-gold-dark">{t("admin.settings.testTitle")}</h2>
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium text-gold-dark">
-            {t("admin.settings.testChannel")}
-          </span>
-          <select
-            name="channel"
-            className="w-full rounded-lg border border-border bg-card px-4 py-2.5"
-            defaultValue="email"
-          >
-            <option value="email">{t("admin.settings.channelEmail")}</option>
-            <option value="whatsapp">WhatsApp</option>
-            <option value="sms">SMS</option>
-          </select>
-        </label>
+        <SelectField
+          name="channel"
+          fieldKey="channel"
+          label={t("admin.settings.testChannel")}
+          defaultValue="email"
+          options={[
+            { value: "email", label: t("admin.settings.channelEmail") },
+            { value: "whatsapp", label: "WhatsApp" },
+            { value: "sms", label: "SMS" },
+          ]}
+        />
         <TextField
           name="to"
           label={t("admin.settings.testRecipient")}
@@ -178,7 +170,7 @@ export function DeliveryChannelsPanel() {
           dir="ltr"
           className="text-left"
         />
-        <PrimaryFormButton icon={PaperPlaneTilt} disabled={loading}>
+        <PrimaryFormButton icon={Send} disabled={loading}>
           {loading ? t("admin.settings.testSending") : t("admin.settings.testSend")}
         </PrimaryFormButton>
       </form>

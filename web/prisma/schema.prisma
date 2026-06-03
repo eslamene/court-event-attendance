@@ -50,18 +50,38 @@ model User {
 }
 
 model Event {
-  id        String   @id @default(cuid())
-  name      String
-  date      DateTime
-  slug      String   @unique
-  logoPath  String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(cuid())
+  name           String
+  date           DateTime
+  slug           String   @unique
+  logoPath       String?
+  isActive       Boolean  @default(true)
+  seatingEnabled Boolean  @default(false)
+  seatingRevision Int     @default(0)
+  seatingLayoutType String @default("theater")
+  seatingLayoutJson String @default("{}") @db.Text
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   registrations           Registration[]
   emailTemplate           EmailTemplate?
   registrationFormConfig  RegistrationFormConfig?
+  seatTiers               SeatTier[]
+}
+
+model SeatTier {
+  id        String   @id @default(cuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  name      String
+  seatCount Int
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  registrations Registration[]
+
+  @@index([eventId])
 }
 
 model EmailTemplate {
@@ -123,6 +143,9 @@ model Registration {
   withdrawalNote String?            @db.Text
   approvedById   String?
   approvedBy   User?              @relation("ApprovedBy", fields: [approvedById], references: [id])
+  seatTierId   String?
+  seatTier     SeatTier?          @relation(fields: [seatTierId], references: [id], onDelete: SetNull)
+  seatNumber   Int?
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
 
@@ -130,6 +153,7 @@ model Registration {
 
   @@unique([eventId, email])
   @@unique([eventId, mobile])
+  @@unique([seatTierId, seatNumber])
 }
 
 model ScanLog {

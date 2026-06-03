@@ -5,6 +5,7 @@ import {
 import { prisma } from "./db";
 import type { ScanResult } from "@/generated/prisma/client";
 import { apiT } from "@/lib/i18n/api";
+import { formatSeatLabel } from "@/lib/seating";
 
 export type ScanResponse = {
   result: ScanResult;
@@ -15,6 +16,7 @@ export type ScanResponse = {
     rank: string;
     entity: string;
     eventName: string;
+    seatLabel?: string | null;
   };
 };
 
@@ -46,7 +48,7 @@ export async function processScan(params: {
   if (params.offlineId) {
     const existing = await prisma.scanLog.findUnique({
       where: { offlineId: params.offlineId },
-      include: { registration: { include: { event: true } } },
+      include: { registration: { include: { event: true, seatTier: true } } },
     });
     if (existing) {
       return await logResultFromExisting(existing);
@@ -55,7 +57,7 @@ export async function processScan(params: {
 
   const registration = await prisma.registration.findUnique({
     where: { qrToken },
-    include: { event: true },
+    include: { event: true, seatTier: true },
   });
 
   if (!registration) {
@@ -126,6 +128,13 @@ export async function processScan(params: {
     },
   });
 
+  try {
+    const { notifySeatingUpdate } = await import("@/lib/seating");
+    await notifySeatingUpdate(params.eventId);
+  } catch {
+    /* unavailable */
+  }
+
   return finishScan({
     result: "SUCCESS",
     success: true,
@@ -142,6 +151,10 @@ export async function processScan(params: {
       rank: registration.rank,
       entity: registration.entity,
       eventName: registration.event.name,
+      seatLabel:
+        registration.seatTier && registration.seatNumber != null
+          ? formatSeatLabel(registration.seatTier.name, registration.seatNumber)
+          : null,
     },
   });
 }
@@ -211,6 +224,8 @@ async function logResultFromExisting(log: {
     fullName: string;
     rank: string;
     entity: string;
+    seatNumber: number | null;
+    seatTier: { name: string } | null;
     event: { name: string };
   } | null;
 }): Promise<ScanResponse> {
@@ -231,6 +246,14 @@ async function logResultFromExisting(log: {
           rank: log.registration.rank,
           entity: log.registration.entity,
           eventName: log.registration.event.name,
+          seatLabel:
+            log.registration.seatTier &&
+            log.registration.seatNumber != null
+              ? formatSeatLabel(
+                  log.registration.seatTier.name,
+                  log.registration.seatNumber
+                )
+              : null,
         }
       : undefined,
   };

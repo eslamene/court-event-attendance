@@ -2,19 +2,24 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
-  ArrowsClockwise,
   Copy,
-  FloppyDisk,
   Globe,
+  Languages,
   Plus,
+  RefreshCw,
+  Save,
   X,
-} from "@phosphor-icons/react";
+} from "lucide-react";
 import { DictionaryValueCell } from "@/components/admin/DictionaryValueCell";
 import {
   AdminDataTable,
   type AdminTableColumn,
 } from "@/components/admin/AdminDataTable";
 import { Modal } from "@/components/ui/Modal";
+import { SelectField } from "@/components/ui/Field";
+import { Chip } from "@/components/ui/chip";
+import { Tag } from "@/components/ui/tag";
+import { Button } from "@/components/ui/button";
 import {
   CancelFormButton,
   PrimaryFormButton,
@@ -285,36 +290,40 @@ export function DictionaryPanel() {
         <div className="rounded-xl border border-border bg-card p-3 shadow-sm md:p-4">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f5f0e8] px-3 py-1 text-sm font-medium text-gold-dark">
+              <Tag
+                icon={Languages}
+                className="h-7 gap-1.5 border-gold/20 bg-[#f5f0e8] px-3 text-sm text-gold-dark"
+              >
                 {t("admin.dictionary.entries")}
-                <span className="text-bronze">({table.total})</span>
-              </span>
+                <span className="font-normal text-bronze">({table.total})</span>
+              </Tag>
               {dirtyCount > 0 && (
-                <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-950">
+                <Tag className="border-amber-200/80 bg-amber-50 text-amber-950">
                   {dirtyCount} {t("admin.dictionary.unsaved")}
-                </span>
+                </Tag>
               )}
             </div>
-            <button
+            <Button
               type="button"
+              variant="brand"
+              size="sm"
               onClick={() => {
                 setError("");
                 setShowAddKey(true);
               }}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-gold-dark px-4 py-2 text-sm font-semibold text-white hover:bg-bronze"
             >
-              <Plus size={18} weight="bold" aria-hidden />
+              <Plus className="size-4" aria-hidden />
               {t("admin.dictionary.addKey")}
-            </button>
+            </Button>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 pt-3">
             <div className="flex flex-wrap items-center gap-1.5">
-              <Globe size={18} className="text-bronze" aria-hidden />
               {locales.map((l) => (
-                <button
+                <Chip
                   key={l.code}
-                  type="button"
+                  icon={Globe}
+                  selected={selectedCode === l.code}
                   onClick={() => {
                     setSelectedCode(l.code);
                     setEdits({});
@@ -323,12 +332,6 @@ export function DictionaryPanel() {
                     table.setPage(1);
                     table.clearFilters();
                   }}
-                  className={cn(
-                    "rounded-full px-3 py-1 text-sm font-medium transition",
-                    selectedCode === l.code
-                      ? "bg-gold-dark text-white shadow-sm"
-                      : "border border-border bg-card text-bronze hover:bg-[#f5f0e8]"
-                  )}
                 >
                   {l.name}
                   <span className="ms-1 opacity-70" dir="ltr">
@@ -339,37 +342,40 @@ export function DictionaryPanel() {
                       ★
                     </span>
                   )}
-                </button>
+                </Chip>
               ))}
             </div>
-            <button
+            <Button
               type="button"
+              variant="brandOutline"
+              size="sm"
               onClick={() => {
                 setError("");
                 setShowAddLocale(true);
               }}
-              className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-sm text-gold-dark hover:bg-[#f5f0e8]"
             >
-              <Plus size={14} weight="bold" aria-hidden />
+              <Plus className="size-3.5" aria-hidden />
               {t("admin.dictionary.addLocale")}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="brandOutline"
+              size="sm"
               onClick={onSeed}
-              className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-sm text-bronze hover:bg-[#f5f0e8]"
             >
-              <ArrowsClockwise size={14} aria-hidden />
+              <RefreshCw className="size-3.5" aria-hidden />
               {t("admin.dictionary.seed")}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="brand"
+              size="sm"
               onClick={onSave}
               disabled={saving || dirtyCount === 0}
-              className="inline-flex items-center gap-1 rounded-lg bg-gold-dark px-3 py-1.5 text-sm text-white disabled:opacity-50"
             >
-              <FloppyDisk size={16} aria-hidden />
+              <Save className="size-4" aria-hidden />
               {saving ? "…" : t("admin.dictionary.save")}
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -405,20 +411,22 @@ export function DictionaryPanel() {
                 <code className="min-w-0 flex-1 break-all font-mono text-xs leading-relaxed text-bronze">
                   {entry.key}
                 </code>
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="icon-sm"
                   onClick={() => copyKey(entry.key)}
                   title={t("admin.dictionary.copyKey")}
-                  className="shrink-0 rounded p-1 text-bronze opacity-60 transition hover:bg-white hover:opacity-100"
+                  className="shrink-0 text-bronze"
                 >
-                  <Copy size={14} aria-hidden />
-                </button>
+                  <Copy className="size-3.5" aria-hidden />
+                </Button>
               </div>
             </td>
             <td className="px-3 py-2">
-              <span className="inline-block rounded-full bg-[#f5f0e8] px-2 py-0.5 text-xs font-medium text-gold-dark">
+              <Tag className="border-gold/20 bg-[#f5f0e8] text-gold-dark">
                 {entry.namespace}
-              </span>
+              </Tag>
             </td>
             <td className="px-3 py-2">
               <DictionaryValueCell
@@ -450,23 +458,25 @@ export function DictionaryPanel() {
             {dirtyCount} {t("admin.dictionary.unsaved")}
           </p>
           <div className="flex flex-wrap gap-2">
-            <button
+            <Button
               type="button"
+              variant="brandOutline"
+              size="sm"
               onClick={discardEdits}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-sm text-bronze hover:bg-[#f5f0e8]"
             >
-              <X size={16} aria-hidden />
+              <X className="size-4" aria-hidden />
               {t("admin.dictionary.discard")}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="brand"
+              size="sm"
               onClick={onSave}
               disabled={saving}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-gold-dark px-4 py-1.5 text-sm font-semibold text-white hover:bg-bronze disabled:opacity-50"
             >
-              <FloppyDisk size={16} aria-hidden />
+              <Save className="size-4" aria-hidden />
               {saving ? "…" : t("admin.dictionary.save")}
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -493,23 +503,25 @@ export function DictionaryPanel() {
               required
               className="rounded-lg border border-border px-3 py-2"
             />
-            <select
+            <SelectField
               name="direction"
-              className="rounded-lg border border-border px-3 py-2"
-            >
-              <option value="rtl">RTL</option>
-              <option value="ltr">LTR</option>
-            </select>
-            <select
+              fieldKey="direction"
+              label={t("admin.dictionary.direction")}
+              defaultValue="rtl"
+              options={[
+                { value: "rtl", label: "RTL" },
+                { value: "ltr", label: "LTR" },
+              ]}
+            />
+            <SelectField
               name="cloneFrom"
-              className="rounded-lg border border-border px-3 py-2"
-            >
-              {locales.map((l) => (
-                <option key={l.code} value={l.code}>
-                  Clone from {l.name}
-                </option>
-              ))}
-            </select>
+              fieldKey="cloneFrom"
+              label={t("admin.dictionary.cloneFrom")}
+              options={locales.map((l) => ({
+                value: l.code,
+                label: `${t("admin.dictionary.cloneFrom")} ${l.name}`,
+              }))}
+            />
             {error && (
               <p className="sm:col-span-2 text-sm text-error">{error}</p>
             )}

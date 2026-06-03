@@ -3,12 +3,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  CheckCircle,
-  EnvelopeSimple,
-  FileCsv,
-  FileXls,
+  BadgeCheck,
+  Ban,
+  CheckCircle2,
+  Clock,
+  FileSpreadsheet,
+  FileText,
+  Hand,
+  Mail,
   XCircle,
-} from "@phosphor-icons/react";
+} from "lucide-react";
 import { useSession } from "next-auth/react";
 import { useI18n } from "@/components/I18nProvider";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
@@ -20,6 +24,13 @@ import {
 import { VisualStatusBadge } from "@/components/admin/VisualStatusBadge";
 import { ActionButton } from "@/components/ui/ActionButton";
 import { Button } from "@/components/ui/button";
+import { IconTabBar } from "@/components/ui/icon-tabs";
+import { Modal } from "@/components/ui/Modal";
+import { SelectField } from "@/components/ui/Field";
+import {
+  CancelFormButton,
+  PrimaryFormButton,
+} from "@/components/ui/FormActions";
 import { parseJsonStringArray } from "@/lib/i18n/translate";
 import { useAdminTable } from "@/hooks/useAdminTable";
 import {
@@ -39,10 +50,31 @@ type Registration = {
   mobile: string;
   notes: string | null;
   status: string;
+  eventId: string;
   eventName: string;
   eventDate: string;
+  eventSeatingEnabled?: boolean;
+  seatTierId?: string | null;
+  seatNumber?: number | null;
+  seatTierName?: string | null;
+  seatLabel?: string | null;
+  preferredTierName?: string | null;
   withdrawalNote?: string | null;
   createdAt: string;
+};
+
+type TierOption = {
+  id: string;
+  name: string;
+  seatCount: number;
+  assigned: number;
+  available: number;
+};
+
+type ApproveModalState = {
+  registration: Registration;
+  tiers: TierOption[];
+  selectedTierId: string;
 };
 
 type EventItem = { id: string; name: string };
@@ -53,6 +85,13 @@ const TAB_LABEL_KEYS: Record<RegistrationTabId, string> = {
   rejected: "admin.registrations.tabRejected",
   withdrawn: "admin.registrations.tabWithdrawn",
 };
+
+const TAB_ICONS = {
+  pending: Clock,
+  approved: BadgeCheck,
+  rejected: Ban,
+  withdrawn: Hand,
+} as const;
 
 export function RegistrationsPanel() {
   const router = useRouter();
@@ -73,6 +112,9 @@ export function RegistrationsPanel() {
   const [actionId, setActionId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [batchProcessing, setBatchProcessing] = useState(false);
+  const [approveModal, setApproveModal] = useState<ApproveModalState | null>(
+    null
+  );
   const selectAllRef = useRef<HTMLInputElement>(null);
 
   const batchMode =
@@ -249,6 +291,10 @@ export function RegistrationsPanel() {
         label: t("admin.registrations.colDate"),
         sortable: true,
       },
+      {
+        id: "seat",
+        label: t("admin.registrations.colSeat"),
+      },
     ];
     if (canApprove) {
       cols.push({
@@ -259,19 +305,71 @@ export function RegistrationsPanel() {
     return cols;
   }, [t, ranks, entities, events, canApprove]);
 
-  async function approve(id: string) {
+  async function postApprove(id: string, seatTierId?: string) {
     setActionId(id);
     const res = await fetch(`/api/admin/registrations/${id}/approve`, {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(seatTierId ? { seatTierId } : {}),
     });
     const data = await res.json().catch(() => ({}));
     await table.reload();
     setActionId(null);
     if (res.ok) {
-      toastSuccess(data.message ?? t("api.approveSuccess"));
+      toastSuccess(
+        data.seatLabel
+          ? `${data.message ?? t("api.approveSuccess")} — ${data.seatLabel}`
+          : (data.message ?? t("api.approveSuccess"))
+      );
     } else {
       toastError(data.error ?? t("api.operationFailed"));
     }
+  }
+
+  async function approve(reg: Registration) {
+    if (!reg.eventSeatingEnabled) {
+      await postApprove(reg.id);
+      return;
+    }
+
+    const res = await fetch(`/api/admin/events/${reg.eventId}/seating`);
+    const data = await res.json();
+    if (!res.ok) {
+      toastError(data.error ?? t("api.operationFailed"));
+      return;
+    }
+
+    const tiers = (data.tiers ?? []) as TierOption[];
+    const availableTiers = tiers.filter((tier) => tier.available > 0);
+
+    if (availableTiers.length === 0) {
+      toastError(t("seating.noSeatsAvailable"));
+      return;
+    }
+
+    if (reg.seatTierId) {
+      const preferred = availableTiers.find((tier) => tier.id === reg.seatTierId);
+      await postApprove(reg.id, preferred?.id ?? reg.seatTierId);
+      return;
+    }
+
+    if (availableTiers.length === 1) {
+      await postApprove(reg.id, availableTiers[0].id);
+      return;
+    }
+
+    setApproveModal({
+      registration: reg,
+      tiers: availableTiers,
+      selectedTierId: availableTiers[0].id,
+    });
+  }
+
+  async function confirmApproveWithTier() {
+    if (!approveModal) return;
+    const { registration, selectedTierId } = approveModal;
+    setApproveModal(null);
+    await postApprove(registration.id, selectedTierId);
   }
 
   async function reject(id: string) {
@@ -327,44 +425,38 @@ export function RegistrationsPanel() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <div className="flex flex-wrap gap-1 rounded-xl border border-border bg-card p-1 shadow-sm">
-        {REGISTRATION_TAB_IDS.map((tab) => (
-          <button
-            key={tab}
-            type="button"
-            onClick={() => selectTab(tab)}
-            className={cn(
-              "rounded-lg px-4 py-2 text-sm font-medium transition",
-              activeTab === tab
-                ? "bg-gold-dark text-white shadow-sm"
-                : "text-bronze hover:bg-[#f5f0e8] hover:text-gold-dark"
-            )}
-          >
-            {t(TAB_LABEL_KEYS[tab])}
-          </button>
-        ))}
-      </div>
+      <IconTabBar
+        value={activeTab}
+        onValueChange={(tab) => selectTab(tab as RegistrationTabId)}
+        items={REGISTRATION_TAB_IDS.map((tab) => ({
+          value: tab,
+          label: t(TAB_LABEL_KEYS[tab]),
+          icon: TAB_ICONS[tab],
+        }))}
+      />
 
       <AdminListToolbar
         count={table.total}
         countLabel={t("admin.registrations.countLabel")}
       >
-        <button
+        <Button
           type="button"
+          variant="brand"
+          size="sm"
           onClick={() => exportData("xlsx")}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-gold-dark px-4 py-2 text-sm text-white hover:bg-bronze"
         >
-          <FileXls size={18} aria-hidden />
+          <FileSpreadsheet className="size-4" aria-hidden />
           {t("admin.registrations.exportExcel")}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="brandOutline"
+          size="sm"
           onClick={() => exportData("csv")}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-sm hover:bg-[#f5f0e8]"
         >
-          <FileCsv size={18} aria-hidden />
+          <FileText className="size-4" aria-hidden />
           {t("admin.registrations.exportCsv")}
-        </button>
+        </Button>
       </AdminListToolbar>
 
       {selectedIds.size > 0 && batchMode && (
@@ -381,7 +473,7 @@ export function RegistrationsPanel() {
             className="bg-success text-white hover:bg-success/90"
             onClick={() => runBatch("approve")}
           >
-            <CheckCircle size={16} weight="bold" />
+            <CheckCircle2 className="size-4" />
             {batchProcessing
               ? t("admin.registrations.batchProcessing")
               : t("admin.registrations.batchApprove")}
@@ -394,7 +486,7 @@ export function RegistrationsPanel() {
               disabled={batchProcessing}
               onClick={() => runBatch("reject")}
             >
-              <XCircle size={16} weight="bold" />
+              <XCircle className="size-4" />
               {t("admin.registrations.batchReject")}
             </Button>
           )}
@@ -502,15 +594,30 @@ export function RegistrationsPanel() {
             <td className="px-4 py-3 text-xs text-bronze">
               {format(new Date(r.createdAt), "yyyy-MM-dd HH:mm")}
             </td>
+            <td className="px-4 py-3 text-sm">
+              {r.seatLabel ? (
+                <span className="font-medium text-gold-dark">{r.seatLabel}</span>
+              ) : r.preferredTierName ? (
+                <span className="text-bronze">
+                  {t("admin.registrations.preferredTier", {
+                    tier: r.preferredTierName,
+                  })}
+                </span>
+              ) : r.eventSeatingEnabled ? (
+                <span className="text-bronze">—</span>
+              ) : (
+                <span className="text-bronze/60">—</span>
+              )}
+            </td>
             {canApprove && (
               <td className="px-4 py-3">
                 {activeTab === "pending" && r.status === "PENDING" ? (
                   <div className="flex flex-wrap gap-2">
                     <ActionButton
-                      icon={CheckCircle}
+                      icon={CheckCircle2}
                       variant="success"
                       disabled={actionId === r.id || batchProcessing}
-                      onClick={() => approve(r.id)}
+                      onClick={() => approve(r)}
                       className="!border-success bg-success !text-white hover:!bg-success/90"
                     >
                       {t("admin.registrations.approve")}
@@ -527,10 +634,10 @@ export function RegistrationsPanel() {
                   </div>
                 ) : activeTab === "rejected" && r.status === "REJECTED" ? (
                   <ActionButton
-                    icon={CheckCircle}
+                    icon={CheckCircle2}
                     variant="success"
                     disabled={actionId === r.id || batchProcessing}
-                    onClick={() => approve(r.id)}
+                    onClick={() => approve(r)}
                     className="!border-success bg-success !text-white hover:!bg-success/90"
                   >
                     {t("admin.registrations.approveRejected")}
@@ -538,7 +645,7 @@ export function RegistrationsPanel() {
                 ) : activeTab === "approved" &&
                   (r.status === "APPROVED" || r.status === "ATTENDED") ? (
                   <ActionButton
-                    icon={EnvelopeSimple}
+                    icon={Mail}
                     variant="default"
                     disabled={actionId === r.id}
                     onClick={() => resendEmail(r.id)}
@@ -553,6 +660,46 @@ export function RegistrationsPanel() {
           );
         })}
       </AdminDataTable>
+
+      {approveModal && (
+        <Modal
+          title={t("seating.approveTitle")}
+          onClose={() => setApproveModal(null)}
+          size="md"
+        >
+          <p className="mb-4 text-sm text-bronze">
+            {t("seating.approveMessage", {
+              name: approveModal.registration.fullName,
+            })}
+          </p>
+          <SelectField
+            fieldKey="seatTierId"
+            label={t("seating.selectTier")}
+            value={approveModal.selectedTierId}
+            onChange={(e) =>
+              setApproveModal((prev) =>
+                prev
+                  ? { ...prev, selectedTierId: e.target.value }
+                  : prev
+              )
+            }
+          >
+            {approveModal.tiers.map((tier) => (
+              <option key={tier.id} value={tier.id}>
+                {tier.name} ({t("seating.tierAvailable", { count: String(tier.available) })})
+              </option>
+            ))}
+          </SelectField>
+          <div className="mt-4 flex gap-2">
+            <PrimaryFormButton type="button" onClick={confirmApproveWithTier}>
+              {t("admin.registrations.approve")}
+            </PrimaryFormButton>
+            <CancelFormButton type="button" onClick={() => setApproveModal(null)}>
+              {t("admin.common.cancel")}
+            </CancelFormButton>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

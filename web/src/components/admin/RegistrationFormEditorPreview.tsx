@@ -36,6 +36,8 @@ function PreviewField({
     case "select":
       return (
         <SelectField
+          fieldKey={field.key}
+          fieldType={field.type}
           label={label}
           required={field.required}
           defaultValue=""
@@ -52,6 +54,8 @@ function PreviewField({
     case "textarea":
       return (
         <TextAreaField
+          fieldKey={field.key}
+          fieldType={field.type}
           label={label}
           required={field.required}
           rows={2}
@@ -64,6 +68,8 @@ function PreviewField({
     case "email":
       return (
         <TextField
+          fieldKey={field.key}
+          fieldType={field.type}
           label={label}
           type="email"
           required={field.required}
@@ -78,6 +84,8 @@ function PreviewField({
     case "tel":
       return (
         <TextField
+          fieldKey={field.key}
+          fieldType={field.type}
           label={label}
           type="tel"
           required={field.required}
@@ -92,6 +100,8 @@ function PreviewField({
     case "number":
       return (
         <TextField
+          fieldKey={field.key}
+          fieldType={field.type}
           label={label}
           type="number"
           required={field.required}
@@ -106,6 +116,8 @@ function PreviewField({
     case "date":
       return (
         <TextField
+          fieldKey={field.key}
+          fieldType={field.type}
           label={label}
           type="date"
           required={field.required}
@@ -119,6 +131,8 @@ function PreviewField({
     case "url":
       return (
         <TextField
+          fieldKey={field.key}
+          fieldType={field.type}
           label={label}
           type="url"
           required={field.required}
@@ -133,6 +147,8 @@ function PreviewField({
     default:
       return (
         <TextField
+          fieldKey={field.key}
+          fieldType={field.type}
           label={label}
           required={field.required}
           placeholder={placeholder}
@@ -170,8 +186,16 @@ export function RegistrationFormEditorPreview({
       </h3>
 
       <div className="pointer-events-none space-y-4 opacity-95">
-        <ReadOnlyField label={t("register.eventName")} value={sampleEvent} />
-        <ReadOnlyField label={t("register.eventDate")} value={sampleDate} />
+        <ReadOnlyField
+          fieldKey="eventName"
+          label={t("register.eventName")}
+          value={sampleEvent}
+        />
+        <ReadOnlyField
+          fieldKey="eventDate"
+          label={t("register.eventDate")}
+          value={sampleDate}
+        />
 
         {enabled.length === 0 ? (
           <p className="rounded-lg border border-dashed border-border bg-[#faf8f5] px-4 py-8 text-center text-sm text-bronze">

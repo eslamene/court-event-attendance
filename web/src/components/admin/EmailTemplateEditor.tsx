@@ -371,7 +371,7 @@ export function EmailTemplateEditor({
       </div>
 
       <div className="flex flex-wrap gap-2 border-t border-border pt-4">
-        <PrimaryFormButton icon={FloppyDisk} disabled={saving || loading}>
+        <PrimaryFormButton disabled={saving || loading}>
           {saving ? t("admin.emailTemplate.saving") : t("admin.emailTemplate.save")}
         </PrimaryFormButton>
         {mode === "event" && (

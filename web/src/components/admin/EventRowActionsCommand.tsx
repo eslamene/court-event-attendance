@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import {
+  Armchair,
+  MapTrifold,
   DotsThreeVertical,
   EnvelopeSimple,
   ListBullets,
@@ -32,6 +34,8 @@ export type EventRowAction =
   | "edit"
   | "emailTemplate"
   | "registrationForm"
+  | "seating"
+  | "seatMap"
   | "openRegistration"
   | "clearData"
   | "deleteEvent";
@@ -79,6 +83,18 @@ export function EventRowActionsCommand({ event, onAction }: Props) {
         label: t("admin.events.registrationForm"),
         keywords: "form registration نموذج تسجيل",
         icon: ListBullets,
+      },
+      {
+        id: "seating",
+        label: t("admin.events.seating"),
+        keywords: "seating seats tiers مقاعد",
+        icon: Armchair,
+      },
+      {
+        id: "seatMap",
+        label: t("admin.events.seatMap"),
+        keywords: "seat map live visual خريطة مقاعد",
+        icon: MapTrifold,
       },
       {
         id: "openRegistration",

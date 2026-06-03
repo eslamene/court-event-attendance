@@ -5,6 +5,9 @@ export const EMAIL_TEMPLATE_PLACEHOLDERS = [
   { key: "judgeName", descriptionKey: "admin.emailTemplate.ph.judgeName" },
   { key: "eventName", descriptionKey: "admin.emailTemplate.ph.eventName" },
   { key: "eventDate", descriptionKey: "admin.emailTemplate.ph.eventDate" },
+  { key: "tierName", descriptionKey: "admin.emailTemplate.ph.tierName" },
+  { key: "seatLabel", descriptionKey: "admin.emailTemplate.ph.seatLabel" },
+  { key: "seatBlock", descriptionKey: "admin.emailTemplate.ph.seatBlock" },
   { key: "instructions", descriptionKey: "admin.emailTemplate.ph.instructions" },
   { key: "qrImageUrl", descriptionKey: "admin.emailTemplate.ph.qrImageUrl" },
   { key: "qrScanUrl", descriptionKey: "admin.emailTemplate.ph.qrScanUrl" },
@@ -30,6 +33,7 @@ export function getBuiltinDefaultEmailTemplate(): EmailTemplateRecord {
 <p style="background:#fff;padding:16px;border-radius:8px;border:1px solid #e8dcc8;">
   <strong>{{eventName}}</strong><br/>{{eventDate}}
 </p>
+{{seatBlock}}
 <p>{{instructions}}</p>
 <p style="text-align:center; margin: 24px 0;">
   <img src="{{qrImageUrl}}" alt="رمز QR" width="280" height="280" style="border:4px solid #5c3d1e;border-radius:8px;display:block;margin:0 auto;"/>
@@ -59,6 +63,8 @@ export type RenderEmailTemplateInput = {
   qrImageUrl: string;
   qrScanUrl?: string;
   eventLogoPath?: string | null;
+  seatLabel?: string;
+  tierName?: string;
 };
 
 export function buildEmailTemplateVars(
@@ -82,10 +88,23 @@ export function buildEmailTemplateVars(
     ? `<p style="text-align:center;font-size:13px;"><a href="${escapeHtml(input.qrScanUrl)}" style="color:#5c3d1e;">فتح رمز QR في المتصفح</a></p>`
     : "";
 
+  const seatBlock = input.seatLabel
+    ? `<p style="background:#fff;padding:12px 16px;border-radius:8px;border:1px solid #e8dcc8;margin:16px 0;">
+  <strong>مقعدكم:</strong> ${escapeHtml(input.seatLabel)}${
+        input.tierName && !input.seatLabel.includes(input.tierName)
+          ? `<br/><span style="color:#666;font-size:13px;">${escapeHtml(input.tierName)}</span>`
+          : ""
+      }
+</p>`
+    : "";
+
   return {
     judgeName: escapeHtml(input.judgeName),
     eventName: escapeHtml(input.eventName),
     eventDate: escapeHtml(input.eventDate),
+    tierName: escapeHtml(input.tierName ?? ""),
+    seatLabel: escapeHtml(input.seatLabel ?? ""),
+    seatBlock,
     instructions: escapeHtml(input.instructions),
     qrImageUrl: escapeHtml(input.qrImageUrl),
     qrScanUrl: input.qrScanUrl ? escapeHtml(input.qrScanUrl) : "",

@@ -2,7 +2,7 @@
 
 import { FormEvent, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { Copy, FloppyDisk, Plus, Trash } from "@phosphor-icons/react";
+import { Copy, Plus, Save, Trash2 } from "lucide-react";
 import {
   EventRowActionsCommand,
   type EventRowAction,
@@ -11,6 +11,7 @@ import { VisualStatusBadge } from "@/components/admin/VisualStatusBadge";
 import { EmailTemplateEditor } from "@/components/admin/EmailTemplateEditor";
 import { EventLogoUploader } from "@/components/admin/EventLogoUploader";
 import { RegistrationFormConfigEditor } from "@/components/admin/RegistrationFormConfigEditor";
+import { EventSeatingEditor } from "@/components/admin/EventSeatingEditor";
 import {
   AdminDataTable,
   type AdminTableColumn,
@@ -59,6 +60,10 @@ export function EventsPanel() {
   );
   const [registrationFormEvent, setRegistrationFormEvent] =
     useState<EventRow | null>(null);
+  const [seatingEvent, setSeatingEvent] = useState<EventRow | null>(null);
+  const [seatingInitialTab, setSeatingInitialTab] = useState<
+    "settings" | "layout" | "map"
+  >("settings");
   const [createLogoFile, setCreateLogoFile] = useState<File | null>(null);
   const [savingCreate, setSavingCreate] = useState(false);
   const [savingUpdate, setSavingUpdate] = useState(false);
@@ -271,6 +276,23 @@ export function EventsPanel() {
         break;
       case "registrationForm":
         setRegistrationFormEvent(ev);
+        setSeatingEvent(null);
+        setEmailTemplateEvent(null);
+        setEditing(null);
+        setClearing(null);
+        break;
+      case "seating":
+        setSeatingInitialTab("settings");
+        setSeatingEvent(ev);
+        setRegistrationFormEvent(null);
+        setEmailTemplateEvent(null);
+        setEditing(null);
+        setClearing(null);
+        break;
+      case "seatMap":
+        setSeatingInitialTab("map");
+        setSeatingEvent(ev);
+        setRegistrationFormEvent(null);
         setEmailTemplateEvent(null);
         setEditing(null);
         setClearing(null);
@@ -359,7 +381,7 @@ export function EventsPanel() {
                     className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-xs font-medium text-gold-dark transition hover:border-gold/50 hover:bg-[#f5f0e8]"
                     title={t("admin.events.copyUrl")}
                   >
-                    <Copy size={14} weight="bold" aria-hidden />
+                    <Copy className="size-3.5" aria-hidden />
                     {t("admin.events.copyUrl")}
                   </button>
                 </div>
@@ -529,7 +551,7 @@ export function EventsPanel() {
             </p>
             {error && <p className="text-sm text-error">{error}</p>}
             <div className="flex gap-3 pt-2">
-              <PrimaryFormButton icon={FloppyDisk} disabled={savingUpdate}>
+              <PrimaryFormButton icon={Save} disabled={savingUpdate}>
                 {savingUpdate
                   ? t("admin.common.saving")
                   : t("admin.common.save")}
@@ -572,7 +594,7 @@ export function EventsPanel() {
             />
             {error && <p className="text-sm text-error">{error}</p>}
             <div className="flex gap-3 pt-2">
-              <DangerFormButton icon={Trash}>
+              <DangerFormButton icon={Trash2}>
                 {t("admin.events.clearData")}
               </DangerFormButton>
               <CancelFormButton onClick={() => setClearing(null)}>
@@ -596,6 +618,14 @@ export function EventsPanel() {
           eventId={registrationFormEvent.id}
           eventName={registrationFormEvent.name}
           onClose={() => setRegistrationFormEvent(null)}
+        />
+      )}
+      {seatingEvent && (
+        <EventSeatingEditor
+          eventId={seatingEvent.id}
+          eventName={seatingEvent.name}
+          initialTab={seatingInitialTab}
+          onClose={() => setSeatingEvent(null)}
         />
       )}
     </div>

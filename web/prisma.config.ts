@@ -2,6 +2,7 @@
 // npm install --save-dev prisma dotenv
 import "dotenv/config";
 import { defineConfig } from "prisma/config";
+import { normalizePgSslMode } from "./src/lib/database-url";
 
 export default defineConfig({
   schema: "prisma/schema.prisma",
@@ -12,6 +13,8 @@ export default defineConfig({
   datasource: {
     // CLI (migrate, db push, studio): direct connection — required for Neon pooler.
     // Falls back to DATABASE_URL for local Docker Postgres (no pooler).
-    url: process.env["DIRECT_URL"] ?? process.env["DATABASE_URL"],
+    url: normalizePgSslMode(
+      process.env["DIRECT_URL"] ?? process.env["DATABASE_URL"] ?? ""
+    ),
   },
 });

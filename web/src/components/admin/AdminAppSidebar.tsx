@@ -67,11 +67,6 @@ const mainNavItems = [
     labelKey: "admin.nav.users" as const,
     adminOnly: true,
   },
-  {
-    href: "/admin/audit",
-    icon: ScrollText,
-    labelKey: "admin.nav.audit" as const,
-  },
 ] as const;
 
 const systemNavItems = [
@@ -99,6 +94,11 @@ const systemNavItems = [
     href: "/admin/dictionary",
     icon: BookOpen,
     labelKey: "admin.nav.dictionary" as const,
+  },
+  {
+    href: "/admin/audit",
+    icon: ScrollText,
+    labelKey: "admin.nav.audit" as const,
   },
 ] as const;
 

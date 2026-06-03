@@ -18,6 +18,7 @@ export async function POST(
   const dict = await apiDict();
   const event = await prisma.event.findUnique({
     where: { slug, isActive: true },
+    include: { seatTiers: { orderBy: { sortOrder: "asc" } } },
   });
 
   if (!event) {
@@ -68,6 +69,30 @@ export async function POST(
     parsed.data as Record<string, unknown>
   );
 
+  let seatTierId: string | undefined;
+  if (event.seatingEnabled) {
+    const rawTier = (body as Record<string, unknown>).seatTierId;
+    if (typeof rawTier !== "string" || !rawTier.trim()) {
+      if (event.seatTiers.length === 1) {
+        seatTierId = event.seatTiers[0].id;
+      } else if (event.seatTiers.length > 1) {
+        return NextResponse.json(
+          { error: await apiT("seating.tierRequired") },
+          { status: 400 }
+        );
+      }
+    } else {
+      const tier = event.seatTiers.find((t) => t.id === rawTier.trim());
+      if (!tier) {
+        return NextResponse.json(
+          { error: await apiT("seating.tierNotFound") },
+          { status: 400 }
+        );
+      }
+      seatTierId = tier.id;
+    }
+  }
+
   const enabledKeys = new Set(
     getEnabledFields(formConfig).map((f) => f.key)
   );
@@ -107,6 +132,7 @@ export async function POST(
       notes: data.notes,
       customData,
       status: "PENDING",
+      ...(seatTierId ? { seatTierId } : {}),
     },
   });
 

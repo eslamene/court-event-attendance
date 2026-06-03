@@ -20,10 +20,21 @@ export async function POST(
 
   const { id } = await params;
 
+  let seatTierId: string | undefined;
   try {
-    const { registration, notifications } = await approveRegistration(
+    const body = await req.json();
+    if (body && typeof body.seatTierId === "string" && body.seatTierId.trim()) {
+      seatTierId = body.seatTierId.trim();
+    }
+  } catch {
+    // empty body is fine
+  }
+
+  try {
+    const { registration, notifications, seatLabel } = await approveRegistration(
       id,
-      session.user.id
+      session.user.id,
+      { seatTierId }
     );
     await recordAudit({
       action: AUDIT_ACTIONS.REGISTRATION_APPROVE,
@@ -34,6 +45,9 @@ export async function POST(
       metadata: {
         eventId: registration.eventId,
         eventName: registration.event.name,
+        seatLabel,
+        seatTierId: registration.seatTierId,
+        seatNumber: registration.seatNumber,
         notifications: notifications.map((n) => ({
           channel: n.channel,
           sent: n.sent,
@@ -44,6 +58,7 @@ export async function POST(
     return NextResponse.json({
       id: registration.id,
       status: registration.status,
+      seatLabel,
       message: await apiT("api.approveSuccess"),
       notifications: {
         email: notifications.find((n) => n.channel === "email")?.sent ?? false,

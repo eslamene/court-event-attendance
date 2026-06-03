@@ -1,61 +1,75 @@
 "use client";
 
-import type { IconProps } from "@phosphor-icons/react";
-import { X } from "@phosphor-icons/react";
+import type { LucideIcon } from "lucide-react";
+import { Save, Trash2, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
-type BtnProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  icon?: React.ComponentType<IconProps>;
+type BtnProps = React.ComponentProps<typeof Button> & {
+  icon?: LucideIcon;
 };
 
 export function PrimaryFormButton({
-  icon: Icon,
+  icon: Icon = Save,
   children,
-  className = "",
+  className,
+  size = "lg",
   ...props
 }: BtnProps) {
   return (
-    <button
+    <Button
       type="submit"
-      className={`inline-flex items-center gap-1.5 rounded-xl bg-gold-dark px-6 py-2.5 text-white hover:bg-bronze disabled:opacity-60 ${className}`}
+      variant="brand"
+      size={size}
+      className={cn("gap-1.5 rounded-xl px-6", className)}
       {...props}
     >
-      {Icon && <Icon size={18} weight="bold" aria-hidden />}
+      <Icon className="size-4 shrink-0" aria-hidden />
       {children}
-    </button>
+    </Button>
   );
 }
 
 export function DangerFormButton({
-  icon: Icon,
+  icon: Icon = Trash2,
   children,
-  className = "",
+  className,
+  size = "lg",
   ...props
 }: BtnProps) {
   return (
-    <button
+    <Button
       type="submit"
-      className={`inline-flex items-center gap-1.5 rounded-xl bg-error px-6 py-2.5 text-white hover:opacity-90 disabled:opacity-60 ${className}`}
+      variant="destructive"
+      size={size}
+      className={cn(
+        "gap-1.5 rounded-xl bg-error px-6 text-white hover:bg-error/90",
+        className
+      )}
       {...props}
     >
-      {Icon && <Icon size={18} weight="bold" aria-hidden />}
+      <Icon className="size-4 shrink-0" aria-hidden />
       {children}
-    </button>
+    </Button>
   );
 }
 
 export function CancelFormButton({
   children,
-  className = "",
+  className,
+  size = "lg",
   ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+}: BtnProps) {
   return (
-    <button
+    <Button
       type="button"
-      className={`inline-flex items-center gap-1.5 rounded-xl border border-border px-6 py-2.5 hover:bg-[#f5f0e8] ${className}`}
+      variant="brandOutline"
+      size={size}
+      className={cn("gap-1.5 rounded-xl px-6", className)}
       {...props}
     >
-      <X size={18} aria-hidden />
+      <X className="size-4 shrink-0" aria-hidden />
       {children}
-    </button>
+    </Button>
   );
 }

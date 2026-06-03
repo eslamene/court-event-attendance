@@ -43,6 +43,19 @@
   --sidebar-accent-foreground: #5c3d1e;
   --sidebar-border: #e8dcc8;
   --sidebar-ring: #b8860b;
+
+  /* Seating map — light floor (original) with high-contrast seats */
+  --seat-map-floor: #f0ebe3;
+  --seat-map-grid: rgba(139, 105, 20, 0.22);
+  --seat-free-bg: #ffffff;
+  --seat-free-fg: #5c3d1e;
+  --seat-free-ring: #5c3d1e;
+  --seat-approved-bg: #b8860b;
+  --seat-approved-fg: #ffffff;
+  --seat-approved-ring: #5c3d1e;
+  --seat-attended-bg: #166534;
+  --seat-attended-fg: #ffffff;
+  --seat-attended-ring: #14532d;
 }
 
 @theme inline {
@@ -56,6 +69,10 @@
   --color-border: var(--border);
   --color-success: var(--success);
   --color-error: var(--error);
+  --color-seat-map-floor: var(--seat-map-floor);
+  --color-seat-free-bg: var(--seat-free-bg);
+  --color-seat-approved-bg: var(--seat-approved-bg);
+  --color-seat-attended-bg: var(--seat-attended-bg);
   --font-sans: var(--font-noto), Tahoma, Arial, sans-serif;
   --font-heading: var(--font-noto), Tahoma, Arial, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);

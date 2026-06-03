@@ -2,10 +2,11 @@
 
 import { signIn } from "next-auth/react";
 import { FormEvent, useState } from "react";
-import { CircleNotch, SignIn } from "@phosphor-icons/react";
+import { Loader2, LogIn } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { LogoHeader } from "@/components/LogoHeader";
 import { TextField } from "@/components/ui/Field";
+import { Button } from "@/components/ui/button";
 import { useI18n } from "@/components/I18nProvider";
 
 export default function AdminLoginPage() {
@@ -64,23 +65,25 @@ export default function AdminLoginPage() {
         {error && (
           <p className="text-center text-sm text-error">{error}</p>
         )}
-        <button
+        <Button
           type="submit"
+          variant="brand"
+          size="lg"
           disabled={loading}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gold-dark py-3 font-semibold text-white hover:bg-bronze disabled:opacity-60"
+          className="w-full rounded-xl"
         >
           {loading ? (
             <>
-              <CircleNotch size={20} className="animate-spin" aria-hidden />
+              <Loader2 className="size-4 animate-spin" aria-hidden />
               {t("admin.login.submitting")}
             </>
           ) : (
             <>
-              <SignIn size={20} weight="bold" aria-hidden />
+              <LogIn className="size-4" aria-hidden />
               {t("admin.login.submit")}
             </>
           )}
-        </button>
+        </Button>
       </form>
     </main>
   );

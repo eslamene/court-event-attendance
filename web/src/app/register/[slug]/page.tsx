@@ -16,14 +16,28 @@ export default async function RegisterPage({
   const { slug } = await params;
   const event = await prisma.event.findUnique({
     where: { slug, isActive: true },
+    select: {
+      id: true,
+      name: true,
+      date: true,
+      logoPath: true,
+      seatingEnabled: true,
+    },
   });
 
   if (!event) notFound();
 
   const eventDate = format(event.date, "EEEE، d MMMM yyyy", { locale: ar });
-  const [registrationGate, formConfig] = await Promise.all([
+  const [registrationGate, formConfig, seatTiers] = await Promise.all([
     isRegistrationOpen(),
     resolveRegistrationFormConfigForEvent(event.id),
+    event.seatingEnabled
+      ? prisma.seatTier.findMany({
+          where: { eventId: event.id },
+          orderBy: { sortOrder: "asc" },
+          select: { id: true, name: true, seatCount: true },
+        })
+      : Promise.resolve([]),
   ]);
 
   return (
@@ -53,6 +67,7 @@ export default async function RegisterPage({
               eventName={event.name}
               eventDate={eventDate}
               formConfig={formConfig}
+              seatTiers={seatTiers}
             />
             <WithdrawRegistrationPanel slug={slug} formConfig={formConfig} />
           </>

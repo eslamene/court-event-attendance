@@ -1,15 +1,16 @@
 "use client";
 
+import type { LucideIcon } from "lucide-react";
 import {
-  CheckCircle,
+  BadgeCheck,
+  Ban,
+  CheckCircle2,
   Clock,
-  HandWaving,
+  Hand,
   PauseCircle,
-  Prohibit,
-  SealCheck,
-  type Icon,
-} from "@phosphor-icons/react";
+} from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
+import { Tag } from "@/components/ui/tag";
 import { cn } from "@/lib/utils";
 
 const REGISTRATION_STATUS = [
@@ -24,42 +25,30 @@ type RegistrationStatus = (typeof REGISTRATION_STATUS)[number];
 
 const registrationStyles: Record<
   RegistrationStatus,
-  { icon: Icon; ring: string; bg: string; text: string; dot: string }
+  { icon: LucideIcon; className: string }
 > = {
   PENDING: {
     icon: Clock,
-    ring: "ring-amber-200/80",
-    bg: "bg-amber-50",
-    text: "text-amber-950",
-    dot: "bg-amber-500",
+    className:
+      "border-amber-200/80 bg-amber-50 text-amber-950 ring-amber-200/80",
   },
   APPROVED: {
-    icon: SealCheck,
-    ring: "ring-sky-200/80",
-    bg: "bg-sky-50",
-    text: "text-sky-950",
-    dot: "bg-sky-500",
+    icon: BadgeCheck,
+    className: "border-sky-200/80 bg-sky-50 text-sky-950 ring-sky-200/80",
   },
   REJECTED: {
-    icon: Prohibit,
-    ring: "ring-red-200/80",
-    bg: "bg-red-50",
-    text: "text-red-950",
-    dot: "bg-red-500",
+    icon: Ban,
+    className: "border-red-200/80 bg-red-50 text-red-950 ring-red-200/80",
   },
   ATTENDED: {
-    icon: CheckCircle,
-    ring: "ring-emerald-200/80",
-    bg: "bg-emerald-50",
-    text: "text-emerald-950",
-    dot: "bg-emerald-500",
+    icon: CheckCircle2,
+    className:
+      "border-emerald-200/80 bg-emerald-50 text-emerald-950 ring-emerald-200/80",
   },
   WITHDRAWN: {
-    icon: HandWaving,
-    ring: "ring-violet-200/80",
-    bg: "bg-violet-50",
-    text: "text-violet-950",
-    dot: "bg-violet-500",
+    icon: Hand,
+    className:
+      "border-violet-200/80 bg-violet-50 text-violet-950 ring-violet-200/80",
   },
 };
 
@@ -85,35 +74,19 @@ export function VisualStatusBadge(props: Props) {
     const style = registrationStyles[key];
     if (!style) {
       return (
-        <span
-          className={cn(
-            "inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground",
-            props.className
-          )}
-        >
+        <Tag variant="outline" className={props.className}>
           {props.status}
-        </span>
+        </Tag>
       );
     }
-    const IconComp = style.icon;
     return (
-      <span
-        className={cn(
-          "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ring-1 ring-inset",
-          style.ring,
-          style.bg,
-          style.text,
-          props.className
-        )}
+      <Tag
+        icon={style.icon}
         title={t(`status.${key}`)}
+        className={cn("ring-1 ring-inset", style.className, props.className)}
       >
-        <span
-          className={cn("size-1.5 shrink-0 rounded-full", style.dot)}
-          aria-hidden
-        />
-        <IconComp size={14} weight="duotone" className="shrink-0 opacity-90" aria-hidden />
-        <span>{t(`status.${key}`)}</span>
-      </span>
+        {t(`status.${key}`)}
+      </Tag>
     );
   }
 
@@ -127,51 +100,32 @@ export function VisualStatusBadge(props: Props) {
         ? t("admin.users.active")
         : t("admin.users.inactive");
 
-  const IconComp = active ? CheckCircle : PauseCircle;
   const isUserDisabled = props.kind === "user" && !active;
   const style = active
     ? {
-        ring: "ring-emerald-200/80",
-        bg: "bg-emerald-50",
-        text: "text-emerald-950",
-        dot: "bg-emerald-500",
-        border: "border-emerald-200/60",
+        icon: CheckCircle2,
+        className:
+          "border-emerald-200/80 bg-emerald-50 text-emerald-950 ring-emerald-200/80",
       }
     : isUserDisabled
       ? {
-          ring: "ring-red-200/80",
-          bg: "bg-red-50",
-          text: "text-red-950",
-          dot: "bg-red-500",
-          border: "border-red-200/60",
+          icon: Ban,
+          className:
+            "border-red-200/80 bg-red-50 text-red-950 ring-red-200/80",
         }
       : {
-          ring: "ring-slate-200/80",
-          bg: "bg-slate-100",
-          text: "text-slate-700",
-          dot: "bg-slate-400",
-          border: "border-slate-200/80",
+          icon: PauseCircle,
+          className:
+            "border-slate-200/80 bg-slate-100 text-slate-700 ring-slate-200/80",
         };
 
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ring-1 ring-inset",
-        style.ring,
-        style.bg,
-        style.text,
-        style.border,
-        props.className
-      )}
+    <Tag
+      icon={style.icon}
       title={label}
+      className={cn("ring-1 ring-inset", style.className, props.className)}
     >
-      <span
-        className={cn("size-1.5 shrink-0 rounded-full", style.dot)}
-        aria-hidden
-      />
-      <IconComp size={14} weight="duotone" className="shrink-0 opacity-90" aria-hidden />
-      <span>{label}</span>
-    </span>
+      {label}
+    </Tag>
   );
 }
-

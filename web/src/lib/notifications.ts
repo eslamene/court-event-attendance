@@ -207,6 +207,8 @@ export async function sendQrEmail(params: {
   qrToken: string;
   qrScanUrl?: string;
   instructions: string;
+  seatLabel?: string;
+  tierName?: string;
 }): Promise<DeliveryResult> {
   const toCheck = validateRecipientEmail(params.to, "Recipient");
   if (!toCheck.ok) {
@@ -231,6 +233,8 @@ export async function sendQrEmail(params: {
     qrImageUrl,
     qrScanUrl: params.qrScanUrl,
     eventLogoPath: params.eventLogoPath,
+    seatLabel: params.seatLabel,
+    tierName: params.tierName,
   });
   const from = process.env.EMAIL_FROM;
   const { getSystemSettings } = await import("./system-settings");
@@ -253,11 +257,14 @@ export async function sendQrEmail(params: {
 
   const plainText = [
     `تأكيد حضور — ${params.eventName} — ${dateStr}`,
+    params.seatLabel ? `المقعد: ${params.seatLabel}` : "",
     params.instructions,
     params.qrScanUrl
       ? `رمز QR: ${params.qrScanUrl}`
       : `صورة QR: ${qrImageUrl}`,
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   try {
     if (provider === "twilio") {
@@ -345,9 +352,12 @@ export async function sendQrSms(params: {
   eventName: string;
   eventDate: Date;
   qrUrl: string;
+  seatLabel?: string;
+  tierName?: string;
 }): Promise<DeliveryResult> {
   const dateStr = format(params.eventDate, "d/M/yyyy", { locale: ar });
-  const body = `مرحباً ${params.judgeName}، تم تأكيد حضوركم لـ ${params.eventName} بتاريخ ${dateStr}. رمز الدخول: ${params.qrUrl}`;
+  const seatPart = params.seatLabel ? ` المقعد: ${params.seatLabel}.` : "";
+  const body = `مرحباً ${params.judgeName}، تم تأكيد حضوركم لـ ${params.eventName} بتاريخ ${dateStr}.${seatPart} رمز الدخول: ${params.qrUrl}`;
 
   const result = await sendTwilioMessage({
     to: params.to,
@@ -386,6 +396,8 @@ export async function sendQrWhatsApp(params: {
   eventDate: Date;
   qrToken: string;
   qrUrl: string;
+  seatLabel?: string;
+  tierName?: string;
 }): Promise<DeliveryResult> {
   if (!process.env.TWILIO_WHATSAPP_NUMBER) {
     return {
@@ -404,6 +416,7 @@ export async function sendQrWhatsApp(params: {
     `مرحباً ${params.judgeName}،`,
     `تم تأكيد حضوركم لـ *${params.eventName}*`,
     `التاريخ: ${dateStr}`,
+    params.seatLabel ? `المقعد: *${params.seatLabel}*` : "",
     ``,
     `يرجى إبراز رمز QR المرفق عند الوصول (صالح لمرة واحدة).`,
     mediaUrl ? `` : `الرابط: ${params.qrUrl}`,

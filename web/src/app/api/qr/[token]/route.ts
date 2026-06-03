@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getPublicAppBaseUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
 import { buildQrPayload, generateQrDataUrl } from "@/lib/qr";
+import { formatSeatLabel } from "@/lib/seating";
 
 export async function GET(
   _req: Request,
@@ -10,7 +11,7 @@ export async function GET(
   const { token } = await params;
   const registration = await prisma.registration.findUnique({
     where: { qrToken: token },
-    include: { event: true },
+    include: { event: true, seatTier: true },
   });
 
   if (!registration || registration.status === "REJECTED") {
@@ -27,6 +28,10 @@ export async function GET(
     judgeName: registration.fullName,
     eventName: registration.event.name,
     eventDate: registration.event.date.toISOString(),
+    seatLabel:
+      registration.seatTier && registration.seatNumber != null
+        ? formatSeatLabel(registration.seatTier.name, registration.seatNumber)
+        : null,
     qrImage: dataUrl,
   });
 }

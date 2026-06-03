@@ -7,6 +7,7 @@ import {
   recordAudit,
 } from "@/lib/audit-log";
 import { approveRegistration, rejectRegistration } from "@/lib/approval";
+import { prisma } from "@/lib/db";
 import { apiT } from "@/lib/i18n/api";
 import { jsonForbidden } from "@/lib/i18n/responses";
 
@@ -39,9 +40,14 @@ export async function POST(req: Request) {
   for (const id of body.ids) {
     try {
       if (body.action === "approve") {
-        const { registration, notifications } = await approveRegistration(
+        const pending = await prisma.registration.findUnique({
+          where: { id },
+          select: { seatTierId: true },
+        });
+        const { registration, notifications, seatLabel } = await approveRegistration(
           id,
-          session.user.id
+          session.user.id,
+          { seatTierId: pending?.seatTierId }
         );
         await recordAudit({
           action: AUDIT_ACTIONS.REGISTRATION_APPROVE,
@@ -53,6 +59,7 @@ export async function POST(req: Request) {
             eventId: registration.eventId,
             eventName: registration.event.name,
             batch: true,
+            seatLabel,
             notifications: notifications.map((n) => ({
               channel: n.channel,
               sent: n.sent,

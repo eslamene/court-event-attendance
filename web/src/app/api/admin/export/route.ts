@@ -23,7 +23,7 @@ export async function GET(req: Request) {
   const registrations = await prisma.registration.findMany({
     where: eventId ? { eventId } : {},
     orderBy: { createdAt: "desc" },
-    include: { event: true },
+    include: { event: true, seatTier: true },
   });
 
   const rows = registrations.map((r) => ({
@@ -36,6 +36,13 @@ export async function GET(req: Request) {
     [t("export.mobile")]: r.mobile,
     Notes: r.notes ?? "",
     [t("export.status")]: t(`status.${r.status}`),
+    [t("export.seatTier")]: r.seatTier?.name ?? "",
+    [t("export.seatNumber")]:
+      r.seatNumber != null ? String(r.seatNumber) : "",
+    [t("export.seatLabel")]:
+      r.seatTier && r.seatNumber != null
+        ? `${r.seatTier.name} · ${r.seatNumber}`
+        : "",
     [t("export.registeredAt")]: format(r.createdAt, "yyyy-MM-dd HH:mm"),
     [t("export.attendedAt")]: r.attendedAt
       ? format(r.attendedAt, "yyyy-MM-dd HH:mm")

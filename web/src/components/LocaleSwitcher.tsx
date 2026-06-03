@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { Globe } from "@phosphor-icons/react";
+import { IconSelect } from "@/components/ui/icon-select";
 import { useI18n, useLocales } from "./I18nProvider";
 import { LOCALE_COOKIE } from "@/lib/i18n/constants";
 import { cn } from "@/lib/utils";
@@ -26,26 +27,19 @@ export function LocaleSwitcher({ className = "", variant = "pills" }: Props) {
 
   if (variant === "select") {
     return (
-      <label
-        className={cn(
-          "inline-flex items-center gap-2 text-sm text-bronze",
-          className
-        )}
-      >
-        <Globe size={18} className="text-gold-dark" aria-hidden />
-        <select
-          value={locale}
-          onChange={(e) => onChange(e.target.value)}
-          className="rounded-lg border border-border bg-card px-2 py-1 text-gold-dark"
-          aria-label={t("header.switchLanguage")}
-        >
-          {locales.map((l) => (
-            <option key={l.code} value={l.code}>
-              {l.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      <IconSelect
+        fieldKey="locale"
+        size="sm"
+        value={locale}
+        onValueChange={onChange}
+        triggerClassName="min-w-[8rem]"
+        className={className}
+        options={locales.map((l) => ({
+          value: l.code,
+          label: l.name,
+        }))}
+        aria-label={t("header.switchLanguage")}
+      />
     );
   }
 
