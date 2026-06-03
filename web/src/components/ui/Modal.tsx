@@ -8,6 +8,7 @@ type Props = {
   children: React.ReactNode;
   onClose: () => void;
   size?: "md" | "lg" | "xl";
+  elevated?: boolean;
 };
 
 const sizeClass = {
@@ -16,7 +17,7 @@ const sizeClass = {
   xl: "max-w-6xl",
 };
 
-export function Modal({ title, children, onClose, size = "md" }: Props) {
+export function Modal({ title, children, onClose, size = "md", elevated = false }: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -32,7 +33,7 @@ export function Modal({ title, children, onClose, size = "md" }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className={`fixed inset-0 flex items-center justify-center bg-black/50 p-4 ${elevated ? "z-[60]" : "z-50"}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-title"

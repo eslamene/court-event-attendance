@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { PLATFORM_LOGO_PATH } from "@/lib/platform-logo";
+import { LocaleSwitcher } from "@/components/LocaleSwitcher";
 import { useI18n } from "./I18nProvider";
 
 type Props = {
@@ -19,7 +20,11 @@ export function LogoHeader({ subtitle, logoSrc, logoAlt }: Props) {
     (isDefaultLogo ? t("header.logoAltCourt") : t("header.logoAltEvent"));
 
   return (
-    <header className="flex flex-col items-center gap-4 border-b border-border bg-card px-6 py-8 shadow-sm">
+    <header className="relative border-b border-border bg-card px-6 py-8 shadow-sm">
+      <div className="absolute end-4 top-4 z-10">
+        <LocaleSwitcher />
+      </div>
+      <div className="mx-auto flex max-w-2xl flex-col items-center gap-4">
       <Image
         src={src}
         alt={alt}
@@ -37,6 +42,7 @@ export function LogoHeader({ subtitle, logoSrc, logoAlt }: Props) {
         <p className="mt-1 text-sm text-bronze">
           {subtitle ?? t("header.subtitle")}
         </p>
+      </div>
       </div>
     </header>
   );

@@ -1,88 +1,133 @@
 import { NextResponse } from "next/server";
-import { auth, canManageEvents } from "@/lib/auth";
+import { auth, canViewAudit } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { apiT } from "@/lib/i18n/api";
+import type { Prisma } from "@/generated/prisma/client";
+import {
+  paginatedResponse,
+  parseColumnFilters,
+  parsePagination,
+  parseSort,
+} from "@/lib/admin-table-query";
 
-const DEFAULT_LIMIT = 50;
-const MAX_LIMIT = 200;
+const SORT_COLUMNS = [
+  "createdAt",
+  "action",
+  "actorName",
+  "entityType",
+  "entityLabel",
+  "ipAddress",
+] as const;
+
+const FILTER_COLUMNS = [
+  "action",
+  "entityType",
+  "actorName",
+  "entityLabel",
+  "ipAddress",
+  "q",
+] as const;
 
 export async function GET(req: Request) {
   const session = await auth();
-  if (!session?.user || !canManageEvents(session.user.role)) {
+  if (!session?.user || !canViewAudit(session.user.role)) {
     return NextResponse.json({ error: await apiT("api.forbidden") }, { status: 403 });
   }
 
   const { searchParams } = new URL(req.url);
-  const action = searchParams.get("action") || undefined;
-  const entityType = searchParams.get("entityType") || undefined;
-  const actorUserId = searchParams.get("actorUserId") || undefined;
-  const q = searchParams.get("q")?.trim() || undefined;
-  const cursor = searchParams.get("cursor") || undefined;
-  const limit = Math.min(
-    Math.max(parseInt(searchParams.get("limit") ?? String(DEFAULT_LIMIT), 10) || DEFAULT_LIMIT, 1),
-    MAX_LIMIT
-  );
+  const { page, pageSize, skip, take } = parsePagination(searchParams);
+  const { sort, order } = parseSort(searchParams, SORT_COLUMNS, "createdAt");
+  const filters = parseColumnFilters(searchParams, FILTER_COLUMNS);
 
-  const where = {
-    ...(action ? { action } : {}),
-    ...(entityType ? { entityType } : {}),
-    ...(actorUserId ? { actorUserId } : {}),
-    ...(q
+  const textFilter = filters.q;
+  const where: Prisma.AuditLogWhereInput = {
+    ...(filters.action ? { action: filters.action } : {}),
+    ...(filters.entityType ? { entityType: filters.entityType } : {}),
+    ...(filters.actorName
       ? {
           OR: [
-            { entityLabel: { contains: q, mode: "insensitive" as const } },
-            { actorName: { contains: q, mode: "insensitive" as const } },
-            { actorEmail: { contains: q, mode: "insensitive" as const } },
-            { action: { contains: q, mode: "insensitive" as const } },
+            { actorName: { contains: filters.actorName, mode: "insensitive" } },
+            { actorEmail: { contains: filters.actorName, mode: "insensitive" } },
+          ],
+        }
+      : {}),
+    ...(filters.entityLabel
+      ? { entityLabel: { contains: filters.entityLabel, mode: "insensitive" } }
+      : {}),
+    ...(filters.ipAddress
+      ? { ipAddress: { contains: filters.ipAddress, mode: "insensitive" } }
+      : {}),
+    ...(textFilter
+      ? {
+          OR: [
+            { entityLabel: { contains: textFilter, mode: "insensitive" } },
+            { actorName: { contains: textFilter, mode: "insensitive" } },
+            { actorEmail: { contains: textFilter, mode: "insensitive" } },
+            { action: { contains: textFilter, mode: "insensitive" } },
+            { entityType: { contains: textFilter, mode: "insensitive" } },
           ],
         }
       : {}),
   };
 
-  const logs = await prisma.auditLog.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    take: limit + 1,
-    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-    include: {
-      actorUser: { select: { id: true, name: true, email: true, role: true } },
-    },
-  });
+  const orderBy: Prisma.AuditLogOrderByWithRelationInput =
+    sort === "action"
+      ? { action: order }
+      : sort === "actorName"
+        ? { actorName: order }
+        : sort === "entityType"
+          ? { entityType: order }
+          : sort === "entityLabel"
+            ? { entityLabel: order }
+            : sort === "ipAddress"
+              ? { ipAddress: order }
+              : { createdAt: order };
 
-  const hasMore = logs.length > limit;
-  const items = hasMore ? logs.slice(0, limit) : logs;
-  const nextCursor = hasMore ? items[items.length - 1]?.id : null;
-
-  const actions = await prisma.auditLog.findMany({
-    distinct: ["action"],
-    select: { action: true },
-    orderBy: { action: "asc" },
-  });
-
-  const entityTypes = await prisma.auditLog.findMany({
-    distinct: ["entityType"],
-    select: { entityType: true },
-    where: { entityType: { not: null } },
-    orderBy: { entityType: "asc" },
-  });
+  const [total, logs, actions, entityTypes] = await Promise.all([
+    prisma.auditLog.count({ where }),
+    prisma.auditLog.findMany({
+      where,
+      orderBy,
+      skip,
+      take,
+      include: {
+        actorUser: { select: { id: true, name: true, email: true, role: true } },
+      },
+    }),
+    prisma.auditLog.findMany({
+      distinct: ["action"],
+      select: { action: true },
+      orderBy: { action: "asc" },
+    }),
+    prisma.auditLog.findMany({
+      distinct: ["entityType"],
+      select: { entityType: true },
+      where: { entityType: { not: null } },
+      orderBy: { entityType: "asc" },
+    }),
+  ]);
 
   return NextResponse.json({
-    items: items.map((log) => ({
-      id: log.id,
-      action: log.action,
-      entityType: log.entityType,
-      entityId: log.entityId,
-      entityLabel: log.entityLabel,
-      actorType: log.actorType,
-      actorUserId: log.actorUserId,
-      actorName: log.actorName ?? log.actorUser?.name,
-      actorEmail: log.actorEmail ?? log.actorUser?.email,
-      actorRole: log.actorUser?.role,
-      metadata: log.metadata,
-      ipAddress: log.ipAddress,
-      createdAt: log.createdAt.toISOString(),
-    })),
-    nextCursor,
+    ...paginatedResponse(
+      logs.map((log) => ({
+        id: log.id,
+        action: log.action,
+        entityType: log.entityType,
+        entityId: log.entityId,
+        entityLabel: log.entityLabel,
+        actorType: log.actorType,
+        actorUserId: log.actorUserId,
+        actorName: log.actorName ?? log.actorUser?.name,
+        actorEmail: log.actorEmail ?? log.actorUser?.email,
+        actorRole: log.actorUser?.role,
+        metadata: log.metadata,
+        ipAddress: log.ipAddress,
+        createdAt: log.createdAt.toISOString(),
+      })),
+      total,
+      page,
+      pageSize
+    ),
     filters: {
       actions: actions.map((a) => a.action),
       entityTypes: entityTypes

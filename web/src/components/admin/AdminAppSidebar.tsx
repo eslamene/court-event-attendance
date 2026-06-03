@@ -71,7 +71,6 @@ const mainNavItems = [
     href: "/admin/audit",
     icon: ScrollText,
     labelKey: "admin.nav.audit" as const,
-    adminOnly: true,
   },
 ] as const;
 

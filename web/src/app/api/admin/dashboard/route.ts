@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { startOfDay } from "date-fns";
-import { auth, canManageEvents } from "@/lib/auth";
+import { auth, canManageEvents, canViewAudit } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { apiT } from "@/lib/i18n/api";
 
@@ -12,6 +12,7 @@ export async function GET() {
 
   const today = startOfDay(new Date());
   const isAdmin = canManageEvents(session.user.role);
+  const viewAudit = canViewAudit(session.user.role);
 
   const [
     statusGroups,
@@ -41,7 +42,7 @@ export async function GET() {
       take: 8,
       include: { event: { select: { name: true, slug: true } } },
     }),
-    isAdmin
+    viewAudit
       ? prisma.auditLog.findMany({
           orderBy: { createdAt: "desc" },
           take: 6,

@@ -12,6 +12,7 @@ import {
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AdminAppSidebar } from "@/components/admin/AdminAppSidebar";
 import { AdminNotificationsBell } from "@/components/admin/AdminNotificationsBell";
+import { LocaleSwitcher } from "@/components/LocaleSwitcher";
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession();
@@ -39,9 +40,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                   {roleLabel || role}
                 </p>
               </div>
+              <LocaleSwitcher className="shrink-0" />
               <AdminNotificationsBell />
             </header>
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4 md:p-6">
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 md:p-6">
               {children}
             </div>
           </SidebarInset>

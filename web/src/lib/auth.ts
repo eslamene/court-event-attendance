@@ -76,3 +76,7 @@ export function canManageEvents(role: UserRole) {
 export function canApprove(role: UserRole) {
   return role === "ADMIN" || role === "APPROVAL_MANAGER";
 }
+
+export function canViewAudit(role: UserRole) {
+  return canApprove(role);
+}

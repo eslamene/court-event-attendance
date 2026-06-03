@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { Copy, FloppyDisk, Plus, Trash } from "@phosphor-icons/react";
 import {
@@ -11,6 +11,10 @@ import { VisualStatusBadge } from "@/components/admin/VisualStatusBadge";
 import { EmailTemplateEditor } from "@/components/admin/EmailTemplateEditor";
 import { EventLogoUploader } from "@/components/admin/EventLogoUploader";
 import { RegistrationFormConfigEditor } from "@/components/admin/RegistrationFormConfigEditor";
+import {
+  AdminDataTable,
+  type AdminTableColumn,
+} from "@/components/admin/AdminDataTable";
 import { TextField } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
 import {
@@ -21,6 +25,7 @@ import {
 import { AdminListToolbar } from "@/components/admin/AdminListToolbar";
 import { useI18n } from "@/components/I18nProvider";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
+import { useAdminTable } from "@/hooks/useAdminTable";
 import { resolveRegistrationUrl } from "@/lib/app-url";
 import { PLATFORM_LOGO_PATH } from "@/lib/platform-logo";
 import { format } from "date-fns";
@@ -39,8 +44,11 @@ type EventRow = {
 export function EventsPanel() {
   const { t } = useI18n();
   const { confirm, toastError, toastSuccess } = useFeedback();
-  const [events, setEvents] = useState<EventRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const table = useAdminTable<EventRow>({
+    fetchUrl: "/api/admin/events",
+    defaultSort: "date",
+    defaultOrder: "desc",
+  });
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
@@ -57,26 +65,47 @@ export function EventsPanel() {
   const createSubmitLock = useRef(false);
   const updateSubmitLock = useRef(false);
 
-  async function load() {
-    setLoading(true);
-    const res = await fetch("/api/admin/events");
-    const data = await res.json();
-    if (Array.isArray(data)) {
-      setEvents(
-        data.map((e: EventRow) => ({
-          ...e,
-          registrationUrl: resolveRegistrationUrl(e.slug, e.registrationUrl),
-        }))
-      );
-    } else {
-      setEvents([]);
-    }
-    setLoading(false);
-  }
+  const columns = useMemo(
+    (): AdminTableColumn[] => [
+      { id: "logo", label: t("admin.events.colLogo") },
+      {
+        id: "name",
+        label: t("admin.events.colEvent"),
+        sortable: true,
+        filterable: true,
+      },
+      {
+        id: "date",
+        label: t("admin.events.colDate"),
+        sortable: true,
+      },
+      {
+        id: "registrationCount",
+        label: t("admin.events.colRegistrations"),
+        sortable: true,
+      },
+      {
+        id: "isActive",
+        label: t("admin.events.colStatus"),
+        sortable: true,
+        filterable: true,
+        filterType: "select",
+        filterOptions: [
+          { value: "true", label: t("admin.events.active") },
+          { value: "false", label: t("admin.events.inactive") },
+        ],
+      },
+      { id: "actions", label: t("admin.events.colActions") },
+    ],
+    [t]
+  );
 
-  useEffect(() => {
-    load();
-  }, []);
+  function withRegistrationUrl(row: EventRow): EventRow {
+    return {
+      ...row,
+      registrationUrl: resolveRegistrationUrl(row.slug, row.registrationUrl),
+    };
+  }
 
   async function copyRegistrationUrl(url: string) {
     try {
@@ -133,7 +162,7 @@ export function EventsPanel() {
         data.registrationUrl
       );
       setMessage(t("admin.events.created", { url: publicUrl }));
-      await load();
+      await table.reload();
     } finally {
       createSubmitLock.current = false;
       setSavingCreate(false);
@@ -169,7 +198,7 @@ export function EventsPanel() {
 
       setEditing(null);
       setMessage(t("admin.events.updated"));
-      await load();
+      await table.reload();
     } finally {
       updateSubmitLock.current = false;
       setSavingUpdate(false);
@@ -198,7 +227,7 @@ export function EventsPanel() {
 
     setMessage(data.message || t("admin.events.cleared"));
     setClearing(null);
-    load();
+    table.reload();
   }
 
   async function onDeleteEvent(ev: EventRow) {
@@ -222,7 +251,7 @@ export function EventsPanel() {
     }
 
     setMessage(data.message || t("admin.events.deleted"));
-    load();
+    table.reload();
   }
 
   function handleEventAction(ev: EventRow, action: EventRowAction) {
@@ -264,7 +293,7 @@ export function EventsPanel() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       {message && (
         <p className="rounded-lg bg-green-50 px-4 py-3 text-sm text-success">
           {message}
@@ -275,101 +304,83 @@ export function EventsPanel() {
       )}
 
       <AdminListToolbar
-        count={events.length}
+        count={table.total}
         countLabel={t("admin.common.viewAll")}
         actionLabel={t("admin.events.createAction")}
         onAction={openCreate}
       />
 
-      <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
-        <table className="w-full min-w-[640px] text-sm">
-          <thead className="bg-[#f5f0e8] text-gold-dark">
-            <tr>
-              <th className="px-4 py-3 text-right">{t("admin.events.colLogo")}</th>
-              <th className="px-4 py-3 text-right">{t("admin.events.colEvent")}</th>
-              <th className="px-4 py-3 text-right">{t("admin.events.colDate")}</th>
-              <th className="px-4 py-3 text-right">
-                {t("admin.events.colRegistrations")}
-              </th>
-              <th className="px-4 py-3 text-right">{t("admin.events.colStatus")}</th>
-              <th className="px-4 py-3 text-right">{t("admin.events.colActions")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-bronze">
-                  {t("admin.registrations.loading")}
-                </td>
-              </tr>
-            ) : events.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-12 text-center">
-                  <p className="text-bronze">{t("admin.events.empty")}</p>
+      <AdminDataTable
+        columns={columns}
+        sort={table.sort}
+        order={table.order}
+        columnFilters={table.columnFilters}
+        onSort={table.toggleSort}
+        onFilterChange={table.setColumnFilter}
+        onClearFilters={table.clearFilters}
+        page={table.page}
+        pageSize={table.pageSize}
+        total={table.total}
+        totalPages={table.totalPages}
+        onPageChange={table.setPage}
+        onPageSizeChange={table.setPageSize}
+        loading={table.loading}
+        emptyMessage={t("admin.events.empty")}
+        colSpan={columns.length}
+      >
+        {table.items.map((row) => {
+          const ev = withRegistrationUrl(row);
+          return (
+            <tr
+              key={ev.id}
+              className="border-t border-border transition hover:bg-[#faf8f5]"
+            >
+              <td className="px-4 py-3">
+                <EventLogoThumb path={ev.logoPath} name={ev.name} />
+              </td>
+              <td className="px-4 py-3">
+                <div className="font-medium">{ev.name}</div>
+                <div
+                  className="mt-1 flex flex-wrap items-center gap-1.5"
+                  dir="ltr"
+                >
+                  <a
+                    href={ev.registrationUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="max-w-[220px] truncate text-xs text-gold-dark underline hover:text-bronze"
+                    title={ev.registrationUrl}
+                  >
+                    {ev.registrationUrl}
+                  </a>
                   <button
                     type="button"
-                    onClick={openCreate}
-                    className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-gold-dark underline hover:text-bronze"
+                    onClick={() => void copyRegistrationUrl(ev.registrationUrl)}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-xs font-medium text-gold-dark transition hover:border-gold/50 hover:bg-[#f5f0e8]"
+                    title={t("admin.events.copyUrl")}
                   >
-                    <Plus size={16} weight="bold" aria-hidden />
-                    {t("admin.events.createAction")}
+                    <Copy size={14} weight="bold" aria-hidden />
+                    {t("admin.events.copyUrl")}
                   </button>
-                </td>
-              </tr>
-            ) : (
-              events.map((ev) => (
-                <tr
-                  key={ev.id}
-                  className="border-t border-border transition hover:bg-[#faf8f5]"
-                >
-                  <td className="px-4 py-3">
-                    <EventLogoThumb path={ev.logoPath} name={ev.name} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="font-medium">{ev.name}</div>
-                    <div
-                      className="mt-1 flex flex-wrap items-center gap-1.5"
-                      dir="ltr"
-                    >
-                      <a
-                        href={ev.registrationUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="max-w-[220px] truncate text-xs text-gold-dark underline hover:text-bronze"
-                        title={ev.registrationUrl}
-                      >
-                        {ev.registrationUrl}
-                      </a>
-                      <button
-                        type="button"
-                        onClick={() => void copyRegistrationUrl(ev.registrationUrl)}
-                        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-xs font-medium text-gold-dark transition hover:border-gold/50 hover:bg-[#f5f0e8]"
-                        title={t("admin.events.copyUrl")}
-                      >
-                        <Copy size={14} weight="bold" aria-hidden />
-                        {t("admin.events.copyUrl")}
-                      </button>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    {format(new Date(ev.date), "yyyy-MM-dd")}
-                  </td>
-                  <td className="px-4 py-3">{ev.registrationCount}</td>
-                  <td className="px-4 py-3">
-                    <VisualStatusBadge kind="event" active={ev.isActive} />
-                  </td>
-                  <td className="min-w-[7.5rem] px-3 py-3 text-end">
-                    <EventRowActionsCommand
-                      event={ev}
-                      onAction={(action) => handleEventAction(ev, action)}
-                    />
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+                </div>
+              </td>
+              <td className="px-4 py-3">
+                {format(new Date(ev.date), "yyyy-MM-dd")}
+              </td>
+              <td className="px-4 py-3">{ev.registrationCount}</td>
+              <td className="px-4 py-3">
+                <VisualStatusBadge kind="event" active={ev.isActive} />
+              </td>
+              <td className="min-w-[7.5rem] px-3 py-3 text-end">
+                <EventRowActionsCommand
+                  event={ev}
+                  onAction={(action) => handleEventAction(ev, action)}
+                />
+              </td>
+            </tr>
+          );
+        })}
+      </AdminDataTable>
 
       {creating && (
         <Modal

@@ -10,37 +10,89 @@ import {
 } from "@/lib/audit-log";
 import { createUserSchema } from "@/lib/i18n/schemas";
 import { jsonForbidden, jsonInvalidData } from "@/lib/i18n/responses";
+import type { Prisma, UserRole } from "@/generated/prisma/client";
+import {
+  paginatedResponse,
+  parseColumnFilters,
+  parsePagination,
+  parseSort,
+} from "@/lib/admin-table-query";
 
-export async function GET() {
+const SORT_COLUMNS = ["name", "email", "role", "isActive", "createdAt"] as const;
+const FILTER_COLUMNS = ["name", "email", "role", "isActive"] as const;
+
+export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user || !canManageEvents(session.user.role)) {
     return jsonForbidden();
   }
 
-  const users = await prisma.user.findMany({
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      role: true,
-      isActive: true,
-      createdAt: true,
-      _count: { select: { approvedRegistrations: true, scanLogs: true } },
-    },
-  });
+  const { searchParams } = new URL(req.url);
+  const { page, pageSize, skip, take } = parsePagination(searchParams);
+  const { sort, order } = parseSort(searchParams, SORT_COLUMNS, "createdAt");
+  const filters = parseColumnFilters(searchParams, FILTER_COLUMNS);
+
+  const where: Prisma.UserWhereInput = {
+    ...(filters.name
+      ? { name: { contains: filters.name, mode: "insensitive" } }
+      : {}),
+    ...(filters.email
+      ? { email: { contains: filters.email, mode: "insensitive" } }
+      : {}),
+    ...(filters.role ? { role: filters.role as UserRole } : {}),
+    ...(filters.isActive === "true"
+      ? { isActive: true }
+      : filters.isActive === "false"
+        ? { isActive: false }
+        : {}),
+  };
+
+  const orderBy: Prisma.UserOrderByWithRelationInput =
+    sort === "name"
+      ? { name: order }
+      : sort === "email"
+        ? { email: order }
+        : sort === "role"
+          ? { role: order }
+          : sort === "isActive"
+            ? { isActive: order }
+            : { createdAt: order };
+
+  const [total, users] = await Promise.all([
+    prisma.user.count({ where }),
+    prisma.user.findMany({
+      where,
+      orderBy,
+      skip,
+      take,
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        _count: { select: { approvedRegistrations: true, scanLogs: true } },
+      },
+    }),
+  ]);
 
   return NextResponse.json(
-    users.map((u) => ({
-      id: u.id,
-      email: u.email,
-      name: u.name,
-      role: u.role,
-      isActive: u.isActive,
-      createdAt: u.createdAt.toISOString(),
-      approvalsCount: u._count.approvedRegistrations,
-      scansCount: u._count.scanLogs,
-    }))
+    paginatedResponse(
+      users.map((u) => ({
+        id: u.id,
+        email: u.email,
+        name: u.name,
+        role: u.role,
+        isActive: u.isActive,
+        createdAt: u.createdAt.toISOString(),
+        approvalsCount: u._count.approvedRegistrations,
+        scansCount: u._count.scanLogs,
+      })),
+      total,
+      page,
+      pageSize
+    )
   );
 }
 

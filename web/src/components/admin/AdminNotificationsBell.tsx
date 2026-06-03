@@ -130,7 +130,7 @@ export function AdminNotificationsBell() {
               {data.items.map((item) => (
                 <li key={item.id}>
                   <Link
-                    href="/admin/registrations?status=PENDING"
+                    href="/admin/registrations?tab=pending"
                     onClick={() => setOpen(false)}
                     className="block px-4 py-3 transition hover:bg-[#faf8f5]"
                   >
@@ -153,7 +153,7 @@ export function AdminNotificationsBell() {
 
         <div className="flex flex-wrap gap-2 border-t border-border p-3">
           <Link
-            href="/admin/registrations?status=PENDING"
+            href="/admin/registrations?tab=pending"
             onClick={() => {
               handleMarkAllRead();
               setOpen(false);

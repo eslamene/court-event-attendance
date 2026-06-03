@@ -1,7 +1,6 @@
 import { startOfDay } from "date-fns";
 import { LogoHeader } from "@/components/LogoHeader";
 import { EventCard } from "@/components/EventCard";
-import { LocaleSwitcher } from "@/components/LocaleSwitcher";
 import { PastEventsCaret } from "@/components/home/PastEventsCaret";
 import { prisma } from "@/lib/db";
 import { getServerT } from "@/lib/i18n/server";
@@ -40,11 +39,10 @@ export default async function HomePage() {
           {t("home.welcome")}
         </p>
 
-        <div className="mb-6 flex items-center justify-between gap-4">
+        <div className="mb-6">
           <h2 className="text-lg font-bold text-gold-dark">
             {t("home.activeEvents")}
           </h2>
-          <LocaleSwitcher />
         </div>
 
         {activeEvents.length === 0 ? (

@@ -32,7 +32,10 @@ export async function approveRegistration(
   });
 
   if (!registration) throw new Error(await apiT("approval.notFound"));
-  if (registration.status !== "PENDING") {
+  if (
+    registration.status !== "PENDING" &&
+    registration.status !== "REJECTED"
+  ) {
     throw new Error(await apiT("approval.cannotApprove"));
   }
 
@@ -47,6 +50,7 @@ export async function approveRegistration(
       approvedAt: new Date(),
       approvedById,
       qrSentAt: new Date(),
+      rejectedAt: null,
     },
     include: { event: true },
   });
@@ -103,6 +107,26 @@ export async function approveRegistration(
   const notifications = await Promise.all(tasks);
 
   return { registration: updated, notifications };
+}
+
+export async function rejectRegistration(
+  registrationId: string
+): Promise<Registration & { event: Event }> {
+  const registration = await prisma.registration.findUnique({
+    where: { id: registrationId },
+    include: { event: true },
+  });
+
+  if (!registration) throw new Error(await apiT("api.registrationNotFound"));
+  if (registration.status !== "PENDING") {
+    throw new Error(await apiT("api.cannotReject"));
+  }
+
+  return prisma.registration.update({
+    where: { id: registrationId },
+    data: { status: "REJECTED", rejectedAt: new Date() },
+    include: { event: true },
+  });
 }
 
 export type ResendQrEmailResult = {

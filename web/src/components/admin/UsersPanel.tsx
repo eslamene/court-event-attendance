@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Key, Plus, UserMinus, UserPlus } from "@phosphor-icons/react";
 import { TextField, SelectField } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
@@ -11,8 +11,13 @@ import {
   PrimaryFormButton,
 } from "@/components/ui/FormActions";
 import { AdminListToolbar } from "@/components/admin/AdminListToolbar";
+import {
+  AdminDataTable,
+  type AdminTableColumn,
+} from "@/components/admin/AdminDataTable";
 import { useI18n } from "@/components/I18nProvider";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
+import { useAdminTable } from "@/hooks/useAdminTable";
 import { USER_ROLES } from "@/lib/i18n/schemas";
 
 type UserRow = {
@@ -27,27 +32,59 @@ type UserRow = {
 export function UsersPanel() {
   const { t } = useI18n();
   const { toastSuccess, toastError, prompt } = useFeedback();
-  const [users, setUsers] = useState<UserRow[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    const res = await fetch("/api/admin/users");
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error || t("admin.users.loadFailed"));
-      setLoading(false);
-      return;
-    }
-    setUsers(data);
-    setLoading(false);
-  }, [t]);
+  const table = useAdminTable<UserRow>({
+    fetchUrl: "/api/admin/users",
+    defaultSort: "createdAt",
+    defaultOrder: "desc",
+  });
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const columns = useMemo(
+    (): AdminTableColumn[] => [
+      {
+        id: "name",
+        label: t("admin.users.name"),
+        sortable: true,
+        filterable: true,
+      },
+      {
+        id: "email",
+        label: t("admin.users.colEmail"),
+        sortable: true,
+        filterable: true,
+        align: "left",
+      },
+      {
+        id: "role",
+        label: t("admin.users.role"),
+        sortable: true,
+        filterable: true,
+        filterType: "select",
+        filterOptions: USER_ROLES.map((r) => ({
+          value: r,
+          label: t(`roles.${r}`),
+        })),
+      },
+      {
+        id: "isActive",
+        label: t("admin.registrations.colStatus"),
+        sortable: true,
+        filterable: true,
+        filterType: "select",
+        filterOptions: [
+          { value: "true", label: t("admin.users.enable") },
+          { value: "false", label: t("admin.users.disable") },
+        ],
+      },
+      {
+        id: "actions",
+        label: t("admin.users.colActions"),
+      },
+    ],
+    [t]
+  );
 
   async function onCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -69,7 +106,7 @@ export function UsersPanel() {
       return;
     }
     setCreating(false);
-    load();
+    table.reload();
   }
 
   async function toggleActive(user: UserRow) {
@@ -78,7 +115,7 @@ export function UsersPanel() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ isActive: !user.isActive }),
     });
-    load();
+    table.reload();
   }
 
   async function resetPassword(id: string) {
@@ -103,13 +140,13 @@ export function UsersPanel() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       {error && !creating && (
         <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-error">{error}</p>
       )}
 
       <AdminListToolbar
-        count={users.length}
+        count={table.total}
         countLabel={t("admin.common.viewAll")}
         actionLabel={t("admin.users.create")}
         onAction={() => {
@@ -118,78 +155,58 @@ export function UsersPanel() {
         }}
       />
 
-      <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
-        <table className="w-full text-sm">
-          <thead className="bg-[#f5f0e8] text-gold-dark">
-            <tr>
-              <th className="px-4 py-3 text-right">{t("admin.users.name")}</th>
-              <th className="px-4 py-3 text-right">{t("admin.users.colEmail")}</th>
-              <th className="px-4 py-3 text-right">{t("admin.users.role")}</th>
-              <th className="px-4 py-3 text-right">
-                {t("admin.registrations.colStatus")}
-              </th>
-              <th className="px-4 py-3 text-right">{t("admin.users.colActions")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-bronze">
-                  {t("admin.registrations.loading")}
-                </td>
-              </tr>
-            ) : users.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-4 py-12 text-center">
-                  <p className="text-bronze">{t("admin.users.empty")}</p>
-                  <button
-                    type="button"
-                    onClick={() => setCreating(true)}
-                    className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-gold-dark underline"
-                  >
-                    <Plus size={16} weight="bold" aria-hidden />
-                    {t("admin.users.create")}
-                  </button>
-                </td>
-              </tr>
-            ) : (
-              users.map((u) => (
-                <tr
-                  key={u.id}
-                  className="border-t border-border transition hover:bg-[#faf8f5]"
+      <AdminDataTable
+        columns={columns}
+        sort={table.sort}
+        order={table.order}
+        columnFilters={table.columnFilters}
+        onSort={table.toggleSort}
+        onFilterChange={table.setColumnFilter}
+        onClearFilters={table.clearFilters}
+        page={table.page}
+        pageSize={table.pageSize}
+        total={table.total}
+        totalPages={table.totalPages}
+        onPageChange={table.setPage}
+        onPageSizeChange={table.setPageSize}
+        loading={table.loading}
+        emptyMessage={t("admin.users.empty")}
+        colSpan={columns.length}
+      >
+        {table.items.map((u) => (
+          <tr
+            key={u.id}
+            className="border-t border-border transition hover:bg-[#faf8f5]"
+          >
+            <td className="px-4 py-3 font-medium">{u.name}</td>
+            <td className="px-4 py-3 text-left" dir="ltr">
+              {u.email}
+            </td>
+            <td className="px-4 py-3">{t(`roles.${u.role}`)}</td>
+            <td className="px-4 py-3">
+              <VisualStatusBadge kind="user" active={u.isActive} />
+            </td>
+            <td className="px-4 py-3">
+              <div className="flex flex-wrap gap-2">
+                <ActionButton
+                  icon={u.isActive ? UserMinus : UserPlus}
+                  onClick={() => toggleActive(u)}
                 >
-                  <td className="px-4 py-3 font-medium">{u.name}</td>
-                  <td className="px-4 py-3" dir="ltr">
-                    {u.email}
-                  </td>
-                  <td className="px-4 py-3">{t(`roles.${u.role}`)}</td>
-                  <td className="px-4 py-3">
-                    <VisualStatusBadge kind="user" active={u.isActive} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-2">
-                      <ActionButton
-                        icon={u.isActive ? UserMinus : UserPlus}
-                        onClick={() => toggleActive(u)}
-                      >
-                        {u.isActive
-                          ? t("admin.users.disable")
-                          : t("admin.users.enable")}
-                      </ActionButton>
-                      <ActionButton
-                        icon={Key}
-                        onClick={() => resetPassword(u.id)}
-                      >
-                        {t("admin.users.resetPassword")}
-                      </ActionButton>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+                  {u.isActive
+                    ? t("admin.users.disable")
+                    : t("admin.users.enable")}
+                </ActionButton>
+                <ActionButton
+                  icon={Key}
+                  onClick={() => resetPassword(u.id)}
+                >
+                  {t("admin.users.resetPassword")}
+                </ActionButton>
+              </div>
+            </td>
+          </tr>
+        ))}
+      </AdminDataTable>
 
       {creating && (
         <Modal

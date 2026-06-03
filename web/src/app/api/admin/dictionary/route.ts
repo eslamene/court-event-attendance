@@ -9,17 +9,81 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { namespaceFromKey } from "@/lib/i18n/catalog";
 import { apiT } from "@/lib/i18n/api";
+import type { Prisma } from "@/generated/prisma/client";
+import {
+  paginatedResponse,
+  parseColumnFilters,
+  parsePagination,
+  parseSort,
+} from "@/lib/admin-table-query";
 
-export async function GET() {
+const ENTRY_SORT = ["key", "namespace", "value"] as const;
+const ENTRY_FILTER = ["key", "namespace", "value"] as const;
+
+export async function GET(req: Request) {
   const session = await auth();
   if (session?.user?.role !== "ADMIN") {
     return NextResponse.json({ error: await apiT("api.forbidden") }, { status: 403 });
   }
 
+  const { searchParams } = new URL(req.url);
+  const localeCode = searchParams.get("localeCode");
+
+  if (localeCode && searchParams.has("page")) {
+    const locale = await prisma.locale.findUnique({ where: { code: localeCode } });
+    if (!locale) {
+      return NextResponse.json(
+        paginatedResponse([], 0, 1, parsePagination(searchParams).pageSize)
+      );
+    }
+
+    const { page, pageSize, skip, take } = parsePagination(searchParams);
+    const { sort, order } = parseSort(searchParams, ENTRY_SORT, "key");
+    const filters = parseColumnFilters(searchParams, ENTRY_FILTER);
+
+    const where: Prisma.DictionaryEntryWhereInput = {
+      localeId: locale.id,
+      ...(filters.key
+        ? { key: { contains: filters.key, mode: "insensitive" } }
+        : {}),
+      ...(filters.namespace
+        ? { namespace: { contains: filters.namespace, mode: "insensitive" } }
+        : {}),
+      ...(filters.value
+        ? { value: { contains: filters.value, mode: "insensitive" } }
+        : {}),
+    };
+
+    const orderBy: Prisma.DictionaryEntryOrderByWithRelationInput =
+      sort === "namespace"
+        ? { namespace: order }
+        : sort === "value"
+          ? { value: order }
+          : { key: order };
+
+    const [total, entries] = await Promise.all([
+      prisma.dictionaryEntry.count({ where }),
+      prisma.dictionaryEntry.findMany({ where, orderBy, skip, take }),
+    ]);
+
+    return NextResponse.json(
+      paginatedResponse(
+        entries.map((e) => ({
+          id: e.id,
+          key: e.key,
+          value: e.value,
+          namespace: e.namespace,
+        })),
+        total,
+        page,
+        pageSize
+      )
+    );
+  }
+
   const locales = await prisma.locale.findMany({
     orderBy: { sortOrder: "asc" },
     include: {
-      entries: { orderBy: [{ namespace: "asc" }, { key: "asc" }] },
       _count: { select: { entries: true } },
     },
   });
@@ -34,12 +98,6 @@ export async function GET() {
       isActive: l.isActive,
       sortOrder: l.sortOrder,
       entryCount: l._count.entries,
-      entries: l.entries.map((e) => ({
-        id: e.id,
-        key: e.key,
-        value: e.value,
-        namespace: e.namespace,
-      })),
     }))
   );
 }

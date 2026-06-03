@@ -3,17 +3,24 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   ArrowsClockwise,
+  Copy,
   FloppyDisk,
   Globe,
-  MagnifyingGlass,
   Plus,
+  X,
 } from "@phosphor-icons/react";
+import { DictionaryValueCell } from "@/components/admin/DictionaryValueCell";
+import {
+  AdminDataTable,
+  type AdminTableColumn,
+} from "@/components/admin/AdminDataTable";
 import { Modal } from "@/components/ui/Modal";
 import {
   CancelFormButton,
   PrimaryFormButton,
 } from "@/components/ui/FormActions";
 import { useI18n } from "@/components/I18nProvider";
+import { useAdminTable } from "@/hooks/useAdminTable";
 import { cn } from "@/lib/utils";
 
 type EntryRow = {
@@ -31,78 +38,82 @@ type LocaleRow = {
   isDefault: boolean;
   isActive: boolean;
   entryCount: number;
-  entries: EntryRow[];
 };
 
 export function DictionaryPanel() {
   const { t } = useI18n();
   const [locales, setLocales] = useState<LocaleRow[]>([]);
   const [selectedCode, setSelectedCode] = useState("ar");
-  const [search, setSearch] = useState("");
-  const [namespace, setNamespace] = useState("");
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [localesLoading, setLocalesLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showAddLocale, setShowAddLocale] = useState(false);
   const [showAddKey, setShowAddKey] = useState(false);
   const [newKey, setNewKey] = useState("");
   const [newValue, setNewValue] = useState("");
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editingSnapshot, setEditingSnapshot] = useState<string | null>(null);
 
-  async function load() {
-    setLoading(true);
+  const table = useAdminTable<EntryRow>({
+    fetchUrl: "/api/admin/dictionary",
+    defaultSort: "key",
+    defaultOrder: "asc",
+    extraParams: { localeCode: selectedCode },
+  });
+
+  const columns = useMemo(
+    (): AdminTableColumn[] => [
+      {
+        id: "key",
+        label: t("admin.dictionary.key"),
+        sortable: true,
+        filterable: true,
+        align: "left",
+        className: "w-[28%] font-mono",
+      },
+      {
+        id: "namespace",
+        label: t("admin.dictionary.namespace"),
+        sortable: true,
+        filterable: true,
+        className: "w-[14%]",
+      },
+      {
+        id: "value",
+        label: t("admin.dictionary.value"),
+        sortable: true,
+        filterable: true,
+      },
+    ],
+    [t]
+  );
+
+  async function loadLocales() {
+    setLocalesLoading(true);
     const res = await fetch("/api/admin/dictionary");
     const data = await res.json();
     if (!res.ok) {
       setError(data.error || "Error");
-      setLoading(false);
+      setLocalesLoading(false);
       return;
     }
     setLocales(data);
     if (!data.find((l: LocaleRow) => l.code === selectedCode) && data[0]) {
       setSelectedCode(data[0].code);
     }
-    setLoading(false);
+    setLocalesLoading(false);
   }
 
   useEffect(() => {
-    load();
+    loadLocales();
   }, []);
 
-  const selected = locales.find((l) => l.code === selectedCode);
-
-  const namespaces = useMemo(() => {
-    if (!selected) return [];
-    const set = new Set(selected.entries.map((e) => e.namespace));
-    return Array.from(set).sort();
-  }, [selected]);
-
-  const filteredEntries = useMemo(() => {
-    if (!selected) return [];
-    return selected.entries.filter((e) => {
-      if (namespace && e.namespace !== namespace) return false;
-      if (!search) return true;
-      const q = search.toLowerCase();
-      return (
-        e.key.toLowerCase().includes(q) || e.value.toLowerCase().includes(q)
-      );
-    });
-  }, [selected, namespace, search]);
-
-  const dirtyCount = useMemo(() => {
-    if (!selected) return 0;
-    return Object.entries(edits).filter(([key, value]) => {
-      const orig = selected.entries.find((e) => e.key === key);
-      return orig && orig.value !== value;
-    }).length;
-  }, [edits, selected]);
+  const dirtyCount = Object.keys(edits).length;
 
   async function onSave() {
-    const changed = Object.entries(edits).filter(([key, value]) => {
-      const orig = selected?.entries.find((e) => e.key === key);
-      return orig && orig.value !== value;
-    });
+    const changed = Object.entries(edits);
     if (!changed.length) {
       setMessage(t("admin.dictionary.saved"));
       return;
@@ -125,8 +136,11 @@ export function DictionaryPanel() {
       return;
     }
     setEdits({});
+    setEditingKey(null);
+    setEditingSnapshot(null);
     setMessage(t("admin.dictionary.saved"));
-    load();
+    await table.reload();
+    await loadLocales();
   }
 
   async function onSeed() {
@@ -142,7 +156,8 @@ export function DictionaryPanel() {
       return;
     }
     setMessage(t("admin.dictionary.seeded"));
-    load();
+    await table.reload();
+    await loadLocales();
   }
 
   async function onAddLocale(e: FormEvent<HTMLFormElement>) {
@@ -165,7 +180,7 @@ export function DictionaryPanel() {
     }
     setShowAddLocale(false);
     setError("");
-    load();
+    await loadLocales();
   }
 
   async function onAddKey(e: FormEvent<HTMLFormElement>) {
@@ -190,7 +205,8 @@ export function DictionaryPanel() {
     setNewValue("");
     setShowAddKey(false);
     setError("");
-    load();
+    await table.reload();
+    await loadLocales();
   }
 
   function getValue(key: string, original: string) {
@@ -201,7 +217,50 @@ export function DictionaryPanel() {
     return key in edits && edits[key] !== original;
   }
 
-  if (loading) {
+  function discardEdits() {
+    setEdits({});
+    setEditingKey(null);
+    setEditingSnapshot(null);
+    setMessage("");
+  }
+
+  function startEditing(entryKey: string, currentValue: string) {
+    setEditingKey(entryKey);
+    setEditingSnapshot(currentValue);
+  }
+
+  function stopEditing() {
+    setEditingKey(null);
+    setEditingSnapshot(null);
+  }
+
+  function cancelEditing(entryKey: string, original: string) {
+    if (editingSnapshot === null) {
+      stopEditing();
+      return;
+    }
+    setEdits((prev) => {
+      const next = { ...prev };
+      if (editingSnapshot === original) {
+        delete next[entryKey];
+      } else {
+        next[entryKey] = editingSnapshot;
+      }
+      return next;
+    });
+    stopEditing();
+  }
+
+  async function copyKey(key: string) {
+    try {
+      await navigator.clipboard.writeText(key);
+      setMessage(t("admin.dictionary.keyCopied"));
+    } catch {
+      setError(t("register.errorNetwork"));
+    }
+  }
+
+  if (localesLoading) {
     return (
       <p className="rounded-xl border border-border bg-card px-6 py-12 text-center text-bronze">
         {t("admin.registrations.loading")}
@@ -228,7 +287,7 @@ export function DictionaryPanel() {
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f5f0e8] px-3 py-1 text-sm font-medium text-gold-dark">
                 {t("admin.dictionary.entries")}
-                <span className="text-bronze">({filteredEntries.length})</span>
+                <span className="text-bronze">({table.total})</span>
               </span>
               {dirtyCount > 0 && (
                 <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-950">
@@ -250,24 +309,39 @@ export function DictionaryPanel() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 pt-3">
-            <label className="flex items-center gap-2 text-sm">
+            <div className="flex flex-wrap items-center gap-1.5">
               <Globe size={18} className="text-bronze" aria-hidden />
-              <select
-                value={selectedCode}
-                onChange={(e) => {
-                  setSelectedCode(e.target.value);
-                  setEdits({});
-                  setNamespace("");
-                }}
-                className="rounded-lg border border-border bg-card px-3 py-1.5"
-              >
-                {locales.map((l) => (
-                  <option key={l.code} value={l.code}>
-                    {l.name} ({l.code})
-                  </option>
-                ))}
-              </select>
-            </label>
+              {locales.map((l) => (
+                <button
+                  key={l.code}
+                  type="button"
+                  onClick={() => {
+                    setSelectedCode(l.code);
+                    setEdits({});
+                    setEditingKey(null);
+                    setEditingSnapshot(null);
+                    table.setPage(1);
+                    table.clearFilters();
+                  }}
+                  className={cn(
+                    "rounded-full px-3 py-1 text-sm font-medium transition",
+                    selectedCode === l.code
+                      ? "bg-gold-dark text-white shadow-sm"
+                      : "border border-border bg-card text-bronze hover:bg-[#f5f0e8]"
+                  )}
+                >
+                  {l.name}
+                  <span className="ms-1 opacity-70" dir="ltr">
+                    ({l.code})
+                  </span>
+                  {l.isDefault && (
+                    <span className="ms-1 text-[10px] uppercase opacity-80">
+                      ★
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
             <button
               type="button"
               onClick={() => {
@@ -297,131 +371,105 @@ export function DictionaryPanel() {
               {saving ? "…" : t("admin.dictionary.save")}
             </button>
           </div>
+        </div>
+      </div>
 
-          <div className="mt-3 flex flex-wrap gap-2">
-            <div className="relative min-w-[200px] flex-1">
-              <MagnifyingGlass
-                size={18}
-                className="pointer-events-none absolute end-3 top-1/2 -translate-y-1/2 text-bronze"
-                aria-hidden
-              />
-              <input
-                type="search"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder={t("admin.dictionary.search")}
-                className="w-full rounded-lg border border-border py-2 ps-3 pe-10 text-sm"
-              />
-            </div>
-            <select
-              value={namespace}
-              onChange={(e) => setNamespace(e.target.value)}
-              className="min-w-[160px] rounded-lg border border-border px-3 py-2 text-sm"
-            >
-              <option value="">
-                {t("admin.dictionary.namespace")} — {t("admin.common.viewAll")}
-              </option>
-              {namespaces.map((ns) => (
-                <option key={ns} value={ns}>
-                  {ns}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {namespaces.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                onClick={() => setNamespace("")}
-                className={cn(
-                  "rounded-full px-2.5 py-0.5 text-xs font-medium transition",
-                  !namespace
-                    ? "bg-gold-dark text-white"
-                    : "bg-[#f5f0e8] text-bronze hover:bg-gold-dark/10"
-                )}
-              >
-                {t("admin.common.viewAll")}
-              </button>
-              {namespaces.map((ns) => (
+      <AdminDataTable
+        columns={columns}
+        sort={table.sort}
+        order={table.order}
+        columnFilters={table.columnFilters}
+        onSort={table.toggleSort}
+        onFilterChange={table.setColumnFilter}
+        onClearFilters={table.clearFilters}
+        page={table.page}
+        pageSize={table.pageSize}
+        total={table.total}
+        totalPages={table.totalPages}
+        onPageChange={table.setPage}
+        onPageSizeChange={table.setPageSize}
+        loading={table.loading}
+        colSpan={columns.length}
+      >
+        {table.items.map((entry) => (
+          <tr
+            key={entry.id}
+            className={cn(
+              "border-b border-border/60 align-top transition-colors hover:bg-[#faf8f5]",
+              isDirty(entry.key, entry.value) && "bg-amber-50/50",
+              editingKey === entry.key && "bg-gold/5"
+            )}
+          >
+            <td className="px-3 py-2" dir="ltr">
+              <div className="flex items-start gap-1">
+                <code className="min-w-0 flex-1 break-all font-mono text-xs leading-relaxed text-bronze">
+                  {entry.key}
+                </code>
                 <button
-                  key={ns}
                   type="button"
-                  onClick={() => setNamespace(ns)}
-                  className={cn(
-                    "rounded-full px-2.5 py-0.5 text-xs font-medium transition",
-                    namespace === ns
-                      ? "bg-gold-dark text-white"
-                      : "bg-[#f5f0e8] text-bronze hover:bg-gold-dark/10"
-                  )}
+                  onClick={() => copyKey(entry.key)}
+                  title={t("admin.dictionary.copyKey")}
+                  className="shrink-0 rounded p-1 text-bronze opacity-60 transition hover:bg-white hover:opacity-100"
                 >
-                  {ns}
+                  <Copy size={14} aria-hidden />
                 </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+              </div>
+            </td>
+            <td className="px-3 py-2">
+              <span className="inline-block rounded-full bg-[#f5f0e8] px-2 py-0.5 text-xs font-medium text-gold-dark">
+                {entry.namespace}
+              </span>
+            </td>
+            <td className="px-3 py-2">
+              <DictionaryValueCell
+                value={getValue(entry.key, entry.value)}
+                isEditing={editingKey === entry.key}
+                isDirty={isDirty(entry.key, entry.value)}
+                emptyLabel={t("admin.dictionary.emptyValue")}
+                clickToEditLabel={t("admin.dictionary.clickToEdit")}
+                onStartEdit={() =>
+                  startEditing(entry.key, getValue(entry.key, entry.value))
+                }
+                onEndEdit={stopEditing}
+                onChange={(value) =>
+                  setEdits((prev) => ({
+                    ...prev,
+                    [entry.key]: value,
+                  }))
+                }
+                onCancel={() => cancelEditing(entry.key, entry.value)}
+              />
+            </td>
+          </tr>
+        ))}
+      </AdminDataTable>
 
-      <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        <div className="h-full overflow-auto">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 border-b border-border bg-[#f5f0e8] text-right text-gold-dark shadow-sm">
-              <tr>
-                <th className="w-[28%] px-3 py-3 font-mono font-semibold" dir="ltr">
-                  {t("admin.dictionary.key")}
-                </th>
-                <th className="w-[14%] px-3 py-3 font-semibold">
-                  {t("admin.dictionary.namespace")}
-                </th>
-                <th className="px-3 py-3 font-semibold">
-                  {t("admin.dictionary.value")}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredEntries.length === 0 ? (
-                <tr>
-                  <td colSpan={3} className="px-4 py-16 text-center text-bronze">
-                    —
-                  </td>
-                </tr>
-              ) : (
-                filteredEntries.map((entry) => (
-                  <tr
-                    key={entry.id}
-                    className={cn(
-                      "border-b border-border/60 align-top hover:bg-[#faf8f5]",
-                      isDirty(entry.key, entry.value) && "bg-amber-50/60"
-                    )}
-                  >
-                    <td
-                      className="px-3 py-2 font-mono text-xs text-bronze"
-                      dir="ltr"
-                    >
-                      {entry.key}
-                    </td>
-                    <td className="px-3 py-2 text-bronze">{entry.namespace}</td>
-                    <td className="px-3 py-2">
-                      <textarea
-                        value={getValue(entry.key, entry.value)}
-                        onChange={(e) =>
-                          setEdits((prev) => ({
-                            ...prev,
-                            [entry.key]: e.target.value,
-                          }))
-                        }
-                        rows={entry.value.length > 120 ? 4 : 2}
-                        className="w-full min-w-[200px] resize-y rounded border border-border px-2 py-1.5 text-sm leading-relaxed focus:border-gold-dark/50 focus:outline-none focus:ring-1 focus:ring-gold-dark/30"
-                      />
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+      {dirtyCount > 0 && (
+        <div className="sticky bottom-0 z-20 flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 shadow-lg">
+          <p className="text-sm font-medium text-amber-950">
+            {dirtyCount} {t("admin.dictionary.unsaved")}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={discardEdits}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-sm text-bronze hover:bg-[#f5f0e8]"
+            >
+              <X size={16} aria-hidden />
+              {t("admin.dictionary.discard")}
+            </button>
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={saving}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-gold-dark px-4 py-1.5 text-sm font-semibold text-white hover:bg-bronze disabled:opacity-50"
+            >
+              <FloppyDisk size={16} aria-hidden />
+              {saving ? "…" : t("admin.dictionary.save")}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {showAddLocale && (
         <Modal

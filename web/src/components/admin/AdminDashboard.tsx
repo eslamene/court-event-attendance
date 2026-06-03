@@ -117,6 +117,9 @@ export function AdminDashboard() {
   const { t, locale, direction } = useI18n();
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "ADMIN";
+  const canViewAudit =
+    session?.user?.role === "ADMIN" ||
+    session?.user?.role === "APPROVAL_MANAGER";
   const dateLocale = locale === "ar" ? ar : enUS;
   const Arrow = direction === "rtl" ? ArrowLeft : ArrowRight;
 
@@ -161,7 +164,7 @@ export function AdminDashboard() {
 
   const quickActions = [
     {
-      href: "/admin/registrations?status=PENDING",
+      href: "/admin/registrations?tab=pending",
       icon: Clipboard,
       label: t("admin.dashboard.reviewPending"),
       show: reg.pending > 0,
@@ -189,7 +192,7 @@ export function AdminDashboard() {
       href: "/admin/audit",
       icon: Scroll,
       label: t("admin.nav.audit"),
-      show: isAdmin,
+      show: canViewAudit,
     },
   ].filter((a) => a.show);
 
@@ -207,7 +210,7 @@ export function AdminDashboard() {
           label={t("admin.dashboard.statPending")}
           value={reg.pending}
           icon={Clock}
-          href="/admin/registrations?status=PENDING"
+          href="/admin/registrations?tab=pending"
           barClass="bg-amber-500"
           iconBgClass="bg-amber-100"
           highlight={reg.pending > 0}
@@ -216,7 +219,7 @@ export function AdminDashboard() {
           label={t("admin.dashboard.statApproved")}
           value={reg.approved}
           icon={SealCheck}
-          href="/admin/registrations?status=APPROVED"
+          href="/admin/registrations?tab=approved"
           barClass="bg-sky-500"
           iconBgClass="bg-sky-100"
         />
@@ -224,7 +227,7 @@ export function AdminDashboard() {
           label={t("admin.dashboard.statAttended")}
           value={reg.attended}
           icon={CheckCircle}
-          href="/admin/registrations?status=ATTENDED"
+          href="/admin/registrations?tab=approved"
           barClass="bg-emerald-500"
           iconBgClass="bg-emerald-100"
         />
@@ -232,7 +235,7 @@ export function AdminDashboard() {
           label={t("admin.dashboard.statRejected")}
           value={reg.rejected}
           icon={Prohibit}
-          href="/admin/registrations?status=REJECTED"
+          href="/admin/registrations?tab=rejected"
           barClass="bg-red-500"
           iconBgClass="bg-red-100"
         />
@@ -240,7 +243,7 @@ export function AdminDashboard() {
           label={t("admin.dashboard.statWithdrawn")}
           value={reg.withdrawn}
           icon={HandWaving}
-          href="/admin/registrations?status=WITHDRAWN"
+          href="/admin/registrations?tab=withdrawn"
           barClass="bg-violet-500"
           iconBgClass="bg-violet-100"
         />
@@ -266,7 +269,7 @@ export function AdminDashboard() {
               </p>
             </div>
             <Link
-              href="/admin/registrations?status=PENDING"
+              href="/admin/registrations?tab=pending"
               className="inline-flex items-center gap-1 text-sm font-medium text-gold-dark hover:text-bronze"
             >
               {t("admin.dashboard.viewAll")}
@@ -282,7 +285,7 @@ export function AdminDashboard() {
               {data.recentPending.map((r) => (
                 <li key={r.id}>
                   <Link
-                    href="/admin/registrations?status=PENDING"
+                    href="/admin/registrations?tab=pending"
                     className="flex items-center justify-between gap-3 px-5 py-3 transition hover:bg-[#faf8f5]"
                   >
                     <div className="min-w-0">
@@ -372,7 +375,7 @@ export function AdminDashboard() {
         </div>
       </div>
 
-      {isAdmin && data.recentAudit.length > 0 && (
+      {canViewAudit && (
         <section className="rounded-xl border border-border bg-card shadow-sm">
           <div className="flex items-center justify-between border-b border-border px-5 py-4">
             <h2 className="font-bold text-gold-dark">
@@ -386,34 +389,40 @@ export function AdminDashboard() {
               <Arrow size={16} weight="bold" />
             </Link>
           </div>
-          <ul className="divide-y divide-border/60">
-            {data.recentAudit.map((a) => (
-              <li
-                key={a.id}
-                className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 text-sm"
-              >
-                <div className="min-w-0">
-                  <span className="font-medium text-gold-dark">
-                    {t(actionLabelKey(a.action)) !== actionLabelKey(a.action)
-                      ? t(actionLabelKey(a.action))
-                      : a.action}
+          {data.recentAudit.length === 0 ? (
+            <p className="px-5 py-10 text-center text-sm text-bronze">
+              {t("audit.empty")}
+            </p>
+          ) : (
+            <ul className="divide-y divide-border/60">
+              {data.recentAudit.map((a) => (
+                <li
+                  key={a.id}
+                  className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 text-sm"
+                >
+                  <div className="min-w-0">
+                    <span className="font-medium text-gold-dark">
+                      {t(actionLabelKey(a.action)) !== actionLabelKey(a.action)
+                        ? t(actionLabelKey(a.action))
+                        : a.action}
+                    </span>
+                    {a.entityLabel && (
+                      <span className="text-bronze"> — {a.entityLabel}</span>
+                    )}
+                    {a.actorName && (
+                      <p className="text-xs text-bronze">{a.actorName}</p>
+                    )}
+                  </div>
+                  <span className="shrink-0 text-xs text-bronze">
+                    {formatDistanceToNow(new Date(a.createdAt), {
+                      addSuffix: true,
+                      locale: dateLocale,
+                    })}
                   </span>
-                  {a.entityLabel && (
-                    <span className="text-bronze"> — {a.entityLabel}</span>
-                  )}
-                  {a.actorName && (
-                    <p className="text-xs text-bronze">{a.actorName}</p>
-                  )}
-                </div>
-                <span className="shrink-0 text-xs text-bronze">
-                  {formatDistanceToNow(new Date(a.createdAt), {
-                    addSuffix: true,
-                    locale: dateLocale,
-                  })}
-                </span>
-              </li>
-            ))}
-          </ul>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       )}
 

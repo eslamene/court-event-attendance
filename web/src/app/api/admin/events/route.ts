@@ -10,29 +10,104 @@ import {
 } from "@/lib/audit-log";
 import { buildRegistrationUrl } from "@/lib/app-url";
 import { uniqueEventSlug } from "@/lib/slug";
+import type { Prisma } from "@/generated/prisma/client";
+import {
+  paginatedResponse,
+  parseColumnFilters,
+  parsePagination,
+  parseSort,
+} from "@/lib/admin-table-query";
 
-export async function GET() {
+const SORT_COLUMNS = ["name", "date", "slug", "isActive", "registrationCount"] as const;
+const FILTER_COLUMNS = ["name", "slug", "isActive"] as const;
+
+function mapEvent(e: {
+  id: string;
+  name: string;
+  date: Date;
+  slug: string;
+  logoPath: string | null;
+  isActive: boolean;
+  _count: { registrations: number };
+}) {
+  return {
+    id: e.id,
+    name: e.name,
+    date: e.date.toISOString(),
+    slug: e.slug,
+    logoPath: e.logoPath,
+    isActive: e.isActive,
+    registrationCount: e._count.registrations,
+    registrationUrl: buildRegistrationUrl(e.slug),
+  };
+}
+
+export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: await apiT("api.unauthorized") }, { status: 401 });
   }
 
-  const events = await prisma.event.findMany({
-    orderBy: { date: "desc" },
-    include: { _count: { select: { registrations: true } } },
-  });
+  const { searchParams } = new URL(req.url);
+
+  if (searchParams.get("compact") === "1") {
+    const events = await prisma.event.findMany({
+      orderBy: { date: "desc" },
+      select: { id: true, name: true },
+    });
+    return NextResponse.json(events);
+  }
+
+  if (!searchParams.has("page")) {
+    const events = await prisma.event.findMany({
+      orderBy: { date: "desc" },
+      include: { _count: { select: { registrations: true } } },
+    });
+    return NextResponse.json(events.map(mapEvent));
+  }
+
+  const { page, pageSize, skip, take } = parsePagination(searchParams);
+  const { sort, order } = parseSort(searchParams, SORT_COLUMNS, "date");
+  const filters = parseColumnFilters(searchParams, FILTER_COLUMNS);
+
+  const where: Prisma.EventWhereInput = {
+    ...(filters.name
+      ? { name: { contains: filters.name, mode: "insensitive" } }
+      : {}),
+    ...(filters.slug
+      ? { slug: { contains: filters.slug, mode: "insensitive" } }
+      : {}),
+    ...(filters.isActive === "true"
+      ? { isActive: true }
+      : filters.isActive === "false"
+        ? { isActive: false }
+        : {}),
+  };
+
+  const orderBy: Prisma.EventOrderByWithRelationInput =
+    sort === "registrationCount"
+      ? { registrations: { _count: order } }
+      : sort === "name"
+        ? { name: order }
+        : sort === "slug"
+          ? { slug: order }
+          : sort === "isActive"
+            ? { isActive: order }
+            : { date: order };
+
+  const [total, events] = await Promise.all([
+    prisma.event.count({ where }),
+    prisma.event.findMany({
+      where,
+      orderBy,
+      skip,
+      take,
+      include: { _count: { select: { registrations: true } } },
+    }),
+  ]);
 
   return NextResponse.json(
-    events.map((e) => ({
-      id: e.id,
-      name: e.name,
-      date: e.date.toISOString(),
-      slug: e.slug,
-      logoPath: e.logoPath,
-      isActive: e.isActive,
-      registrationCount: e._count.registrations,
-      registrationUrl: buildRegistrationUrl(e.slug),
-    }))
+    paginatedResponse(events.map(mapEvent), total, page, pageSize)
   );
 }
 

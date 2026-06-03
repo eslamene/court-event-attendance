@@ -8,6 +8,7 @@ export default async function DictionaryPage() {
     <div className="flex min-h-0 flex-1 flex-col">
       <AdminPageHeader
         title={t("admin.dictionary.title")}
+        description={t("admin.dictionary.description")}
         className="mb-4 shrink-0"
       />
       <DictionaryPanel />
