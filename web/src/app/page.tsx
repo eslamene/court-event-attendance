@@ -2,7 +2,6 @@ import { startOfDay } from "date-fns";
 import { LogoHeader } from "@/components/LogoHeader";
 import { EventCard } from "@/components/EventCard";
 import { LocaleSwitcher } from "@/components/LocaleSwitcher";
-import { AdminLoginLink } from "@/components/home/AdminLoginLink";
 import { PastEventsCaret } from "@/components/home/PastEventsCaret";
 import { prisma } from "@/lib/db";
 import { getServerT } from "@/lib/i18n/server";
@@ -86,10 +85,6 @@ export default async function HomePage() {
             </div>
           </details>
         )}
-
-        <p className="mt-10 text-center text-sm text-bronze">
-          <AdminLoginLink label={t("home.adminLogin")} />
-        </p>
       </section>
     </main>
   );

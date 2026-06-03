@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getPublicAppBaseUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
 import { buildQrPayload, generateQrDataUrl } from "@/lib/qr";
 
@@ -16,7 +17,7 @@ export async function GET(
     return NextResponse.json({ valid: false }, { status: 404 });
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const baseUrl = getPublicAppBaseUrl();
   const payload = buildQrPayload(token, baseUrl);
   const dataUrl = await generateQrDataUrl(payload);
 

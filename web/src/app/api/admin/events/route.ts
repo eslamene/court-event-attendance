@@ -3,6 +3,7 @@ import { auth, canManageEvents } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { apiDict, apiT } from "@/lib/i18n/api";
 import { createEventSchema } from "@/lib/i18n/schemas";
+import { buildRegistrationUrl } from "@/lib/app-url";
 import { uniqueEventSlug } from "@/lib/slug";
 
 export async function GET() {
@@ -16,8 +17,6 @@ export async function GET() {
     include: { _count: { select: { registrations: true } } },
   });
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-
   return NextResponse.json(
     events.map((e) => ({
       id: e.id,
@@ -27,7 +26,7 @@ export async function GET() {
       logoPath: e.logoPath,
       isActive: e.isActive,
       registrationCount: e._count.registrations,
-      registrationUrl: `${baseUrl}/register/${e.slug}`,
+      registrationUrl: buildRegistrationUrl(e.slug),
     }))
   );
 }
@@ -70,11 +69,9 @@ export async function POST(req: Request) {
     },
   });
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-
   return NextResponse.json({
     ...event,
     date: event.date.toISOString(),
-    registrationUrl: `${baseUrl}/register/${event.slug}`,
+    registrationUrl: buildRegistrationUrl(event.slug),
   });
 }

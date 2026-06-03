@@ -3,6 +3,7 @@ import { auth, canManageEvents } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { removeEventLogoFiles } from "@/lib/event-logo";
 import { apiDict, apiT } from "@/lib/i18n/api";
+import { buildRegistrationUrl } from "@/lib/app-url";
 import { createUpdateEventSchema } from "@/lib/i18n/schemas";
 
 export async function PATCH(
@@ -76,8 +77,6 @@ export async function PATCH(
     include: { _count: { select: { registrations: true } } },
   });
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-
   return NextResponse.json({
     id: updated.id,
     name: updated.name,
@@ -86,7 +85,7 @@ export async function PATCH(
     logoPath: updated.logoPath,
     isActive: updated.isActive,
     registrationCount: updated._count.registrations,
-    registrationUrl: `${baseUrl}/register/${updated.slug}`,
+    registrationUrl: buildRegistrationUrl(updated.slug),
   });
 }
 

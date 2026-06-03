@@ -53,6 +53,7 @@ export function EventLogoUploader({
   const { toastSuccess, toastError } = useFeedback();
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
+  const processingRef = useRef(false);
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -142,19 +143,24 @@ export function EventLogoUploader({
 
   const handleFile = useCallback(
     async (file: File | null) => {
-      if (!file || disabled) return;
-      const validationError = validateFile(file);
-      if (validationError) {
-        setError(validationError);
-        toastError(validationError);
-        return;
-      }
-      setError("");
-      setPreviewFromFile(file);
-      if (eventId) {
-        await uploadFile(file);
-      } else {
-        onPendingFile?.(file);
+      if (!file || disabled || processingRef.current) return;
+      processingRef.current = true;
+      try {
+        const validationError = validateFile(file);
+        if (validationError) {
+          setError(validationError);
+          toastError(validationError);
+          return;
+        }
+        setError("");
+        setPreviewFromFile(file);
+        if (eventId) {
+          await uploadFile(file);
+        } else {
+          onPendingFile?.(file);
+        }
+      } finally {
+        processingRef.current = false;
       }
     },
     [

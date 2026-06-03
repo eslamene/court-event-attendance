@@ -1,8 +1,8 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { FloppyDisk, Plus, Trash } from "@phosphor-icons/react";
+import { Copy, FloppyDisk, Plus, Trash } from "@phosphor-icons/react";
 import {
   EventRowActionsCommand,
   type EventRowAction,
@@ -21,6 +21,7 @@ import {
 import { AdminListToolbar } from "@/components/admin/AdminListToolbar";
 import { useI18n } from "@/components/I18nProvider";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
+import { resolveRegistrationUrl } from "@/lib/app-url";
 import { PLATFORM_LOGO_PATH } from "@/lib/platform-logo";
 import { format } from "date-fns";
 
@@ -37,7 +38,7 @@ type EventRow = {
 
 export function EventsPanel() {
   const { t } = useI18n();
-  const { confirm, toastError } = useFeedback();
+  const { confirm, toastError, toastSuccess } = useFeedback();
   const [events, setEvents] = useState<EventRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
@@ -51,11 +52,25 @@ export function EventsPanel() {
   const [registrationFormEvent, setRegistrationFormEvent] =
     useState<EventRow | null>(null);
   const [createLogoFile, setCreateLogoFile] = useState<File | null>(null);
+  const [savingCreate, setSavingCreate] = useState(false);
+  const [savingUpdate, setSavingUpdate] = useState(false);
+  const createSubmitLock = useRef(false);
+  const updateSubmitLock = useRef(false);
 
   async function load() {
     setLoading(true);
     const res = await fetch("/api/admin/events");
-    setEvents(await res.json());
+    const data = await res.json();
+    if (Array.isArray(data)) {
+      setEvents(
+        data.map((e: EventRow) => ({
+          ...e,
+          registrationUrl: resolveRegistrationUrl(e.slug, e.registrationUrl),
+        }))
+      );
+    } else {
+      setEvents([]);
+    }
     setLoading(false);
   }
 
@@ -63,70 +78,102 @@ export function EventsPanel() {
     load();
   }, []);
 
+  async function copyRegistrationUrl(url: string) {
+    try {
+      await navigator.clipboard.writeText(url);
+      toastSuccess(t("admin.events.urlCopied"));
+    } catch {
+      toastError(t("admin.events.urlCopyFailed"));
+    }
+  }
+
   function openCreate() {
     setError("");
+    createSubmitLock.current = false;
+    setSavingCreate(false);
     setCreating(true);
   }
 
   async function onCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (createSubmitLock.current || savingCreate) return;
+    createSubmitLock.current = true;
+    setSavingCreate(true);
     setError("");
     setMessage("");
-    const form = new FormData(e.currentTarget);
-    const name = form.get("name") as string;
-    const date = form.get("date") as string;
-    const res = await fetch("/api/admin/events", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, date }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error || t("admin.events.createFailed"));
-      return;
-    }
 
-    if (createLogoFile) {
-      const fd = new FormData();
-      fd.append("logo", createLogoFile);
-      await fetch(`/api/admin/events/${data.id}/logo`, {
+    try {
+      const form = new FormData(e.currentTarget);
+      const name = form.get("name") as string;
+      const date = form.get("date") as string;
+      const res = await fetch("/api/admin/events", {
         method: "POST",
-        body: fd,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, date }),
       });
-    }
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || t("admin.events.createFailed"));
+        return;
+      }
 
-    setMessage(t("admin.events.created", { url: data.registrationUrl }));
-    setCreating(false);
-    setCreateLogoFile(null);
-    load();
+      if (createLogoFile) {
+        const fd = new FormData();
+        fd.append("logo", createLogoFile);
+        await fetch(`/api/admin/events/${data.id}/logo`, {
+          method: "POST",
+          body: fd,
+        });
+      }
+
+      setCreating(false);
+      setCreateLogoFile(null);
+      const publicUrl = resolveRegistrationUrl(
+        data.slug,
+        data.registrationUrl
+      );
+      setMessage(t("admin.events.created", { url: publicUrl }));
+      await load();
+    } finally {
+      createSubmitLock.current = false;
+      setSavingCreate(false);
+    }
   }
 
   async function onUpdate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!editing) return;
+    if (!editing || updateSubmitLock.current || savingUpdate) return;
+    updateSubmitLock.current = true;
+    setSavingUpdate(true);
     setError("");
-    const form = new FormData(e.currentTarget);
 
-    const res = await fetch(`/api/admin/events/${editing.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: form.get("name"),
-        date: form.get("date"),
-        slug: form.get("slug"),
-        isActive: form.get("isActive") === "true",
-        logoUrl: form.get("logoUrl") || "",
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error || t("admin.events.updateFailed"));
-      return;
+    try {
+      const form = new FormData(e.currentTarget);
+
+      const res = await fetch(`/api/admin/events/${editing.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.get("name"),
+          date: form.get("date"),
+          slug: form.get("slug"),
+          isActive: form.get("isActive") === "true",
+          logoUrl: form.get("logoUrl") || "",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || t("admin.events.updateFailed"));
+        return;
+      }
+
+      setEditing(null);
+      setMessage(t("admin.events.updated"));
+      await load();
+    } finally {
+      updateSubmitLock.current = false;
+      setSavingUpdate(false);
     }
-
-    setMessage(t("admin.events.updated"));
-    setEditing(null);
-    load();
   }
 
   async function onClearData(e: FormEvent<HTMLFormElement>) {
@@ -280,9 +327,29 @@ export function EventsPanel() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="font-medium">{ev.name}</div>
-                    <span className="text-xs text-bronze" dir="ltr">
-                      /register/{ev.slug}
-                    </span>
+                    <div
+                      className="mt-1 flex flex-wrap items-center gap-1.5"
+                      dir="ltr"
+                    >
+                      <a
+                        href={ev.registrationUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="max-w-[220px] truncate text-xs text-gold-dark underline hover:text-bronze"
+                        title={ev.registrationUrl}
+                      >
+                        {ev.registrationUrl}
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => void copyRegistrationUrl(ev.registrationUrl)}
+                        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-xs font-medium text-gold-dark transition hover:border-gold/50 hover:bg-[#f5f0e8]"
+                        title={t("admin.events.copyUrl")}
+                      >
+                        <Copy size={14} weight="bold" aria-hidden />
+                        {t("admin.events.copyUrl")}
+                      </button>
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     {format(new Date(ev.date), "yyyy-MM-dd")}
@@ -308,12 +375,18 @@ export function EventsPanel() {
         <Modal
           title={t("admin.events.createTitle")}
           onClose={() => {
+            if (savingCreate) return;
             setCreating(false);
             setCreateLogoFile(null);
+            createSubmitLock.current = false;
             setError("");
           }}
         >
-          <form onSubmit={onCreate} className="space-y-4">
+          <form
+            onSubmit={onCreate}
+            className="space-y-4"
+            aria-busy={savingCreate}
+          >
             <TextField name="name" label={t("admin.events.name")} required />
             <TextField
               name="date"
@@ -324,15 +397,21 @@ export function EventsPanel() {
             <EventLogoUploader
               label={t("admin.events.logoUpload")}
               onPendingFile={setCreateLogoFile}
+              disabled={savingCreate}
             />
             {error && <p className="text-sm text-error">{error}</p>}
             <div className="flex gap-3 pt-2">
-              <PrimaryFormButton icon={Plus}>
-                {t("admin.common.create")}
+              <PrimaryFormButton icon={Plus} disabled={savingCreate}>
+                {savingCreate
+                  ? t("admin.common.saving")
+                  : t("admin.common.create")}
               </PrimaryFormButton>
               <CancelFormButton
+                disabled={savingCreate}
                 onClick={() => {
                   setCreating(false);
+                  setCreateLogoFile(null);
+                  createSubmitLock.current = false;
                   setError("");
                 }}
               >
@@ -346,7 +425,10 @@ export function EventsPanel() {
       {editing && (
         <Modal
           title={`${t("admin.events.editTitle")}: ${editing.name}`}
-          onClose={() => setEditing(null)}
+          onClose={() => {
+            if (savingUpdate) return;
+            setEditing(null);
+          }}
         >
           <form onSubmit={onUpdate} className="space-y-4">
             <TextField
@@ -436,10 +518,15 @@ export function EventsPanel() {
             </p>
             {error && <p className="text-sm text-error">{error}</p>}
             <div className="flex gap-3 pt-2">
-              <PrimaryFormButton icon={FloppyDisk}>
-                {t("admin.common.save")}
+              <PrimaryFormButton icon={FloppyDisk} disabled={savingUpdate}>
+                {savingUpdate
+                  ? t("admin.common.saving")
+                  : t("admin.common.save")}
               </PrimaryFormButton>
-              <CancelFormButton onClick={() => setEditing(null)}>
+              <CancelFormButton
+                disabled={savingUpdate}
+                onClick={() => setEditing(null)}
+              >
                 {t("admin.common.cancel")}
               </CancelFormButton>
             </div>

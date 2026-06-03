@@ -1,5 +1,6 @@
 import QRCode from "qrcode";
 import { nanoid } from "nanoid";
+import { getPublicAppBaseUrl } from "@/lib/app-url";
 
 export const QR_RENDER_OPTIONS = {
   errorCorrectionLevel: "H" as const,
@@ -9,10 +10,7 @@ export const QR_RENDER_OPTIONS = {
 };
 
 export function getAppBaseUrl(): string {
-  return (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(
-    /\/$/,
-    ""
-  );
+  return getPublicAppBaseUrl();
 }
 
 export function generateQrToken(): string {

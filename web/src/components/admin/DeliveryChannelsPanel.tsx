@@ -18,6 +18,7 @@ type Status = {
     provider: string;
     fromAddress?: string | null;
     fromError?: string | null;
+    configGap?: string | null;
     fromMatchesVerified?: boolean | null;
     verifiedSenders?: string[];
     verifiedDomains?: string[];
@@ -86,7 +87,13 @@ export function DeliveryChannelsPanel() {
               From: {status.email.fromAddress}
             </p>
           )}
-          {status?.email.fromError && (
+          {!status?.email.configured &&
+            (status?.email.configGap || status?.email.fromError) && (
+              <p className="rounded-lg border border-error/30 bg-red-50 px-3 py-2 text-xs text-error">
+                {status.email.configGap ?? status.email.fromError}
+              </p>
+            )}
+          {status?.email.configured && status?.email.fromError && (
             <p className="text-xs text-error">{status.email.fromError}</p>
           )}
           {status?.email.fromMatchesVerified === false && (

@@ -1,3 +1,4 @@
+import { getPublicAppBaseUrl } from "./app-url";
 import { Resend } from "resend";
 import sgMail from "@sendgrid/mail";
 import { format } from "date-fns";
@@ -41,29 +42,86 @@ function isFromFieldError(error?: string): boolean {
   );
 }
 
-export function getEmailProvider(
+function tryEmailProvider(provider: EmailProvider): EmailProvider {
+  if (provider === "twilio" && isTwilioEmailConfigured()) return "twilio";
+  if (provider === "sendgrid" && process.env.SENDGRID_API_KEY?.trim()) {
+    return "sendgrid";
+  }
+  if (provider === "resend" && process.env.RESEND_API_KEY?.trim()) {
+    return "resend";
+  }
+  return null;
+}
+
+/** Explains why email cannot be sent (for admin UI and API errors). */
+export function describeEmailConfiguration(
   preference: EmailProviderPreference = "auto"
-): EmailProvider {
-  if (!process.env.EMAIL_FROM) return null;
+): string | null {
+  if (!process.env.EMAIL_FROM?.trim()) {
+    return "Set EMAIL_FROM to your verified Twilio sender (e.g. Court Events <noreply@yourdomain.com>).";
+  }
+
+  const from = resolveTwilioEmailFrom();
+  if (from?.error) return from.error;
+
+  const sid = process.env.TWILIO_ACCOUNT_SID?.trim();
+  const token = process.env.TWILIO_AUTH_TOKEN?.trim();
+  if (!sid || !token) {
+    return "Set TWILIO_ACCOUNT_SID (starts with AC) and TWILIO_AUTH_TOKEN in environment variables.";
+  }
+  if (sid.startsWith("SK")) {
+    return "TWILIO_ACCOUNT_SID must be Account SID (AC…), not API Key (SK…).";
+  }
 
   const envForced = process.env.EMAIL_PROVIDER?.trim().toLowerCase();
   const pref =
     preference !== "auto"
       ? preference
       : envForced && ["twilio", "sendgrid", "resend"].includes(envForced)
-        ? envForced
+        ? (envForced as EmailProviderPreference)
         : "auto";
 
-  if (pref === "sendgrid" && process.env.SENDGRID_API_KEY) return "sendgrid";
-  if (pref === "resend" && process.env.RESEND_API_KEY) return "resend";
-  if (pref === "twilio" && isTwilioEmailConfigured()) return "twilio";
+  if (getEmailProvider(preference)) return null;
 
-  if (pref !== "auto") return null;
+  if (pref === "sendgrid") {
+    return "SendGrid is selected in settings but SENDGRID_API_KEY is not set.";
+  }
+  if (pref === "resend") {
+    return "Resend is selected in settings but RESEND_API_KEY is not set.";
+  }
+  if (pref === "twilio" && !isTwilioEmailConfigured()) {
+    return "Twilio Email is selected but sender or credentials are invalid.";
+  }
 
-  if (isTwilioEmailConfigured()) return "twilio";
-  if (process.env.SENDGRID_API_KEY) return "sendgrid";
-  if (process.env.RESEND_API_KEY) return "resend";
-  return null;
+  return (
+    "Email not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and EMAIL_FROM " +
+    "(or SENDGRID_API_KEY / RESEND_API_KEY)."
+  );
+}
+
+export function getEmailProvider(
+  preference: EmailProviderPreference = "auto"
+): EmailProvider {
+  if (!process.env.EMAIL_FROM?.trim()) return null;
+
+  const envForced = process.env.EMAIL_PROVIDER?.trim().toLowerCase();
+  const pref =
+    preference !== "auto"
+      ? preference
+      : envForced && ["twilio", "sendgrid", "resend"].includes(envForced)
+        ? (envForced as EmailProviderPreference)
+        : "auto";
+
+  if (pref !== "auto") {
+    const chosen = tryEmailProvider(pref);
+    if (chosen) return chosen;
+  }
+
+  return (
+    tryEmailProvider("twilio") ??
+    tryEmailProvider("sendgrid") ??
+    tryEmailProvider("resend")
+  );
 }
 
 async function sendViaSendGrid(params: {
@@ -114,12 +172,15 @@ export async function getNotificationsSummary() {
   const twilioFrom = resolveTwilioEmailFrom();
   const verified = await fetchVerifiedEmailSenders();
 
+  const configGap = describeEmailConfiguration(settings.emailProviderPreference);
+
   return {
     email: {
       configured: Boolean(emailProvider),
       provider: emailProviderLabel(emailProvider),
+      configGap,
       fromAddress: verified.configuredFrom ?? twilioFrom?.address ?? null,
-      fromError: twilioFrom?.error ?? null,
+      fromError: twilioFrom?.error ?? configGap,
       fromMatchesVerified: verified.matchesVerified,
       verifiedSenders: verified.singleSenders,
       verifiedDomains: verified.authenticatedDomains,
@@ -185,7 +246,8 @@ export async function sendQrEmail(params: {
       channel: "email",
       skipped: true,
       error:
-        "Email not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and EMAIL_FROM (or SENDGRID_API_KEY / RESEND_API_KEY).",
+        describeEmailConfiguration(settings.emailProviderPreference) ??
+        "Email not configured.",
     };
   }
 
@@ -334,9 +396,9 @@ export async function sendQrWhatsApp(params: {
     };
   }
 
-  const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
+  const baseUrl = getPublicAppBaseUrl();
   const dateStr = format(params.eventDate, "EEEE d MMMM yyyy", { locale: ar });
-  const mediaUrl = baseUrl ? `${baseUrl}/api/qr/${params.qrToken}/image` : undefined;
+  const mediaUrl = `${baseUrl}/api/qr/${params.qrToken}/image`;
 
   const body = [
     `مرحباً ${params.judgeName}،`,
@@ -371,14 +433,14 @@ export async function sendQrWhatsApp(params: {
 }
 
 export async function sendTestEmail(to: string): Promise<DeliveryResult> {
-  const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
+  const baseUrl = getPublicAppBaseUrl();
   return sendQrEmail({
     to,
     judgeName: "اختبار النظام",
     eventName: "فعالية تجريبية",
     eventDate: new Date(),
     qrToken: "test",
-    qrScanUrl: baseUrl ? `${baseUrl}/api/qr/test` : undefined,
+    qrScanUrl: `${baseUrl}/api/qr/test`,
     instructions: "هذه رسالة اختبار من نظام تسجيل الحضور.",
   });
 }
@@ -389,7 +451,7 @@ export async function sendTestSms(to: string): Promise<DeliveryResult> {
     judgeName: "اختبار",
     eventName: "فعالية تجريبية",
     eventDate: new Date(),
-    qrUrl: process.env.NEXT_PUBLIC_APP_URL || "https://example.com",
+    qrUrl: getPublicAppBaseUrl(),
   });
 }
 

@@ -3,7 +3,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { signOut, useSession } from "next-auth/react";
+import { useSession } from "next-auth/react";
+import { adminSignOut } from "@/components/admin/AdminLogoutButton";
 import {
   BookOpen,
   Calendar,
@@ -246,10 +247,7 @@ export function AdminAppSidebar() {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  variant="destructive"
-                  onClick={() => signOut({ callbackUrl: "/admin/login" })}
-                >
+                <DropdownMenuItem variant="destructive" onClick={adminSignOut}>
                   <LogOut />
                   {t("admin.nav.logout")}
                 </DropdownMenuItem>

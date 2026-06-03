@@ -48,12 +48,15 @@ Set environment variables in Vercel dashboard (Settings → Environment Variable
 | `DATABASE_URL` | `postgresql://...?sslmode=require` |
 | `AUTH_SECRET` | `openssl rand -base64 32` |
 | `STAFF_JWT_SECRET` | `openssl rand -base64 32` |
-| `NEXT_PUBLIC_APP_URL` | `https://your-app.vercel.app` |
-| `RESEND_API_KEY` | `re_...` |
-| `EMAIL_FROM` | `Event Attendance <noreply@yourdomain.com>` |
-| `TWILIO_ACCOUNT_SID` | optional |
-| `TWILIO_AUTH_TOKEN` | optional |
-| `TWILIO_PHONE_NUMBER` | optional |
+| `NEXT_PUBLIC_APP_URL` | `https://court-events.flagshipfintech.com` |
+| `APP_PUBLIC_URL` | same as above (canonical links) |
+| `EMAIL_FROM` | `Court Events <noreply@yourdomain.com>` — must match Twilio verified sender |
+| `TWILIO_ACCOUNT_SID` | `AC…` from Twilio Console (not API key `SK…`) |
+| `TWILIO_AUTH_TOKEN` | from Twilio Console |
+| `RESEND_API_KEY` | optional fallback |
+| `SENDGRID_API_KEY` | optional fallback |
+| `TWILIO_PHONE_NUMBER` | optional SMS |
+| `TWILIO_WHATSAPP_NUMBER` | optional WhatsApp |
 
 ```bash
 vercel --prod

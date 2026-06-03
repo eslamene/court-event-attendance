@@ -1,3 +1,4 @@
+import { getPublicAppBaseUrl } from "./app-url";
 import { prisma } from "./db";
 import { buildQrPayload, generateQrToken } from "./qr";
 import {
@@ -23,7 +24,7 @@ export async function approveRegistration(
   registrationId: string,
   approvedById: string
 ): Promise<ApprovalResult> {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const baseUrl = getPublicAppBaseUrl();
 
   const registration = await prisma.registration.findUnique({
     where: { id: registrationId },
@@ -112,7 +113,7 @@ export type ResendQrEmailResult = {
 export async function resendQrEmail(
   registrationId: string
 ): Promise<ResendQrEmailResult> {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const baseUrl = getPublicAppBaseUrl();
 
   const registration = await prisma.registration.findUnique({
     where: { id: registrationId },

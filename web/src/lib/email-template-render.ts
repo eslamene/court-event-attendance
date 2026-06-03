@@ -1,3 +1,4 @@
+import { getClientPublicAppBaseUrl, getPublicAppBaseUrl } from "./app-url";
 import { PLATFORM_LOGO_PATH } from "./platform-logo";
 
 export const EMAIL_TEMPLATE_PLACEHOLDERS = [
@@ -63,7 +64,7 @@ export type RenderEmailTemplateInput = {
 export function buildEmailTemplateVars(
   input: RenderEmailTemplateInput
 ): Record<string, string> {
-  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
+  const appUrl = getPublicAppBaseUrl();
   const platformLogo = appUrl ? `${appUrl}${PLATFORM_LOGO_PATH}` : "";
   const eventLogo =
     input.eventLogoPath && appUrl
@@ -98,11 +99,10 @@ export function buildEmailTemplateVars(
 export function getSampleEmailPreviewInput(
   eventName?: string
 ): RenderEmailTemplateInput {
-  const base =
-    (typeof process !== "undefined"
-      ? process.env.NEXT_PUBLIC_APP_URL
-      : "") || "https://court-events.flagshipfintech.com";
-  const appUrl = base.replace(/\/$/, "");
+  const appUrl =
+    typeof window === "undefined"
+      ? getPublicAppBaseUrl()
+      : getClientPublicAppBaseUrl();
   return {
     judgeName: "أحمد محمد علي",
     eventName: eventName || "فعالية تجريبية",

@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AdminAppSidebar } from "@/components/admin/AdminAppSidebar";
+import { AdminLogoutButton } from "@/components/admin/AdminLogoutButton";
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession();
@@ -38,6 +39,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                   {roleLabel || role}
                 </p>
               </div>
+              {session?.user && (
+                <AdminLogoutButton className="shrink-0" />
+              )}
             </header>
             <div className="flex flex-1 flex-col gap-4 p-4 md:p-6">{children}</div>
           </SidebarInset>
