@@ -18,6 +18,8 @@ Quick reference for every link in the project.
 | Vercel dashboard | https://vercel.com/flagships-projects/court-event-attendance |
 | Neon database | [Neon Console](https://console.neon.tech) |
 | Expo / EAS | https://expo.dev/accounts/eslamene/projects/court-event-attendance |
+| Expo ↔ GitHub | https://expo.dev/accounts/eslamene/projects/court-event-attendance/github |
+| EAS CI setup | [mobile/EXPO_GITHUB.md](./mobile/EXPO_GITHUB.md) |
 
 ---
 

@@ -132,22 +132,30 @@ railway run npm run db:seed
 
 ## 5. Mobile production builds (EAS)
 
+**Expo project:** [@eslamene/court-event-attendance](https://expo.dev/accounts/eslamene/projects/court-event-attendance)  
+**Full GitHub CI/CD guide:** [mobile/EXPO_GITHUB.md](./mobile/EXPO_GITHUB.md)
+
+### One-time setup
+
 ```bash
 cd mobile
-npm install -g eas-cli
-eas login
-eas init   # creates project, sets EAS_PROJECT_ID
+npx eas-cli login          # account: eslamene
+npx eas-cli project:info   # verify @eslamene/court-event-attendance
 ```
 
-Update `eas.json` production env:
+1. Connect repo in [Expo → GitHub](https://expo.dev/accounts/eslamene/projects/court-event-attendance/github) → `eslamene/court-event-attendance`
+2. Create [Expo access token](https://expo.dev/accounts/eslamene/settings/access-tokens)
+3. Add GitHub secret: `gh secret set EXPO_TOKEN --repo eslamene/court-event-attendance`
 
-```json
-"EXPO_PUBLIC_API_URL": "https://your-app.vercel.app"
-```
+### CI/CD (automatic)
 
-### Android APK (internal testing)
+- **Every PR/push** touching `mobile/` → TypeScript check (`.github/workflows/mobile-ci.yml`)
+- **Every push to `main`** touching `mobile/` → EAS **preview** Android APK (`.github/workflows/eas-build.yml`)
+
+### Local / manual build
 
 ```bash
+cd mobile
 npm run build:preview
 # Download APK from expo.dev build page
 ```

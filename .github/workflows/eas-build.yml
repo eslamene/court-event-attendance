@@ -1,0 +1,82 @@
+# Trigger EAS cloud builds when mobile/ changes on main
+name: EAS Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "mobile/**"
+      - ".github/workflows/eas-build.yml"
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: EAS build profile
+        required: true
+        default: preview
+        type: choice
+        options:
+          - preview
+          - production
+      platform:
+        description: Target platform
+        required: true
+        default: android
+        type: choice
+        options:
+          - android
+          - ios
+          - all
+
+concurrency:
+  group: eas-build-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && inputs.profile || 'preview' }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: mobile
+
+jobs:
+  build:
+    name: EAS ${{ github.event_name == 'workflow_dispatch' && inputs.profile || 'preview' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require EXPO_TOKEN
+        run: |
+          if [ -z "${{ secrets.EXPO_TOKEN }}" ]; then
+            echo "::error::Missing EXPO_TOKEN repository secret."
+            echo "Create a token at https://expo.dev/accounts/eslamene/settings/access-tokens"
+            echo "Then: gh secret set EXPO_TOKEN --repo eslamene/court-event-attendance"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+          packager: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify EAS project
+        run: eas project:info
+
+      - name: Build on EAS
+        env:
+          PROFILE: ${{ github.event_name == 'workflow_dispatch' && inputs.profile || 'preview' }}
+          PLATFORM: ${{ github.event_name == 'workflow_dispatch' && inputs.platform || 'android' }}
+        run: eas build --profile "$PROFILE" --platform "$PLATFORM" --non-interactive --no-wait
+
+      - name: Build dashboard
+        run: |
+          echo "Track build progress:"
+          echo "https://expo.dev/accounts/eslamene/projects/court-event-attendance/builds"
