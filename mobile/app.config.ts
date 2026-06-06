@@ -20,6 +20,7 @@ const config: ExpoConfig = {
     infoPlist: {
       NSCameraUsageDescription:
         "الكاميرا مطلوبة لمسح رموز QR وتسجيل الحضور",
+      ITSAppUsesNonExemptEncryption: false,
     },
   },
   android: {

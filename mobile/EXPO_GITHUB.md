@@ -51,9 +51,18 @@ Or from Expo: [Start build](https://expo.dev/accounts/eslamene/projects/court-ev
 
 | Profile | Use |
 |---------|-----|
-| `preview` | Internal APK, production API URL (CI default on `main`) |
-| `production` | Store builds (AAB / iOS), auto-increment version |
-| `development` | Dev client, localhost API |
+| `preview` | **Standalone release** — internal APK / Ad Hoc iOS, production API (use this for staff devices) |
+| `production` | **App Store / TestFlight** — store distribution, production API |
+| `development` | Dev client + Metro only (Android); **do not use for iOS staff installs** |
+
+### iOS staff installs (not dev mode)
+
+Do **not** use `expo start` or `build:dev` on iPhones. Install a release build:
+
+```bash
+npm run build:preview:ios    # Ad Hoc — install from expo.dev link
+npm run build:release:ios    # TestFlight / App Store
+```
 
 ## 6. Verify setup
 
