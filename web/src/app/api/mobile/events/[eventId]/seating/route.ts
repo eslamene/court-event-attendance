@@ -32,8 +32,19 @@ export async function GET(req: Request, { params }: Params) {
     );
   }
 
+  const { searchParams } = new URL(req.url);
+  const seatTierId = searchParams.get("seatTierId");
+  const seatNumberRaw = searchParams.get("seatNumber");
+  const seatNumber = seatNumberRaw ? Number(seatNumberRaw) : undefined;
+  const tierId = searchParams.get("tierId") || undefined;
+
+  const focusSeat =
+    seatTierId && seatNumber && Number.isInteger(seatNumber) && seatNumber > 0
+      ? { tierId: seatTierId, seatNumber }
+      : undefined;
+
   try {
-    const map = await getSeatingMap(eventId);
+    const map = await getSeatingMap(eventId, { focusSeat, tierId });
     return NextResponse.json(map);
   } catch (e) {
     return NextResponse.json(

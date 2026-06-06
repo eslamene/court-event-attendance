@@ -1,6 +1,18 @@
 import type { SeatCell } from "@/lib/seating";
 
 /** Light venue floor with strong seat contrast (brand gold). */
+export const SEAT_STATUS_FILL: Record<SeatCell["status"], string> = {
+  free: "#ffffff",
+  approved: "#b8860b",
+  attended: "#166534",
+};
+
+export const SEAT_STATUS_STROKE: Record<SeatCell["status"], string> = {
+  free: "#5c3d1e",
+  approved: "#5c3d1e",
+  attended: "#14532d",
+};
+
 export const SEAT_STATUS_STYLES: Record<SeatCell["status"], string> = {
   free:
     "border-2 border-[var(--seat-free-ring)] bg-[var(--seat-free-bg)] text-[var(--seat-free-fg)] shadow-[0_1px_4px_rgba(92,61,30,0.28)]",

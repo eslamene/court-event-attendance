@@ -55,14 +55,16 @@ export function AdminNotificationsBell() {
       if (res.ok) {
         setData(await res.json());
       }
+    } catch {
+      /* Network blip or dev server restart — keep last known data */
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchNotifications();
-    const id = setInterval(fetchNotifications, POLL_MS);
+    void fetchNotifications();
+    const id = setInterval(() => void fetchNotifications(), POLL_MS);
     return () => clearInterval(id);
   }, [fetchNotifications]);
 

@@ -54,12 +54,35 @@ export type PositionedSeat = {
   seat: SeatCell;
 };
 
+export type SeatingMapRenderMode = "full" | "sections" | "tier";
+
+export type SectionBound = {
+  tierId: string;
+  tierName: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  seatCount: number;
+  assigned: number;
+};
+
 export type VenueLayout = {
   type: SeatingLayoutType;
   config: SeatingLayoutConfig;
   stage: StageRect;
   seats: PositionedSeat[];
+  renderMode?: SeatingMapRenderMode;
+  sectionBounds?: SectionBound[];
+  focusedTierId?: string;
 };
+
+/** Resolve seat data by index; tiers may carry sparse `seats` (occupied only). */
+function seatAtIndex(tier: SeatingMapTier, index: number): SeatCell {
+  const number = index + 1;
+  const found = tier.seats.find((s) => s.number === number);
+  return found ?? { number, status: "free" };
+}
 
 export const LAYOUT_TYPES: SeatingLayoutType[] = [
   "theater",
@@ -254,6 +277,27 @@ export function getTierPlacement(
   tierKey: string
 ): TierPlacement {
   return config.tierPlacements?.[tierKey] ?? {};
+}
+
+/** Drop ring placements for removed tiers so layout auto-redistributes. */
+export function syncTierPlacementsAfterTierChange(
+  config: SeatingLayoutConfig,
+  tiers: { id?: string; clientKey?: string }[]
+): SeatingLayoutConfig {
+  if (!config.tierPlacements) return config;
+
+  const validKeys = new Set(
+    tiers.map((tier, index) => tierPlacementKey(tier, index))
+  );
+  const next: Record<string, TierPlacement> = {};
+  for (const [key, placement] of Object.entries(config.tierPlacements)) {
+    if (validKeys.has(key)) next[key] = placement;
+  }
+
+  return {
+    ...config,
+    tierPlacements: Object.keys(next).length > 0 ? next : undefined,
+  };
 }
 
 function mergeLayoutConfig(parsed: Partial<SeatingLayoutConfig>): SeatingLayoutConfig {
@@ -971,8 +1015,8 @@ function placeRowSeats(
 
   for (let col = 0; col < seatsInRow; col++) {
     const seatIdx = startSeatIndex + col;
-    if (seatIdx >= tier.seats.length) break;
-    const seat = tier.seats[seatIdx];
+    if (seatIdx >= tier.seatCount) break;
+    const seat = seatAtIndex(tier, seatIdx);
 
     const along = rowStart + col * pitch;
 
@@ -1470,8 +1514,8 @@ function flattenArenaSeats(tiers: SeatingMapTier[]): ArenaSeatRef[] {
   const items: ArenaSeatRef[] = [];
   const ordered = [...tiers].sort((a, b) => a.sortOrder - b.sortOrder);
   for (const tier of ordered) {
-    for (const seat of tier.seats) {
-      items.push({ tier, seat });
+    for (let i = 0; i < tier.seatCount; i++) {
+      items.push({ tier, seat: seatAtIndex(tier, i) });
     }
   }
   return items;
@@ -1634,8 +1678,8 @@ function layoutArenaRings(
       const tiersOnRing = ringTiers.get(ring) ?? [];
       const group: ArenaSeatRef[] = [];
       for (const tier of tiersOnRing) {
-        for (const seat of tier.seats) {
-          group.push({ tier, seat });
+        for (let i = 0; i < tier.seatCount; i++) {
+          group.push({ tier, seat: seatAtIndex(tier, i) });
         }
       }
       ringSeatGroups.push(group);
@@ -1767,7 +1811,7 @@ function layoutBanquet(
             : 0;
 
         for (let s = start; s < end; s++) {
-          const seat = tier.seats[s];
+          const seat = seatAtIndex(tier, s);
           const seatAngle =
             seatArc * (s - start) - Math.PI / 2;
           all.push({
@@ -1822,7 +1866,7 @@ function layoutUShape(
     ) => (total <= 1 ? (start + end) / 2 : start + (index / (total - 1)) * (end - start));
 
     for (let i = 0; i < count; i++) {
-      const seat = tier.seats[i];
+      const seat = seatAtIndex(tier, i);
       let x = BOUNDS.cx;
       let y = BOUNDS.cy;
 

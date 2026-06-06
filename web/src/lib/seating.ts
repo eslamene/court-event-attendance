@@ -12,8 +12,18 @@ import {
 } from "./seating-layout";
 import {
   collectSeatTierValidationIssues,
+  getVenueCapacityProfile,
   SEAT_TIER_LIMITS,
+  totalSeatCount,
+  usesSectionOverview,
+  type VenueCapacityProfile,
 } from "./seating-limits";
+import {
+  computeSectionBounds,
+  resolveMapRenderMode,
+  type OccupiedSeatCell,
+  type SparseTierMeta,
+} from "./seating-map-utils";
 import { findDuplicateTierNames } from "./seating-tier-names";
 
 const OCCUPIED_STATUSES = ["APPROVED", "ATTENDED"] as const;
@@ -35,7 +45,16 @@ export type SeatingMapTier = {
   sortOrder: number;
   assigned: number;
   available: number;
+  /** Occupied seats only for large venues; full list when small. */
   seats: SeatCell[];
+  occupiedSeats?: OccupiedSeatCell[];
+};
+
+export type GetSeatingMapOptions = {
+  /** Drill into a single section (tier). */
+  tierId?: string;
+  /** Always include this seat in the venue map (e.g. mobile seat guide). */
+  focusSeat?: { tierId: string; seatNumber: number };
 };
 
 export type SeatingMap = {
@@ -48,6 +67,8 @@ export type SeatingMap = {
   venue: VenueLayout;
   updatedAt: string;
   tiers: SeatingMapTier[];
+  totalSeats: number;
+  capacityProfile: VenueCapacityProfile;
 };
 
 export async function bumpSeatingRevision(eventId: string): Promise<number> {
@@ -190,7 +211,105 @@ export async function getTierAvailability(eventId: string) {
   });
 }
 
-export async function getSeatingMap(eventId: string): Promise<SeatingMap> {
+function buildOccupiedSeatCell(
+  reg: {
+    id: string;
+    seatNumber: number | null;
+    fullName: string;
+    rank: string;
+    status: string;
+  }
+): OccupiedSeatCell {
+  return {
+    number: reg.seatNumber!,
+    status: reg.status === "ATTENDED" ? "attended" : "approved",
+    registrationId: reg.id,
+    fullName: reg.fullName,
+    rank: reg.rank,
+  };
+}
+
+function applyOccupancyToLayout(
+  positioned: VenueLayout["seats"],
+  occupiedByTier: Map<string, Map<number, SeatCell>>
+): VenueLayout["seats"] {
+  return positioned.map((pos) => {
+    const occupied = occupiedByTier.get(pos.tierId)?.get(pos.number);
+    return occupied ? { ...pos, seat: occupied } : pos;
+  });
+}
+
+function shapeVenueForClient(
+  fullVenue: VenueLayout,
+  tiersMeta: SparseTierMeta[],
+  options: {
+    totalSeats: number;
+    tierId?: string;
+    focusSeat?: { tierId: string; seatNumber: number };
+  }
+): VenueLayout {
+  const renderMode = resolveMapRenderMode({
+    totalSeats: options.totalSeats,
+    tierId: options.tierId,
+    tierSeatCount: options.tierId
+      ? tiersMeta.find((t) => t.id === options.tierId)?.seatCount
+      : undefined,
+  });
+
+  const sectionBounds = computeSectionBounds(fullVenue.seats, tiersMeta);
+
+  if (renderMode === "sections") {
+    const occupiedOnly = fullVenue.seats.filter((s) => s.seat.status !== "free");
+    let seats = occupiedOnly;
+
+    if (options.focusSeat) {
+      const focus = fullVenue.seats.find(
+        (s) =>
+          s.tierId === options.focusSeat!.tierId &&
+          s.number === options.focusSeat!.seatNumber
+      );
+      if (focus && !seats.some((s) => s.tierId === focus.tierId && s.number === focus.number)) {
+        seats = [...seats, focus];
+      }
+    }
+
+    return {
+      ...fullVenue,
+      seats,
+      renderMode,
+      sectionBounds,
+    };
+  }
+
+  const tierFilter = options.tierId;
+  let seats = tierFilter
+    ? fullVenue.seats.filter((s) => s.tierId === tierFilter)
+    : fullVenue.seats;
+
+  if (options.focusSeat) {
+    const focus = fullVenue.seats.find(
+      (s) =>
+        s.tierId === options.focusSeat!.tierId &&
+        s.number === options.focusSeat!.seatNumber
+    );
+    if (focus && !seats.some((s) => s.tierId === focus.tierId && s.number === focus.number)) {
+      seats = [...seats, focus];
+    }
+  }
+
+  return {
+    ...fullVenue,
+    seats,
+    renderMode,
+    sectionBounds: renderMode === "tier" ? sectionBounds : undefined,
+    focusedTierId: tierFilter,
+  };
+}
+
+export async function getSeatingMap(
+  eventId: string,
+  options: GetSeatingMapOptions = {}
+): Promise<SeatingMap> {
   const event = await prisma.event.findUnique({
     where: { id: eventId },
     select: {
@@ -241,36 +360,87 @@ export async function getSeatingMap(eventId: string): Promise<SeatingMap> {
   const layoutType = normalizeLayoutType(event.seatingLayoutType);
   const layoutConfig = parseLayoutConfig(event.seatingLayoutJson);
 
-  const tiersData: SeatingMapTier[] = tiers.map((tier) => {
-      const occupied = byTierSeat.get(tier.id) ?? new Map();
-      const seats: SeatCell[] = [];
-      for (let n = 1; n <= tier.seatCount; n++) {
-        const reg = occupied.get(n);
-        if (reg) {
-          seats.push({
-            number: n,
-            status: reg.status === "ATTENDED" ? "attended" : "approved",
-            registrationId: reg.id,
-            fullName: reg.fullName,
-            rank: reg.rank,
-          });
-        } else {
-          seats.push({ number: n, status: "free" });
-        }
-      }
-      const assigned = seats.filter((s) => s.status !== "free").length;
-      return {
-        id: tier.id,
-        name: tier.name,
-        seatCount: tier.seatCount,
-        sortOrder: tier.sortOrder,
-        assigned,
-        available: Math.max(0, tier.seatCount - assigned),
-        seats,
-      };
-    });
+  const occupiedCellsByTier = new Map<string, Map<number, SeatCell>>();
 
-  const venue = computeVenueLayout(tiersData, layoutType, layoutConfig);
+  const tiersMeta: SparseTierMeta[] = tiers.map((tier) => {
+    const occupied = byTierSeat.get(tier.id) ?? new Map();
+    const occupiedSeats: OccupiedSeatCell[] = [];
+    const seatCells = new Map<number, SeatCell>();
+
+    for (const reg of occupied.values()) {
+      if (reg.seatNumber == null) continue;
+      const cell = buildOccupiedSeatCell(reg);
+      occupiedSeats.push(cell);
+      seatCells.set(reg.seatNumber, {
+        ...cell,
+        status: cell.status,
+      });
+    }
+
+    occupiedCellsByTier.set(tier.id, seatCells);
+    const assigned = occupiedSeats.length;
+
+    return {
+      id: tier.id,
+      name: tier.name,
+      seatCount: tier.seatCount,
+      sortOrder: tier.sortOrder,
+      assigned,
+      available: Math.max(0, tier.seatCount - assigned),
+      occupiedSeats,
+    };
+  });
+
+  const totalSeats = totalSeatCount(tiersMeta);
+  const capacityProfile = getVenueCapacityProfile(totalSeats);
+
+  const layoutTiers: SeatingMapTier[] = tiersMeta.map((tier) => ({
+    ...tier,
+    seats: [],
+  }));
+
+  const fullVenue = computeVenueLayout(layoutTiers, layoutType, layoutConfig);
+  const enrichedSeats = applyOccupancyToLayout(fullVenue.seats, occupiedCellsByTier);
+  const venueForClient = shapeVenueForClient(
+    { ...fullVenue, seats: enrichedSeats },
+    tiersMeta,
+    {
+      totalSeats,
+      tierId: options.tierId,
+      focusSeat: options.focusSeat,
+    }
+  );
+
+  const tiersData: SeatingMapTier[] = tiersMeta.map((tier) => {
+    const occupiedSeats = tier.occupiedSeats;
+    let seats: SeatCell[];
+
+    if (options.tierId) {
+      seats =
+        options.tierId === tier.id
+          ? venueForClient.seats
+              .filter((s) => s.tierId === tier.id)
+              .map((s) => s.seat)
+          : occupiedSeats.map((s) => ({ ...s }));
+    } else if (!usesSectionOverview(totalSeats)) {
+      seats = enrichedSeats
+        .filter((s) => s.tierId === tier.id)
+        .map((s) => s.seat);
+    } else {
+      seats = occupiedSeats.map((s) => ({ ...s }));
+    }
+
+    return {
+      id: tier.id,
+      name: tier.name,
+      seatCount: tier.seatCount,
+      sortOrder: tier.sortOrder,
+      assigned: tier.assigned,
+      available: tier.available,
+      seats,
+      occupiedSeats,
+    };
+  });
 
   return {
     eventId: event.id,
@@ -279,9 +449,11 @@ export async function getSeatingMap(eventId: string): Promise<SeatingMap> {
     seatingRevision: event.seatingRevision,
     layoutType,
     layoutConfig,
-    venue,
+    venue: venueForClient,
     updatedAt: new Date().toISOString(),
     tiers: tiersData,
+    totalSeats,
+    capacityProfile,
   };
 }
 

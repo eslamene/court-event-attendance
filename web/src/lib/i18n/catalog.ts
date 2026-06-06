@@ -620,6 +620,7 @@ export const TRANSLATION_CATALOG: Record<string, Record<string, string>> = {
     "admin.events.emailTemplate": "قالب البريد",
     "admin.events.registrationForm": "نموذج التسجيل",
     "admin.events.seating": "المقاعد والفئات",
+    "admin.events.seatingDesigner": "مصمم القاعة",
 
     "seating.title": "المقاعد — {name}",
     "seating.intro":
@@ -665,6 +666,18 @@ export const TRANSLATION_CATALOG: Record<string, Record<string, string>> = {
     "seating.layoutIntroLabel": "معلومات عن تصميم القاعة",
     "seating.designerSummary": "ملخص التصميم",
     "seating.designerReset": "إعادة ضبط",
+    "seating.designerPageTitle": "مصمم القاعة",
+    "seating.designerPageDescription": "تصميم توزيع المقاعد لـ {name}",
+    "seating.designerPageDescriptionLoading": "جاري تحميل الفعالية…",
+    "seating.designerSeatingDisabled":
+      "فعّل المقاعد من إعدادات المقاعد قبل استخدام المصمم.",
+    "seating.designerLargeVenueHint":
+      "القاعات الكبيرة تُعرض بملخص الأقسام في الخريطة الحية؛ قسّم المقاعد إلى فئات (أقسام).",
+    "seating.designerPromo":
+      "استخدم مصمم القاعة لتخطيط المسرح والفئات والتباعد.",
+    "seating.openDesigner": "فتح المصمم",
+    "seating.openSeatingSettings": "إعدادات المقاعد",
+    "seating.backToEvents": "الفعاليات",
     "seating.statsTotal": "{count} مقعد",
     "seating.statsSeatsLabel": "مقاعد",
     "seating.statsTiersLabel": "فئات",
@@ -704,6 +717,18 @@ export const TRANSLATION_CATALOG: Record<string, Record<string, string>> = {
     "seating.layoutPreviewEmpty": "أضف فئة مقاعد واحدة على الأقل للمعاينة.",
     "seating.layoutPreviewLimitExceeded":
       "أصلح أعداد المقاعد ضمن الحدود المسموحة لعرض المعاينة.",
+    "seating.layoutPreviewLargeVenue":
+      "معاينة كثيفة — يتم عرض {total} مقعد عبر العارض السريع.",
+    "seating.capacityProfile.small": "قاعة صغيرة/متوسطة",
+    "seating.capacityProfile.medium": "قاعة كبيرة",
+    "seating.capacityProfile.large": "ساحة / حلبة",
+    "seating.largeVenueMapHint":
+      "{total} مقعد — اختر قسماً لعرض التفاصيل.",
+    "seating.sectionOverviewHint":
+      "اضغط على قسم لعرض خريطة المقاعد.",
+    "seating.sectionOpen": "فتح {name}",
+    "seating.sectionOccupancy": "{assigned}/{total} ({pct}%)",
+    "seating.sectionBack": "كل الأقسام",
     "seating.stagePosition": "موقع المسرح / المركز",
     "seating.stageLabel": "تسمية المسرح",
     "seating.stageLabelPlaceholder": "مسرح",
@@ -1444,6 +1469,7 @@ export const TRANSLATION_CATALOG: Record<string, Record<string, string>> = {
     "admin.events.emailTemplate": "Email template",
     "admin.events.registrationForm": "Registration form",
     "admin.events.seating": "Seating & tiers",
+    "admin.events.seatingDesigner": "Venue designer",
 
     "seating.title": "Seating — {name}",
     "seating.intro":
@@ -1492,6 +1518,18 @@ export const TRANSLATION_CATALOG: Record<string, Record<string, string>> = {
     "seating.layoutIntroLabel": "Venue layout help",
     "seating.designerSummary": "Design summary",
     "seating.designerReset": "Reset",
+    "seating.designerPageTitle": "Venue designer",
+    "seating.designerPageDescription": "Design seat layout for {name}",
+    "seating.designerPageDescriptionLoading": "Loading event…",
+    "seating.designerSeatingDisabled":
+      "Enable seating in seating settings before using the designer.",
+    "seating.designerLargeVenueHint":
+      "Large venues use section summaries on the live map — split seats into tiers (sections).",
+    "seating.designerPromo":
+      "Use the venue designer to plan stage position, tiers, and spacing.",
+    "seating.openDesigner": "Open designer",
+    "seating.openSeatingSettings": "Seating settings",
+    "seating.backToEvents": "Events",
     "seating.statsTotal": "{count} seats",
     "seating.statsSeatsLabel": "seats",
     "seating.statsTiersLabel": "tiers",
@@ -1531,6 +1569,18 @@ export const TRANSLATION_CATALOG: Record<string, Record<string, string>> = {
     "seating.layoutPreviewEmpty": "Add at least one seat tier to preview.",
     "seating.layoutPreviewLimitExceeded":
       "Fix seat counts to stay within the limits before previewing the layout.",
+    "seating.layoutPreviewLargeVenue":
+      "Dense preview — rendering {total} seats with the fast canvas view.",
+    "seating.capacityProfile.small": "Small / medium venue",
+    "seating.capacityProfile.medium": "Large venue",
+    "seating.capacityProfile.large": "Arena scale",
+    "seating.largeVenueMapHint":
+      "{total} seats — select a section to view seat details.",
+    "seating.sectionOverviewHint":
+      "Tap a section to open its seat map.",
+    "seating.sectionOpen": "Open {name}",
+    "seating.sectionOccupancy": "{assigned}/{total} ({pct}%)",
+    "seating.sectionBack": "All sections",
     "seating.stagePosition": "Stage / center position",
     "seating.stageLabel": "Stage label",
     "seating.stageLabelPlaceholder": "Stage",

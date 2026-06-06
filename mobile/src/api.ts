@@ -1,6 +1,43 @@
 import { API_BASE_URL } from "./config";
 import { getStoredLocale, type Locale } from "./i18n";
+import type { VenueCapacityProfile } from "./lib/seating-capacity";
 import { getToken } from "./storage";
+
+export type SeatingMapRenderMode = "full" | "sections" | "tier";
+
+export type SectionBound = {
+  tierId: string;
+  tierName: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  seatCount: number;
+  assigned: number;
+};
+
+export type SeatingMapTier = {
+  id: string;
+  name: string;
+  seatCount: number;
+  sortOrder: number;
+  assigned: number;
+  available: number;
+  seats: Array<{
+    number: number;
+    status: SeatCellStatus;
+    registrationId?: string;
+    fullName?: string;
+    rank?: string;
+  }>;
+  occupiedSeats?: Array<{
+    number: number;
+    status: "approved" | "attended";
+    registrationId?: string;
+    fullName?: string;
+    rank?: string;
+  }>;
+};
 
 export type EventItem = {
   id: string;
@@ -9,6 +46,13 @@ export type EventItem = {
   slug: string;
   logoPath?: string | null;
   seatingEnabled?: boolean;
+};
+
+export type SeatGuideTarget = {
+  guestName: string;
+  seatLabel: string;
+  seatTierId: string;
+  seatNumber: number;
 };
 
 export type ScanResultCode =
@@ -34,8 +78,11 @@ export type SeatingMap = {
   eventId: string;
   eventName: string;
   seatingEnabled: boolean;
+  seatingRevision?: number;
   layoutType: string;
   venue: {
+    type: string;
+    config?: { stagePosition?: string; stageLabel?: string };
     stage: { x: number; y: number; width: number; height: number; label: string };
     seats: Array<{
       number: number;
@@ -45,7 +92,14 @@ export type SeatingMap = {
       y: number;
       seat: { status: SeatCellStatus };
     }>;
+    renderMode?: SeatingMapRenderMode;
+    sectionBounds?: SectionBound[];
+    focusedTierId?: string;
   };
+  updatedAt?: string;
+  tiers?: SeatingMapTier[];
+  totalSeats?: number;
+  capacityProfile?: VenueCapacityProfile;
 };
 
 export type ScanResult = {
@@ -196,13 +250,28 @@ export async function fetchEventScans(
   return data as AttendanceLogResponse;
 }
 
-export async function fetchEventSeating(eventId: string): Promise<SeatingMap> {
+export async function fetchEventSeating(
+  eventId: string,
+  options?: {
+    focus?: { seatTierId: string; seatNumber: number };
+    tierId?: string;
+  }
+): Promise<SeatingMap> {
   const token = await getToken();
   if (!token) {
     throw new ApiError("Session expired", 401);
   }
+  const params = new URLSearchParams();
+  if (options?.focus) {
+    params.set("seatTierId", options.focus.seatTierId);
+    params.set("seatNumber", String(options.focus.seatNumber));
+  }
+  if (options?.tierId) {
+    params.set("tierId", options.tierId);
+  }
+  const query = params.toString() ? `?${params.toString()}` : "";
   const res = await fetch(
-    `${API_BASE_URL}/api/mobile/events/${eventId}/seating`,
+    `${API_BASE_URL}/api/mobile/events/${eventId}/seating${query}`,
     { headers: await mobileHeaders(token) }
   );
   const data = await parseJson(res);

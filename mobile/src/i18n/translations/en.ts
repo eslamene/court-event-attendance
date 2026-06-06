@@ -63,6 +63,20 @@ export const en: TranslationTree = {
     seatNotOnMap: "Could not locate the seat on the map — check with the host.",
     loadFailed: "Could not load seating map",
     notEnabled: "Seating is not enabled for this event",
+    largeSectionHint:
+      "This section has {{count}} seats — use the directions below to guide the guest.",
+  },
+  seating: {
+    capacityProfile: {
+      small: "Small / medium venue",
+      medium: "Large venue",
+      large: "Arena scale",
+    },
+    sectionOverviewHint: "Tap a section to open its seat map.",
+    sectionBack: "All sections",
+    largeVenueMapHint: "{{total}} seats — select a section to view seat details.",
+    tierStats: "{{assigned}} / {{total}} assigned",
+    totalSeatsLabel: "{{count}} seats total",
   },
   scanner: {
     title: "Scan attendance",

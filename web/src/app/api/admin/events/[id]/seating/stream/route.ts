@@ -55,7 +55,9 @@ export async function GET(
         if (row.seatingRevision === lastRevision) return true;
 
         lastRevision = row.seatingRevision;
-        const map = await getSeatingMap(eventId);
+        const { searchParams } = new URL(req.url);
+        const tierId = searchParams.get("tierId") ?? undefined;
+        const map = await getSeatingMap(eventId, { tierId });
         enqueue(encodeSse("seating:map", map));
         return true;
       };

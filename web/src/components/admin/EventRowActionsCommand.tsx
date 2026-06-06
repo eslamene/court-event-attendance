@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import {
   Armchair,
+  Blueprint,
   MapTrifold,
   DotsThreeVertical,
   EnvelopeSimple,
@@ -35,6 +36,7 @@ export type EventRowAction =
   | "emailTemplate"
   | "registrationForm"
   | "seating"
+  | "seatingDesigner"
   | "seatMap"
   | "openRegistration"
   | "clearData"
@@ -89,6 +91,12 @@ export function EventRowActionsCommand({ event, onAction }: Props) {
         label: t("admin.events.seating"),
         keywords: "seating seats tiers مقاعد",
         icon: Armchair,
+      },
+      {
+        id: "seatingDesigner",
+        label: t("admin.events.seatingDesigner"),
+        keywords: "layout designer venue map تصميم قاعة",
+        icon: Blueprint,
       },
       {
         id: "seatMap",

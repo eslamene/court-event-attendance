@@ -11,7 +11,7 @@ import { hasSeatAssignment } from "../api";
 import { Button } from "./ui/Button";
 import { LoadingState, EmptyState } from "./ui/States";
 import { useI18n } from "../context/I18nContext";
-import type { SeatGuideTarget } from "./SeatGuideModal";
+import type { SeatGuideTarget } from "../api";
 import { colors, radius, spacing, typography } from "../theme/tokens";
 
 const RESULT_COLORS: Record<string, string> = {

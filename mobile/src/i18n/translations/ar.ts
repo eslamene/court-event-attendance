@@ -61,6 +61,20 @@ export const ar = {
     seatNotOnMap: "تعذّر تحديد المقعد على الخريطة — راجع المضيف.",
     loadFailed: "تعذّر تحميل خريطة المقاعد",
     notEnabled: "نظام المقاعد غير مفعّل لهذه الفعالية",
+    largeSectionHint:
+      "يحتوي هذا القسم على {{count}} مقعد — استخدم التوجيهات أدناه لإرشاد الضيف.",
+  },
+  seating: {
+    capacityProfile: {
+      small: "قاعة صغيرة/متوسطة",
+      medium: "قاعة كبيرة",
+      large: "ساحة / حلبة",
+    },
+    sectionOverviewHint: "اضغط على قسم لعرض خريطة المقاعد.",
+    sectionBack: "كل الأقسام",
+    largeVenueMapHint: "{{total}} مقعد — اختر قسماً لعرض التفاصيل.",
+    tierStats: "{{assigned}} / {{total}} محجوز",
+    totalSeatsLabel: "{{count}} مقعد إجمالاً",
   },
   scanner: {
     title: "مسح الحضور",

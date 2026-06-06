@@ -8,19 +8,19 @@ import {
   ScrollView,
   useWindowDimensions,
 } from "react-native";
-import { Armchair, X } from "phosphor-react-native";
+import { Armchair, CaretLeft, CaretRight, X } from "phosphor-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ApiError, fetchEventSeating, type SeatingMap } from "../api";
+import { ApiError, fetchEventSeating, type SeatingMap, type SeatGuideTarget } from "../api";
+import { SeatingVenueView } from "./SeatingVenueView";
+import { Button } from "./ui/Button";
 import { LoadingState } from "./ui/States";
 import { useI18n } from "../context/I18nContext";
+import {
+  capacityProfileLabelKey,
+  shouldRenderMobileDotMap,
+  usesSectionOverview,
+} from "../lib/seating-capacity";
 import { colors, layout, radius, spacing, typography } from "../theme/tokens";
-
-export type SeatGuideTarget = {
-  guestName: string;
-  seatLabel: string;
-  seatTierId: string;
-  seatNumber: number;
-};
 
 type Props = {
   visible: boolean;
@@ -36,33 +36,77 @@ const SEAT_COLORS = {
   highlight: { bg: colors.goldAccent, text: colors.textOnGold },
 } as const;
 
+export type { SeatGuideTarget } from "../api";
+
 export function SeatGuideModal({ visible, eventId, target, onClose }: Props) {
-  const { t, textAlign } = useI18n();
+  const { t, textAlign, isRTL } = useI18n();
   const { width } = useWindowDimensions();
   const [map, setMap] = useState<SeatingMap | null>(null);
+  const [focusedTierId, setFocusedTierId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const BackIcon = isRTL ? CaretRight : CaretLeft;
 
   const load = useCallback(async () => {
     if (!visible || !eventId) return;
     setLoading(true);
     setError("");
+    setFocusedTierId(null);
+
     try {
-      const data = await fetchEventSeating(eventId);
+      const focus = target
+        ? { seatTierId: target.seatTierId, seatNumber: target.seatNumber }
+        : undefined;
+
+      let data = await fetchEventSeating(eventId, { focus });
+
+      if (target && data.venue.renderMode === "sections") {
+        const tier = data.tiers?.find((item) => item.id === target.seatTierId);
+        if (tier && shouldRenderMobileDotMap(tier.seatCount)) {
+          data = await fetchEventSeating(eventId, {
+            focus,
+            tierId: target.seatTierId,
+          });
+          setFocusedTierId(target.seatTierId);
+        }
+      }
+
       setMap(data);
     } catch (e) {
       setMap(null);
-      setError(
-        e instanceof ApiError ? e.message : t("seatGuide.loadFailed")
-      );
+      setError(e instanceof ApiError ? e.message : t("seatGuide.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [visible, eventId, t]);
+  }, [visible, eventId, target, t]);
+
+  const loadTier = useCallback(
+    async (tierId: string | null) => {
+      if (!visible || !eventId) return;
+      setLoading(true);
+      setError("");
+      try {
+        const focus = target
+          ? { seatTierId: target.seatTierId, seatNumber: target.seatNumber }
+          : undefined;
+        const data = await fetchEventSeating(eventId, {
+          focus,
+          tierId: tierId ?? undefined,
+        });
+        setFocusedTierId(tierId);
+        setMap(data);
+      } catch (e) {
+        setError(e instanceof ApiError ? e.message : t("seatGuide.loadFailed"));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [visible, eventId, target, t]
+  );
 
   useEffect(() => {
     if (visible) void load();
-  }, [visible, load]);
+  }, [visible, eventId, target]);
 
   const canvasWidth = Math.min(width - spacing.xl * 2, 480);
   const canvasHeight = canvasWidth * 0.68;
@@ -74,6 +118,14 @@ export function SeatGuideModal({ visible, eventId, target, onClose }: Props) {
             s.tierId === target.seatTierId && s.number === target.seatNumber
         )
       : null;
+
+  const focusedTier =
+    focusedTierId && map?.tiers
+      ? map.tiers.find((tier) => tier.id === focusedTierId)
+      : null;
+
+  const isSectionOverview =
+    map?.venue.renderMode === "sections" && !map.venue.focusedTierId;
 
   return (
     <Modal
@@ -126,61 +178,56 @@ export function SeatGuideModal({ visible, eventId, target, onClose }: Props) {
             <Text style={styles.error}>{t("seatGuide.notEnabled")}</Text>
           ) : map ? (
             <>
-              <Text style={[styles.hint, { textAlign }]}>{t("seatGuide.hint")}</Text>
+              {map.totalSeats != null && usesSectionOverview(map.totalSeats) ? (
+                <Text style={[styles.metaHint, { textAlign }]}>
+                  {t("seating.largeVenueMapHint", { total: map.totalSeats })}
+                </Text>
+              ) : null}
 
-              <View
-                style={[
-                  styles.canvas,
-                  { width: canvasWidth, height: canvasHeight },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.stage,
-                    {
-                      left: `${map.venue.stage.x}%`,
-                      top: `${map.venue.stage.y}%`,
-                      width: `${map.venue.stage.width}%`,
-                      height: `${map.venue.stage.height}%`,
-                    },
-                  ]}
-                >
-                  <Text style={styles.stageLabel} numberOfLines={2}>
-                    {map.venue.stage.label || t("seatGuide.stage")}
+              {map.capacityProfile && map.capacityProfile !== "small" ? (
+                <View style={styles.badgeRow}>
+                  <Text style={styles.capacityBadge}>
+                    {t(capacityProfileLabelKey(map.capacityProfile))}
                   </Text>
+                  {map.totalSeats != null ? (
+                    <Text style={styles.totalSeats}>
+                      {t("seating.totalSeatsLabel", { count: map.totalSeats })}
+                    </Text>
+                  ) : null}
                 </View>
+              ) : null}
 
-                {map.venue.seats.map((pos) => {
-                  const isTarget =
-                    target &&
-                    pos.tierId === target.seatTierId &&
-                    pos.number === target.seatNumber;
-                  const seatColors = isTarget
-                    ? SEAT_COLORS.highlight
-                    : SEAT_COLORS[pos.seat.status];
+              {focusedTier ? (
+                <Pressable
+                  style={[styles.backRow, { flexDirection: isRTL ? "row-reverse" : "row" }]}
+                  onPress={() => void loadTier(null)}
+                >
+                  <BackIcon size={16} color={colors.goldAccent} weight="bold" />
+                  <Text style={styles.backText}>{t("seating.sectionBack")}</Text>
+                  <Text style={styles.focusedTierName} numberOfLines={1}>
+                    {focusedTier.name}
+                  </Text>
+                </Pressable>
+              ) : null}
 
-                  return (
-                    <View
-                      key={`${pos.tierId}-${pos.number}`}
-                      style={[
-                        styles.seatDot,
-                        isTarget && styles.seatHighlight,
-                        {
-                          left: `${pos.x}%`,
-                          top: `${pos.y}%`,
-                          backgroundColor: seatColors.bg,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[styles.seatNumber, { color: seatColors.text }]}
-                      >
-                        {pos.number}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </View>
+              <Text style={[styles.hint, { textAlign }]}>
+                {target
+                  ? t("seatGuide.hint")
+                  : isSectionOverview
+                    ? t("seating.sectionOverviewHint")
+                    : t("seatGuide.hint")}
+              </Text>
+
+              <SeatingVenueView
+                map={map}
+                canvasWidth={canvasWidth}
+                canvasHeight={canvasHeight}
+                target={target}
+                highlightTierId={target?.seatTierId}
+                onSelectSection={
+                  isSectionOverview ? (tierId) => void loadTier(tierId) : undefined
+                }
+              />
 
               <View style={styles.legend}>
                 <LegendItem
@@ -212,6 +259,24 @@ export function SeatGuideModal({ visible, eventId, target, onClose }: Props) {
                 <Text style={[styles.directions, { textAlign }]}>
                   {t("seatGuide.seatNotOnMap")}
                 </Text>
+              ) : null}
+
+              {map.tiers && map.tiers.length > 1 && isSectionOverview ? (
+                <View style={styles.tierList}>
+                  {map.tiers.map((tier) => (
+                    <Button
+                      key={tier.id}
+                      variant="secondary"
+                      label={`${tier.name} · ${t("seating.tierStats", {
+                        assigned: tier.assigned,
+                        total: tier.seatCount,
+                      })}`}
+                      onPress={() => void loadTier(tier.id)}
+                      fullWidth
+                      style={styles.tierBtn}
+                    />
+                  ))}
+                </View>
               ) : null}
             </>
           ) : null}
@@ -283,67 +348,55 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     ...typography.body,
   },
+  metaHint: {
+    ...typography.caption,
+    color: colors.textMuted,
+    marginBottom: spacing.sm,
+    alignSelf: "stretch",
+  },
+  badgeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+    alignSelf: "stretch",
+  },
+  capacityBadge: {
+    ...typography.micro,
+    fontWeight: "700",
+    color: colors.gold,
+    backgroundColor: colors.creamDark,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    overflow: "hidden",
+  },
+  totalSeats: {
+    ...typography.micro,
+    color: colors.textMuted,
+    alignSelf: "center",
+  },
+  backRow: {
+    alignItems: "center",
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+    alignSelf: "stretch",
+  },
+  backText: {
+    ...typography.captionBold,
+    color: colors.goldAccent,
+  },
+  focusedTierName: {
+    ...typography.caption,
+    color: colors.textMuted,
+    flex: 1,
+  },
   hint: {
     ...typography.caption,
     color: colors.textMuted,
     marginBottom: spacing.md,
     lineHeight: 20,
     alignSelf: "stretch",
-  },
-  canvas: {
-    backgroundColor: colors.creamDark,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: "hidden",
-    position: "relative",
-  },
-  stage: {
-    position: "absolute",
-    backgroundColor: colors.gold,
-    borderRadius: radius.sm,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: spacing.xs,
-    zIndex: 5,
-  },
-  stageLabel: {
-    color: colors.textOnGold,
-    fontSize: 10,
-    fontWeight: "700",
-    textAlign: "center",
-  },
-  seatDot: {
-    position: "absolute",
-    width: 26,
-    height: 26,
-    marginLeft: -13,
-    marginTop: -13,
-    borderRadius: 13,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(92, 61, 30, 0.2)",
-    zIndex: 10,
-  },
-  seatHighlight: {
-    borderWidth: 3,
-    borderColor: colors.gold,
-    width: 32,
-    height: 32,
-    marginLeft: -16,
-    marginTop: -16,
-    borderRadius: 16,
-    zIndex: 20,
-    elevation: 4,
-    shadowColor: colors.gold,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.35,
-    shadowRadius: 4,
-  },
-  seatNumber: {
-    fontSize: 9,
-    fontWeight: "700",
   },
   legend: {
     flexDirection: "row",
@@ -378,4 +431,10 @@ const styles = StyleSheet.create({
     color: colors.text,
     lineHeight: 22,
   },
+  tierList: {
+    marginTop: spacing.lg,
+    gap: spacing.sm,
+    width: "100%",
+  },
+  tierBtn: { alignSelf: "stretch" },
 });

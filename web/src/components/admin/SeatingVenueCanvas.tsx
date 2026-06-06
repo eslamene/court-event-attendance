@@ -1,8 +1,11 @@
 "use client";
 
 import { useI18n } from "@/components/I18nProvider";
+import { SeatingCanvasRenderer } from "@/components/admin/SeatingCanvasRenderer";
+import { SeatingSectionOverview } from "@/components/admin/SeatingSectionOverview";
 import type { PositionedSeat, VenueLayout } from "@/lib/seating-layout";
 import type { SeatCell } from "@/lib/seating";
+import { shouldUseCanvasForVenue } from "@/lib/seating-map-utils";
 import {
   SEAT_STATUS_STYLES,
   SEAT_TIER_CHIP_CLASS,
@@ -23,6 +26,7 @@ type Props = {
   showTierLabels?: boolean;
   /** Designer preview: seats are non-interactive so pan/zoom works. */
   designMode?: boolean;
+  onSelectSection?: (tierId: string) => void;
 };
 
 export function SeatingVenueCanvas({
@@ -33,7 +37,61 @@ export function SeatingVenueCanvas({
   isRecentSeat,
   showTierLabels = true,
   designMode = false,
+  onSelectSection,
 }: Props) {
+  const renderMode = venue.renderMode ?? "full";
+
+  if (renderMode === "sections" && venue.sectionBounds?.length && onSelectSection) {
+    return (
+      <SeatingSectionOverview
+        venue={venue}
+        sections={venue.sectionBounds}
+        onSelectSection={onSelectSection}
+        fill={fill}
+        className={className}
+      />
+    );
+  }
+
+  const useCanvas = shouldUseCanvasForVenue({
+    renderMode,
+    seatCount: venue.seats.length,
+  });
+
+  if (useCanvas) {
+    return (
+      <SeatingCanvasRenderer
+        venue={venue}
+        compact={compact}
+        fill={fill}
+        className={className}
+        isRecentSeat={isRecentSeat}
+      />
+    );
+  }
+
+  return (
+    <SeatingVenueCanvasDom
+      venue={venue}
+      compact={compact}
+      fill={fill}
+      className={className}
+      isRecentSeat={isRecentSeat}
+      showTierLabels={showTierLabels}
+      designMode={designMode}
+    />
+  );
+}
+
+function SeatingVenueCanvasDom({
+  venue,
+  compact = false,
+  fill = false,
+  className,
+  isRecentSeat,
+  showTierLabels = true,
+  designMode = false,
+}: Omit<Props, "onSelectSection">) {
   const { t } = useI18n();
   const stagePos = venue.config.stagePosition;
 

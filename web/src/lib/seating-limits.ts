@@ -1,9 +1,24 @@
 /** Client-safe seating capacity limits (no server / DB imports). */
 
 export const SEAT_TIER_LIMITS = {
-  seatsPerTier: { min: 1, max: 1000 },
-  totalSeats: { max: 2500 },
-  tierCount: { max: 12 },
+  seatsPerTier: { min: 1, max: 10_000 },
+  totalSeats: { max: 25_000 },
+  tierCount: { max: 32 },
+} as const;
+
+/** Venue size bands for UI and API payload shaping. */
+export type VenueCapacityProfile = "small" | "medium" | "large";
+
+export const VENUE_CAPACITY = {
+  /** Up to this total: full interactive DOM seat map for the whole venue. */
+  fullVisualMapMax: 2_500,
+  /** Prefer canvas rendering above this seat count in a single view. */
+  canvasRenderThreshold: 800,
+  /** Designer preview warns above this total (layout still computes). */
+  designPreviewWarnTotal: 2_500,
+  smallMax: 2_500,
+  mediumMax: 10_000,
+  largeMax: 25_000,
 } as const;
 
 export type SeatTierCountInput = {
@@ -20,7 +35,81 @@ export function isValidTierSeatCount(seatCount: number): boolean {
 }
 
 export function totalSeatCount(tiers: { seatCount: number }[]): number {
-  return tiers.reduce((sum, tier) => sum + Math.max(0, Number(tier.seatCount) || 0), 0);
+  return tiers.reduce(
+    (sum, tier) => sum + Math.max(0, Number(tier.seatCount) || 0),
+    0
+  );
+}
+
+export type TierSeatRedistributionInput = SeatTierCountInput & {
+  assigned?: number;
+};
+
+/** Split `targetTotal` seats evenly across tiers, never below assigned counts. */
+export function redistributeSeatCountsAcrossTiers<T extends TierSeatRedistributionInput>(
+  tiers: T[],
+  targetTotal?: number
+): T[] {
+  if (tiers.length === 0) return [];
+
+  const mins = tiers.map((tier) =>
+    Math.max(0, Number(tier.assigned) || 0)
+  );
+  const minSum = mins.reduce((sum, value) => sum + value, 0);
+  const total = Math.max(targetTotal ?? totalSeatCount(tiers), minSum);
+  const n = tiers.length;
+
+  const ideal = Math.floor(total / n);
+  let remainder = total % n;
+  const counts = mins.map((min, index) => {
+    const share = ideal + (remainder > 0 ? 1 : 0);
+    if (remainder > 0) remainder--;
+    return Math.max(min, share);
+  });
+
+  let sum = counts.reduce((a, b) => a + b, 0);
+  let guard = 0;
+  while (sum > total && guard++ < total * n) {
+    let trimmed = false;
+    for (let i = 0; i < n; i++) {
+      if (counts[i] > mins[i]) {
+        counts[i]--;
+        sum--;
+        trimmed = true;
+        if (sum <= total) break;
+      }
+    }
+    if (!trimmed) break;
+  }
+
+  guard = 0;
+  let fill = 0;
+  while (sum < total && guard++ < total * n) {
+    counts[fill % n]++;
+    sum++;
+    fill++;
+  }
+
+  return tiers.map((tier, index) => ({
+    ...tier,
+    seatCount: counts[index],
+  }));
+}
+
+export function getVenueCapacityProfile(
+  totalSeats: number
+): VenueCapacityProfile {
+  if (totalSeats <= VENUE_CAPACITY.smallMax) return "small";
+  if (totalSeats <= VENUE_CAPACITY.mediumMax) return "medium";
+  return "large";
+}
+
+export function usesSectionOverview(totalSeats: number): boolean {
+  return totalSeats > VENUE_CAPACITY.fullVisualMapMax;
+}
+
+export function prefersCanvasRendering(seatCount: number): boolean {
+  return seatCount > VENUE_CAPACITY.canvasRenderThreshold;
 }
 
 export type SeatTierValidationIssue =

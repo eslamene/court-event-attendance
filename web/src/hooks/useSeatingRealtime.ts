@@ -1,11 +1,27 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { SeatingMap } from "@/lib/seating";
+import type { SeatingMap, SeatCell } from "@/lib/seating";
 
 type ConnectionState = "connecting" | "live" | "polling";
 
-export function useSeatingRealtime(eventId: string, enabled: boolean) {
+type Options = {
+  tierId?: string | null;
+};
+
+function occupiedSeatsForTier(tier: SeatingMap["tiers"][number]): SeatCell[] {
+  if (tier.occupiedSeats?.length) {
+    return tier.occupiedSeats.map((s) => ({ ...s }));
+  }
+  return tier.seats.filter((s) => s.status !== "free");
+}
+
+export function useSeatingRealtime(
+  eventId: string,
+  enabled: boolean,
+  options: Options = {}
+) {
+  const tierId = options.tierId ?? undefined;
   const [map, setMap] = useState<SeatingMap | null>(null);
   const [connection, setConnection] = useState<ConnectionState>("connecting");
   const [loading, setLoading] = useState(true);
@@ -19,15 +35,20 @@ export function useSeatingRealtime(eventId: string, enabled: boolean) {
     let pollTimer: ReturnType<typeof setInterval> | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
+    const mapQuery = tierId ? `?tierId=${encodeURIComponent(tierId)}` : "";
+
     const markRecent = (prev: SeatingMap | null, next: SeatingMap) => {
       if (!prev) return;
       const changed = new Set<string>();
       for (const tier of next.tiers) {
         const prevTier = prev.tiers.find((t) => t.id === tier.id);
         if (!prevTier) continue;
-        for (const seat of tier.seats) {
-          if (seat.status === "free") continue;
-          const prevSeat = prevTier.seats.find((s) => s.number === seat.number);
+        const prevOccupied = occupiedSeatsForTier(prevTier);
+        const nextOccupied = occupiedSeatsForTier(tier);
+        const prevByNumber = new Map(prevOccupied.map((s) => [s.number, s]));
+
+        for (const seat of nextOccupied) {
+          const prevSeat = prevByNumber.get(seat.number);
           if (
             !prevSeat ||
             prevSeat.status !== seat.status ||
@@ -54,7 +75,9 @@ export function useSeatingRealtime(eventId: string, enabled: boolean) {
 
     const fetchMap = async () => {
       try {
-        const res = await fetch(`/api/admin/events/${eventId}/seating/map`);
+        const res = await fetch(
+          `/api/admin/events/${eventId}/seating/map${mapQuery}`
+        );
         if (res.ok) {
           applyMap(await res.json());
         }
@@ -82,7 +105,7 @@ export function useSeatingRealtime(eventId: string, enabled: boolean) {
       setConnection("connecting");
       eventSource?.close();
 
-      const url = `/api/admin/events/${eventId}/seating/stream`;
+      const url = `/api/admin/events/${eventId}/seating/stream${mapQuery}`;
       eventSource = new EventSource(url);
 
       eventSource.addEventListener("seating:map", (event) => {
@@ -112,6 +135,7 @@ export function useSeatingRealtime(eventId: string, enabled: boolean) {
       };
     };
 
+    setLoading(true);
     void fetchMap();
     connectStream();
 
@@ -121,7 +145,7 @@ export function useSeatingRealtime(eventId: string, enabled: boolean) {
       if (reconnectTimer) clearTimeout(reconnectTimer);
       eventSource?.close();
     };
-  }, [eventId, enabled]);
+  }, [eventId, enabled, tierId]);
 
   function isRecentSeat(tierId: string, seatNumber: number) {
     return recentKeys.has(`${tierId}:${seatNumber}`);

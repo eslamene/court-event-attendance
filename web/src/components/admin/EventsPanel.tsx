@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { Copy, Plus, Save, Trash2 } from "lucide-react";
 import {
@@ -44,6 +45,8 @@ type EventRow = {
 
 export function EventsPanel() {
   const { t } = useI18n();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { confirm, toastError, toastSuccess } = useFeedback();
   const table = useAdminTable<EventRow>({
     fetchUrl: "/api/admin/events",
@@ -61,14 +64,24 @@ export function EventsPanel() {
   const [registrationFormEvent, setRegistrationFormEvent] =
     useState<EventRow | null>(null);
   const [seatingEvent, setSeatingEvent] = useState<EventRow | null>(null);
-  const [seatingInitialTab, setSeatingInitialTab] = useState<
-    "settings" | "layout" | "map"
-  >("settings");
+  const [seatingInitialTab, setSeatingInitialTab] = useState<"settings" | "map">(
+    "settings"
+  );
   const [createLogoFile, setCreateLogoFile] = useState<File | null>(null);
   const [savingCreate, setSavingCreate] = useState(false);
   const [savingUpdate, setSavingUpdate] = useState(false);
   const createSubmitLock = useRef(false);
   const updateSubmitLock = useRef(false);
+
+  useEffect(() => {
+    const seatingId = searchParams.get("seating");
+    if (!seatingId || table.loading) return;
+    const ev = table.items.find((row) => row.id === seatingId);
+    if (!ev) return;
+    setSeatingInitialTab("settings");
+    setSeatingEvent(ev);
+    router.replace("/admin/events");
+  }, [searchParams, table.loading, table.items, router]);
 
   const columns = useMemo(
     (): AdminTableColumn[] => [
@@ -288,6 +301,9 @@ export function EventsPanel() {
         setEmailTemplateEvent(null);
         setEditing(null);
         setClearing(null);
+        break;
+      case "seatingDesigner":
+        router.push(`/admin/events/${ev.id}/seating/designer`);
         break;
       case "seatMap":
         setSeatingInitialTab("map");

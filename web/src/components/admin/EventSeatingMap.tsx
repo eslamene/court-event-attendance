@@ -1,10 +1,13 @@
 "use client";
 
-import { Armchair, Circle, RadioButton } from "@phosphor-icons/react";
+import { useCallback, useState } from "react";
+import { ArrowLeft, Circle, RadioButton } from "@phosphor-icons/react";
 import { useI18n } from "@/components/I18nProvider";
 import { SeatingVenueCanvas } from "@/components/admin/SeatingVenueCanvas";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useSeatingRealtime } from "@/hooks/useSeatingRealtime";
+import { capacityProfileLabelKey } from "@/lib/seating-map-utils";
 import { SEAT_STATUS_STYLES } from "@/lib/seat-visual-styles";
 import { cn } from "@/lib/utils";
 
@@ -15,10 +18,20 @@ type Props = {
 
 export function EventSeatingMap({ eventId, enabled }: Props) {
   const { t } = useI18n();
+  const [focusedTierId, setFocusedTierId] = useState<string | null>(null);
   const { map, connection, loading, isRecentSeat } = useSeatingRealtime(
     eventId,
-    enabled
+    enabled,
+    { tierId: focusedTierId }
   );
+
+  const handleSelectSection = useCallback((tierId: string) => {
+    setFocusedTierId(tierId);
+  }, []);
+
+  const handleBackToOverview = useCallback(() => {
+    setFocusedTierId(null);
+  }, []);
 
   if (!enabled) return null;
 
@@ -46,6 +59,11 @@ export function EventSeatingMap({ eventId, enabled }: Props) {
     );
   }
 
+  const focusedTier = focusedTierId
+    ? map.tiers.find((tier) => tier.id === focusedTierId)
+    : null;
+  const isSectionView = map.venue.renderMode === "sections" && !focusedTierId;
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -62,9 +80,44 @@ export function EventSeatingMap({ eventId, enabled }: Props) {
           <Badge variant="outline" className="text-[10px]">
             {t(`seating.layout.${map.layoutType}`)}
           </Badge>
+          {map.capacityProfile !== "small" ? (
+            <Badge variant="secondary" className="text-[10px]">
+              {t(capacityProfileLabelKey(map.capacityProfile))}
+            </Badge>
+          ) : null}
         </div>
         <ConnectionBadge connection={connection} />
       </div>
+
+      {focusedTier ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 text-xs"
+            onClick={handleBackToOverview}
+          >
+            <ArrowLeft size={14} />
+            {t("seating.sectionBack")}
+          </Button>
+          <span className="text-sm font-semibold text-gold-dark">
+            {focusedTier.name}
+          </span>
+          <span className="text-xs text-bronze">
+            {t("seating.tierStats", {
+              assigned: String(focusedTier.assigned),
+              total: String(focusedTier.seatCount),
+            })}
+          </span>
+        </div>
+      ) : isSectionView ? (
+        <p className="text-xs text-bronze">
+          {t("seating.largeVenueMapHint", {
+            total: String(map.totalSeats),
+          })}
+        </p>
+      ) : null}
 
       {map.updatedAt ? (
         <p className="text-xs text-bronze/80">
@@ -77,15 +130,18 @@ export function EventSeatingMap({ eventId, enabled }: Props) {
       <SeatingVenueCanvas
         venue={map.venue}
         isRecentSeat={isRecentSeat}
-        showTierLabels={map.tiers.length > 1}
+        showTierLabels={map.tiers.length > 1 && !focusedTierId}
+        onSelectSection={isSectionView ? handleSelectSection : undefined}
       />
 
-      {map.tiers.length > 1 ? (
+      {map.tiers.length > 1 && !focusedTierId ? (
         <div className="flex flex-wrap gap-2 border-t border-border pt-3">
           {map.tiers.map((tier) => (
-            <div
+            <button
               key={tier.id}
-              className="rounded-lg border border-border bg-[#faf8f5] px-3 py-1.5 text-xs text-bronze"
+              type="button"
+              onClick={() => handleSelectSection(tier.id)}
+              className="rounded-lg border border-border bg-[#faf8f5] px-3 py-1.5 text-xs text-bronze transition hover:border-gold/50"
             >
               <span className="font-semibold text-gold-dark">{tier.name}</span>
               {" · "}
@@ -93,7 +149,7 @@ export function EventSeatingMap({ eventId, enabled }: Props) {
                 assigned: String(tier.assigned),
                 total: String(tier.seatCount),
               })}
-            </div>
+            </button>
           ))}
         </div>
       ) : null}

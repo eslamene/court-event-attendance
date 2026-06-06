@@ -56,7 +56,10 @@ import {
   buildTierSeatCountErrors,
   collectSeatTierValidationIssues,
   SEAT_TIER_LIMITS,
+  VENUE_CAPACITY,
+  type VenueCapacityProfile,
 } from "@/lib/seating-limits";
+import { capacityProfileLabelKey } from "@/lib/seating-map-utils";
 import { tierNameKey } from "@/lib/seating-tier-names";
 import { Input } from "@/components/ui/input";
 import {
@@ -134,7 +137,10 @@ type Props = {
   onUpdateTier: (index: number, patch: Partial<TierPreview>) => void;
   onRemoveTier: (index: number) => void;
   onReorderTiers: (fromIndex: number, toIndex: number) => void;
-  expandedPreview?: boolean;
+  /** Full-page designer route (not embedded in a modal). */
+  standalone?: boolean;
+  totalSeats?: number;
+  capacityProfile?: VenueCapacityProfile;
 };
 
 function tiersToPreviewTiers(tiers: TierPreview[]): SeatingMapTier[] {
@@ -145,10 +151,7 @@ function tiersToPreviewTiers(tiers: TierPreview[]): SeatingMapTier[] {
     sortOrder: index + 1,
     assigned: tier.assigned ?? 0,
     available: tier.available ?? tier.seatCount,
-    seats: Array.from({ length: tier.seatCount }, (_, i) => ({
-      number: i + 1,
-      status: "free" as const,
-    })),
+    seats: [],
   }));
 }
 
@@ -403,7 +406,9 @@ export function SeatingLayoutDesigner({
   onUpdateTier,
   onRemoveTier,
   onReorderTiers,
-  expandedPreview = false,
+  standalone = false,
+  totalSeats: totalSeatsProp,
+  capacityProfile,
 }: Props) {
   const { t } = useI18n();
 
@@ -432,9 +437,16 @@ export function SeatingLayoutDesigner({
         : `seating.layoutHint.${layoutType}`;
 
   const activeTiers = tiers.filter((tier) => tier.seatCount > 0);
-  const totalSeatCount = tiers.reduce(
-    (sum, tier) => sum + Math.max(0, tier.seatCount),
-    0
+  const totalSeatCount =
+    totalSeatsProp ??
+    tiers.reduce((sum, tier) => sum + Math.max(0, tier.seatCount), 0);
+
+  const previewLayoutKey = useMemo(
+    () =>
+      tiers
+        .map((tier, index) => `${tier.id ?? tier.clientKey ?? index}:${tier.seatCount}`)
+        .join("|"),
+    [tiers]
   );
 
   const seatLimitIssues = useMemo(
@@ -617,19 +629,29 @@ export function SeatingLayoutDesigner({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div
+      className={cn(
+        "flex min-h-0 flex-col",
+        standalone ? "h-full" : "h-full"
+      )}
+    >
       <ResizablePanelGroup
+        id="seating-layout-designer"
         orientation="horizontal"
-        className="min-h-0 flex-1"
+        className="min-h-0 flex-1 rounded-xl border border-border bg-card/30"
+        defaultLayout={{
+          "seating-designer-settings": standalone ? 30 : 32,
+          "seating-designer-preview": standalone ? 70 : 68,
+        }}
       >
           <ResizablePanel
             id="seating-designer-settings"
-            defaultSize={32}
-            minSize={22}
-            maxSize={48}
-            className="min-h-0"
+            defaultSize={standalone ? "30%" : "32%"}
+            minSize="280px"
+            maxSize="45%"
+            className="min-h-0 min-w-0"
           >
-            <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto overscroll-contain pe-1">
+            <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto overscroll-contain px-1">
           <div className="flex items-center justify-between gap-2 rounded-xl border border-border bg-[#faf8f5] px-3 py-2">
             <div className="min-w-0">
               <p className="text-xs font-medium text-gold-dark">
@@ -639,7 +661,18 @@ export function SeatingLayoutDesigner({
                 {t(`seating.layout.${layoutType}`)}
                 {" · "}
                 {t("seating.statsTotal", { count: String(totalSeatCount) })}
+                {capacityProfile ? (
+                  <>
+                    {" · "}
+                    {t(capacityProfileLabelKey(capacityProfile))}
+                  </>
+                ) : null}
               </p>
+              {totalSeatCount > VENUE_CAPACITY.fullVisualMapMax ? (
+                <p className="mt-0.5 text-[10px] leading-snug text-bronze/80">
+                  {t("seating.designerLargeVenueHint")}
+                </p>
+              ) : null}
             </div>
             <Button
               type="button"
@@ -1003,14 +1036,14 @@ export function SeatingLayoutDesigner({
 
           <ResizableHandle
             withHandle
-            className="mx-1 w-2 shrink-0 border-s border-border/70 bg-[#faf8f5]/60 transition-colors hover:bg-gold/10"
+            className="mx-0.5 w-3 shrink-0 border-s border-border bg-border/80 transition-colors hover:bg-gold/15"
           />
 
           <ResizablePanel
             id="seating-designer-preview"
-            defaultSize={68}
-            minSize={52}
-            className="min-h-0"
+            defaultSize={standalone ? "70%" : "68%"}
+            minSize="45%"
+            className="min-h-0 min-w-0"
           >
             <section className="flex h-full min-h-0 flex-col gap-2">
           <div className="flex shrink-0 flex-wrap items-start justify-between gap-2">
@@ -1019,6 +1052,13 @@ export function SeatingLayoutDesigner({
                 {t("seating.layoutPreview")}
               </h4>
               <p className="mt-0.5 text-xs text-bronze/85">{t(layoutHintKey)}</p>
+              {totalSeatCount > VENUE_CAPACITY.designPreviewWarnTotal ? (
+                <p className="mt-1 text-xs text-bronze/80">
+                  {t("seating.layoutPreviewLargeVenue", {
+                    total: String(totalSeatCount),
+                  })}
+                </p>
+              ) : null}
             </div>
             {layoutStats ? (
               <div className="flex flex-wrap justify-end gap-1.5">
@@ -1104,7 +1144,10 @@ export function SeatingLayoutDesigner({
             </div>
           ) : null}
 
-          <SeatingDesignerViewport className="min-h-[min(300px,55vh)] flex-1">
+          <SeatingDesignerViewport
+            key={previewLayoutKey}
+            className="min-h-[min(300px,55vh)] flex-1"
+          >
             {previewVenue ? (
               <SeatingVenueCanvas
                 venue={previewVenue}

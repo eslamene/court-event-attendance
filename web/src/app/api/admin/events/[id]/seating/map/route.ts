@@ -5,7 +5,7 @@ import { apiT } from "@/lib/i18n/api";
 import { getSeatingMap } from "@/lib/seating";
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
@@ -26,8 +26,11 @@ export async function GET(
     );
   }
 
+  const { searchParams } = new URL(req.url);
+  const tierId = searchParams.get("tierId") ?? undefined;
+
   try {
-    const map = await getSeatingMap(id);
+    const map = await getSeatingMap(id, { tierId });
     return NextResponse.json(map);
   } catch (e) {
     return NextResponse.json(
