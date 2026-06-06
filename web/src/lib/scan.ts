@@ -7,18 +7,66 @@ import type { ScanResult } from "@/generated/prisma/client";
 import { apiT } from "@/lib/i18n/api";
 import { formatSeatLabel } from "@/lib/seating";
 
+export type ScanRegistrationPayload = {
+  fullName: string;
+  rank: string;
+  entity: string;
+  eventName: string;
+  seatLabel?: string | null;
+  seatTierId?: string | null;
+  seatTierName?: string | null;
+  seatNumber?: number | null;
+};
+
 export type ScanResponse = {
   result: ScanResult;
   success: boolean;
   message: string;
-  registration?: {
-    fullName: string;
-    rank: string;
-    entity: string;
-    eventName: string;
-    seatLabel?: string | null;
-  };
+  registration?: ScanRegistrationPayload;
 };
+
+function registrationSeatInfo(registration: {
+  seatNumber: number | null;
+  seatTier: { id: string; name: string } | null;
+}): Pick<
+  ScanRegistrationPayload,
+  "seatLabel" | "seatTierId" | "seatTierName" | "seatNumber"
+> {
+  if (!registration.seatTier || registration.seatNumber == null) {
+    return {
+      seatLabel: null,
+      seatTierId: null,
+      seatTierName: null,
+      seatNumber: null,
+    };
+  }
+  return {
+    seatLabel: formatSeatLabel(
+      registration.seatTier.name,
+      registration.seatNumber
+    ),
+    seatTierId: registration.seatTier.id,
+    seatTierName: registration.seatTier.name,
+    seatNumber: registration.seatNumber,
+  };
+}
+
+function registrationPayload(registration: {
+  fullName: string;
+  rank: string;
+  entity: string;
+  seatNumber: number | null;
+  seatTier: { id: string; name: string } | null;
+  event: { name: string };
+}): ScanRegistrationPayload {
+  return {
+    fullName: registration.fullName,
+    rank: registration.rank,
+    entity: registration.entity,
+    eventName: registration.event.name,
+    ...registrationSeatInfo(registration),
+  };
+}
 
 function extractToken(raw: string): string {
   const trimmed = raw.trim();
@@ -116,6 +164,7 @@ export async function processScan(params: {
       judgeName: registration.fullName,
       offlineId: params.offlineId,
       scannedAt,
+      registration: registrationPayload(registration),
     });
   }
 
@@ -146,16 +195,7 @@ export async function processScan(params: {
     judgeName: registration.fullName,
     offlineId: params.offlineId,
     scannedAt,
-    registration: {
-      fullName: registration.fullName,
-      rank: registration.rank,
-      entity: registration.entity,
-      eventName: registration.event.name,
-      seatLabel:
-        registration.seatTier && registration.seatNumber != null
-          ? formatSeatLabel(registration.seatTier.name, registration.seatNumber)
-          : null,
-    },
+    registration: registrationPayload(registration),
   });
 }
 
@@ -225,7 +265,7 @@ async function logResultFromExisting(log: {
     rank: string;
     entity: string;
     seatNumber: number | null;
-    seatTier: { name: string } | null;
+    seatTier: { id: string; name: string } | null;
     event: { name: string };
   } | null;
 }): Promise<ScanResponse> {
@@ -241,20 +281,7 @@ async function logResultFromExisting(log: {
     success: log.result === "SUCCESS",
     message: await apiT(keyMap[log.result]),
     registration: log.registration
-      ? {
-          fullName: log.registration.fullName,
-          rank: log.registration.rank,
-          entity: log.registration.entity,
-          eventName: log.registration.event.name,
-          seatLabel:
-            log.registration.seatTier &&
-            log.registration.seatNumber != null
-              ? formatSeatLabel(
-                  log.registration.seatTier.name,
-                  log.registration.seatNumber
-                )
-              : null,
-        }
+      ? registrationPayload(log.registration)
       : undefined,
   };
 }

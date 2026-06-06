@@ -8,7 +8,12 @@ import {
 } from "react-native";
 import { ApiError, fetchEventScans, type AttendanceScan } from "../api";
 import { ScanLogList } from "../components/ScanLogList";
+import {
+  SeatGuideModal,
+  type SeatGuideTarget,
+} from "../components/SeatGuideModal";
 import { useEventContext } from "../context/EventContext";
+import { useI18n } from "../context/I18nContext";
 import { logActivity } from "../lib/activity-log";
 import { clearSession, getToken } from "../storage";
 
@@ -18,11 +23,14 @@ type Props = {
 
 export function EventAttendanceScreen({ onLogout }: Props) {
   const { events, eventId, setEventId, selectedEvent } = useEventContext();
+  const { t, textAlign, rowDirection } = useI18n();
   const [scans, setScans] = useState<AttendanceScan[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [summary, setSummary] = useState({ total: 0, success: 0 });
   const [error, setError] = useState("");
+  const [guideTarget, setGuideTarget] = useState<SeatGuideTarget | null>(null);
+  const [guideVisible, setGuideVisible] = useState(false);
 
   const load = useCallback(
     async (isRefresh = false) => {
@@ -46,23 +54,24 @@ export function EventAttendanceScreen({ onLogout }: Props) {
         const data = await fetchEventScans(token, eventId, "all");
         setScans(data.scans);
         setSummary({ total: data.summary.total, success: data.summary.success });
-        await logActivity("sync", `تحميل سجل حضور: ${data.event.name}`, {
-          eventId,
-          count: String(data.scans.length),
-        });
+        await logActivity(
+          "sync",
+          t("attendance.loadActivity", { name: data.event.name }),
+          { eventId, count: String(data.scans.length) }
+        );
       } catch (e) {
         if (e instanceof ApiError && e.status === 401) {
           await clearSession();
           onLogout();
           return;
         }
-        setError(e instanceof Error ? e.message : "تعذّر تحميل السجل");
+        setError(e instanceof Error ? e.message : t("attendance.loadFailed"));
       } finally {
         setLoading(false);
         setRefreshing(false);
       }
     },
-    [eventId, onLogout]
+    [eventId, onLogout, t]
   );
 
   useEffect(() => {
@@ -72,16 +81,19 @@ export function EventAttendanceScreen({ onLogout }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>سجل حضور الفعالية</Text>
-        <Text style={styles.subtitle}>
-          {selectedEvent?.name ?? "اختر فعالية"}
+        <Text style={[styles.title, { textAlign }]}>{t("attendance.title")}</Text>
+        <Text style={[styles.subtitle, { textAlign }]}>
+          {selectedEvent?.name ?? t("common.selectEvent")}
         </Text>
       </View>
 
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.eventPicker}
+        contentContainerStyle={[
+          styles.eventPicker,
+          { flexDirection: rowDirection },
+        ]}
       >
         {events.map((e) => (
           <TouchableOpacity
@@ -92,6 +104,7 @@ export function EventAttendanceScreen({ onLogout }: Props) {
             <Text
               style={[
                 styles.chipText,
+                { textAlign },
                 eventId === e.id && styles.chipTextActive,
               ]}
               numberOfLines={2}
@@ -102,16 +115,16 @@ export function EventAttendanceScreen({ onLogout }: Props) {
         ))}
       </ScrollView>
 
-      <View style={styles.stats}>
+      <View style={[styles.stats, { flexDirection: rowDirection }]}>
         <View style={styles.statBox}>
           <Text style={styles.statValue}>{summary.total}</Text>
-          <Text style={styles.statLabel}>إجمالي المسوحات</Text>
+          <Text style={styles.statLabel}>{t("attendance.totalScans")}</Text>
         </View>
         <View style={styles.statBox}>
           <Text style={[styles.statValue, styles.statSuccess]}>
             {summary.success}
           </Text>
-          <Text style={styles.statLabel}>حضور ناجح</Text>
+          <Text style={styles.statLabel}>{t("attendance.successful")}</Text>
         </View>
       </View>
 
@@ -123,7 +136,22 @@ export function EventAttendanceScreen({ onLogout }: Props) {
         refreshing={refreshing}
         onRefresh={() => void load(true)}
         showScanner
-        emptyMessage="لا توجد مسوحات لهذه الفعالية بعد"
+        emptyMessage={t("attendance.empty")}
+        seatingEnabled={selectedEvent?.seatingEnabled}
+        onGuideSeat={(target) => {
+          setGuideTarget(target);
+          setGuideVisible(true);
+        }}
+      />
+
+      <SeatGuideModal
+        visible={guideVisible}
+        eventId={eventId}
+        target={guideTarget}
+        onClose={() => {
+          setGuideVisible(false);
+          setGuideTarget(null);
+        }}
       />
     </View>
   );
@@ -137,10 +165,9 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     backgroundColor: "#5c3d1e",
   },
-  title: { color: "#fff", fontSize: 18, fontWeight: "700", textAlign: "right" },
-  subtitle: { color: "#e8dcc8", fontSize: 13, textAlign: "right", marginTop: 4 },
+  title: { color: "#fff", fontSize: 18, fontWeight: "700" },
+  subtitle: { color: "#e8dcc8", fontSize: 13, marginTop: 4 },
   eventPicker: {
-    flexDirection: "row-reverse",
     gap: 8,
     paddingHorizontal: 12,
     paddingVertical: 12,
@@ -155,10 +182,9 @@ const styles = StyleSheet.create({
     maxWidth: 220,
   },
   chipActive: { backgroundColor: "#5c3d1e", borderColor: "#5c3d1e" },
-  chipText: { fontSize: 12, color: "#5c3d1e", textAlign: "right" },
+  chipText: { fontSize: 12, color: "#5c3d1e" },
   chipTextActive: { color: "#fff" },
   stats: {
-    flexDirection: "row-reverse",
     gap: 12,
     paddingHorizontal: 12,
     marginBottom: 8,

@@ -8,8 +8,13 @@ import {
 } from "react-native";
 import { ApiError, fetchEventScans, type AttendanceScan } from "../api";
 import { ScanLogList } from "../components/ScanLogList";
+import {
+  SeatGuideModal,
+  type SeatGuideTarget,
+} from "../components/SeatGuideModal";
 import { useEventContext } from "../context/EventContext";
-import { getToken, clearSession } from "../storage";
+import { useI18n } from "../context/I18nContext";
+import { clearSession, getToken } from "../storage";
 
 type Props = {
   onLogout: () => void;
@@ -17,10 +22,13 @@ type Props = {
 
 export function MyScansScreen({ onLogout }: Props) {
   const { events, eventId, setEventId, selectedEvent } = useEventContext();
+  const { t, textAlign, rowDirection } = useI18n();
   const [scans, setScans] = useState<AttendanceScan[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [guideTarget, setGuideTarget] = useState<SeatGuideTarget | null>(null);
+  const [guideVisible, setGuideVisible] = useState(false);
 
   const load = useCallback(
     async (isRefresh = false) => {
@@ -49,13 +57,13 @@ export function MyScansScreen({ onLogout }: Props) {
           onLogout();
           return;
         }
-        setError(e instanceof Error ? e.message : "تعذّر تحميل مسوحاتك");
+        setError(e instanceof Error ? e.message : t("myScans.loadFailed"));
       } finally {
         setLoading(false);
         setRefreshing(false);
       }
     },
-    [eventId, onLogout]
+    [eventId, onLogout, t]
   );
 
   useEffect(() => {
@@ -67,16 +75,19 @@ export function MyScansScreen({ onLogout }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>مسوحاتي</Text>
-        <Text style={styles.subtitle}>
-          {selectedEvent?.name ?? "اختر فعالية"}
+        <Text style={[styles.title, { textAlign }]}>{t("myScans.title")}</Text>
+        <Text style={[styles.subtitle, { textAlign }]}>
+          {selectedEvent?.name ?? t("common.selectEvent")}
         </Text>
       </View>
 
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.eventPicker}
+        contentContainerStyle={[
+          styles.eventPicker,
+          { flexDirection: rowDirection },
+        ]}
       >
         {events.map((e) => (
           <TouchableOpacity
@@ -87,6 +98,7 @@ export function MyScansScreen({ onLogout }: Props) {
             <Text
               style={[
                 styles.chipText,
+                { textAlign },
                 eventId === e.id && styles.chipTextActive,
               ]}
               numberOfLines={2}
@@ -99,7 +111,10 @@ export function MyScansScreen({ onLogout }: Props) {
 
       <View style={styles.summaryBar}>
         <Text style={styles.summaryText}>
-          {scans.length} مسح · {successCount} ناجح
+          {t("myScans.summary", {
+            total: scans.length,
+            success: successCount,
+          })}
         </Text>
       </View>
 
@@ -110,7 +125,22 @@ export function MyScansScreen({ onLogout }: Props) {
         loading={loading}
         refreshing={refreshing}
         onRefresh={() => void load(true)}
-        emptyMessage="لم تقم بأي مسح لهذه الفعالية بعد"
+        emptyMessage={t("myScans.empty")}
+        seatingEnabled={selectedEvent?.seatingEnabled}
+        onGuideSeat={(target) => {
+          setGuideTarget(target);
+          setGuideVisible(true);
+        }}
+      />
+
+      <SeatGuideModal
+        visible={guideVisible}
+        eventId={eventId}
+        target={guideTarget}
+        onClose={() => {
+          setGuideVisible(false);
+          setGuideTarget(null);
+        }}
       />
     </View>
   );
@@ -124,10 +154,9 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     backgroundColor: "#5c3d1e",
   },
-  title: { color: "#fff", fontSize: 18, fontWeight: "700", textAlign: "right" },
-  subtitle: { color: "#e8dcc8", fontSize: 13, textAlign: "right", marginTop: 4 },
+  title: { color: "#fff", fontSize: 18, fontWeight: "700" },
+  subtitle: { color: "#e8dcc8", fontSize: 13, marginTop: 4 },
   eventPicker: {
-    flexDirection: "row-reverse",
     gap: 8,
     paddingHorizontal: 12,
     paddingVertical: 12,
@@ -142,7 +171,7 @@ const styles = StyleSheet.create({
     maxWidth: 220,
   },
   chipActive: { backgroundColor: "#5c3d1e", borderColor: "#5c3d1e" },
-  chipText: { fontSize: 12, color: "#5c3d1e", textAlign: "right" },
+  chipText: { fontSize: 12, color: "#5c3d1e" },
   chipTextActive: { color: "#fff" },
   summaryBar: {
     marginHorizontal: 12,

@@ -21,6 +21,14 @@ export type SeatingLayoutConfig = {
   aisleCenter?: boolean;
   /** Arena layout: circular rings (default) or row tiers from center stage */
   arenaArrangement?: ArenaArrangement;
+  /** Horizontal pitch multiplier between seats (0.6–2) */
+  horizontalSpacing?: number;
+  /** Vertical pitch multiplier between rows (0.6–2) */
+  verticalSpacing?: number;
+  /** Gap multiplier between seat tiers / layers (0.5–2.5) */
+  tierSpacing?: number;
+  /** Minimum padding between seat centers (1–2.5) */
+  seatPadding?: number;
 };
 
 export type StageRect = {
@@ -62,7 +70,67 @@ export const DEFAULT_LAYOUT_CONFIG: SeatingLayoutConfig = {
   seatsPerRow: 0,
   aisleCenter: false,
   arenaArrangement: "rings",
+  horizontalSpacing: 1,
+  verticalSpacing: 1,
+  tierSpacing: 1,
+  seatPadding: 1.2,
 };
+
+export const SPACING_LIMITS = {
+  horizontal: { min: 0.6, max: 2, step: 0.05 },
+  vertical: { min: 0.6, max: 2, step: 0.05 },
+  tier: { min: 0.5, max: 2.5, step: 0.05 },
+  padding: { min: 1, max: 2.5, step: 0.05 },
+} as const;
+
+function spacingMult(value: number | undefined, fallback = 1): number {
+  if (value == null || !Number.isFinite(value) || value <= 0) return fallback;
+  return value;
+}
+
+export function minSeatCenterDistance(config: SeatingLayoutConfig): number {
+  return 4 * spacingMult(config.seatPadding, 1.2);
+}
+
+/** Push seats apart so centers stay at least minDist apart (canvas % units). */
+export function resolveSeatOverlaps(
+  seats: PositionedSeat[],
+  minDist: number
+): PositionedSeat[] {
+  if (seats.length < 2) return seats;
+
+  const result = seats.map((s) => ({ ...s }));
+  const minDistSq = minDist * minDist;
+
+  for (let iter = 0; iter < 64; iter++) {
+    let moved = false;
+    for (let i = 0; i < result.length; i++) {
+      for (let j = i + 1; j < result.length; j++) {
+        const dx = result[j].x - result[i].x;
+        const dy = result[j].y - result[i].y;
+        const distSq = dx * dx + dy * dy;
+        if (distSq >= minDistSq) continue;
+
+        const dist = Math.sqrt(distSq) || 0.01;
+        const push = (minDist - dist) / 2;
+        const nx = dx / dist;
+        const ny = dy / dist;
+        result[i].x -= nx * push;
+        result[i].y -= ny * push;
+        result[j].x += nx * push;
+        result[j].y += ny * push;
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+
+  return result.map((s) => ({
+    ...s,
+    x: Math.min(97, Math.max(3, s.x)),
+    y: Math.min(97, Math.max(3, s.y)),
+  }));
+}
 
 export function normalizeArenaArrangement(
   value: string | undefined | null
@@ -82,6 +150,16 @@ export function parseLayoutConfig(json: string | null | undefined): SeatingLayou
   }
 }
 
+function clampSpacing(
+  value: number | undefined,
+  min: number,
+  max: number,
+  fallback: number
+): number {
+  const v = spacingMult(value, fallback);
+  return Math.min(max, Math.max(min, v));
+}
+
 function mergeLayoutConfig(parsed: Partial<SeatingLayoutConfig>): SeatingLayoutConfig {
   return {
     stagePosition: parsed.stagePosition ?? DEFAULT_LAYOUT_CONFIG.stagePosition,
@@ -89,6 +167,30 @@ function mergeLayoutConfig(parsed: Partial<SeatingLayoutConfig>): SeatingLayoutC
     seatsPerRow: parsed.seatsPerRow ?? 0,
     aisleCenter: Boolean(parsed.aisleCenter),
     arenaArrangement: normalizeArenaArrangement(parsed.arenaArrangement),
+    horizontalSpacing: clampSpacing(
+      parsed.horizontalSpacing,
+      SPACING_LIMITS.horizontal.min,
+      SPACING_LIMITS.horizontal.max,
+      DEFAULT_LAYOUT_CONFIG.horizontalSpacing!
+    ),
+    verticalSpacing: clampSpacing(
+      parsed.verticalSpacing,
+      SPACING_LIMITS.vertical.min,
+      SPACING_LIMITS.vertical.max,
+      DEFAULT_LAYOUT_CONFIG.verticalSpacing!
+    ),
+    tierSpacing: clampSpacing(
+      parsed.tierSpacing,
+      SPACING_LIMITS.tier.min,
+      SPACING_LIMITS.tier.max,
+      DEFAULT_LAYOUT_CONFIG.tierSpacing!
+    ),
+    seatPadding: clampSpacing(
+      parsed.seatPadding,
+      SPACING_LIMITS.padding.min,
+      SPACING_LIMITS.padding.max,
+      DEFAULT_LAYOUT_CONFIG.seatPadding!
+    ),
   };
 }
 

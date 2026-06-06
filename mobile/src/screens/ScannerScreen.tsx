@@ -13,13 +13,20 @@ import {
   ApiError,
   formatRegistrationDetails,
   fetchSession,
+  hasSeatAssignment,
   isNetworkError,
   scanQr,
+  type ScanRegistration,
   type ScanResult,
   type ScanResultCode,
 } from "../api";
+import {
+  SeatGuideModal,
+  type SeatGuideTarget,
+} from "../components/SeatGuideModal";
 import { extractQrToken, isLikelyQrPayload } from "../qr";
 import { useEventContext } from "../context/EventContext";
+import { useI18n } from "../context/I18nContext";
 import { logActivity } from "../lib/activity-log";
 import {
   clearSession,
@@ -47,26 +54,48 @@ type RecentScan = {
   seatLabel?: string | null;
 };
 
-const RESULT_LABELS: Record<ScanResultCode, string> = {
-  SUCCESS: "حضور مسجّل",
-  INVALID: "رمز غير صالح",
-  ALREADY_USED: "مستخدم مسبقاً",
-  WRONG_EVENT: "فعالية أخرى",
-};
-
 export function ScannerScreen({ onLogout }: Props) {
   const { events, eventId, setEventId, selectedEvent, refreshEvents } =
     useEventContext();
+  const { t, textAlign, rowDirection, dateLocale } = useI18n();
   const [permission, requestPermission] = useCameraPermissions();
   const [userName, setUserName] = useState("");
   const [feedback, setFeedback] = useState<Feedback>("idle");
-  const [message, setMessage] = useState("وجّه الكاميرا نحو رمز QR");
+  const [message, setMessage] = useState("");
   const [details, setDetails] = useState("");
   const [resultCode, setResultCode] = useState<ScanResultCode | null>(null);
   const [scanning, setScanning] = useState(true);
   const [pendingSync, setPendingSync] = useState(0);
   const [recentScans, setRecentScans] = useState<RecentScan[]>([]);
+  const [guideTarget, setGuideTarget] = useState<SeatGuideTarget | null>(null);
+  const [guideVisible, setGuideVisible] = useState(false);
+  const [lastSeatRegistration, setLastSeatRegistration] =
+    useState<ScanRegistration | null>(null);
   const lastScan = useRef(0);
+
+  const eventHasSeating = Boolean(selectedEvent?.seatingEnabled);
+
+  function openSeatGuide(reg?: ScanRegistration | null) {
+    if (!reg || !hasSeatAssignment(reg)) return;
+    setGuideTarget({
+      guestName: reg.fullName,
+      seatLabel: reg.seatLabel,
+      seatTierId: reg.seatTierId,
+      seatNumber: reg.seatNumber,
+    });
+    setGuideVisible(true);
+  }
+
+  useEffect(() => {
+    if (feedback === "idle") {
+      setMessage(t("scanner.pointCamera"));
+    }
+  }, [t, feedback]);
+
+  const formatSeat = useCallback(
+    (label: string) => t("common.seat", { label }),
+    [t]
+  );
 
   const refreshPendingCount = useCallback(async () => {
     const queue = await getOfflineQueue();
@@ -126,11 +155,16 @@ export function ScannerScreen({ onLogout }: Props) {
 
   function applyScanResult(result: ScanResult, raw: string) {
     setResultCode(result.result);
+    setLastSeatRegistration(
+      result.registration && hasSeatAssignment(result.registration)
+        ? result.registration
+        : null
+    );
 
     if (result.success) {
       setFeedback("success");
       setMessage(result.message);
-      setDetails(formatRegistrationDetails(result.registration));
+      setDetails(formatRegistrationDetails(result.registration, formatSeat));
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Vibration.vibrate(200);
       void logActivity("scan_success", result.message, {
@@ -138,7 +172,7 @@ export function ScannerScreen({ onLogout }: Props) {
       });
       pushRecentScan({
         id: raw,
-        at: new Date().toLocaleTimeString("ar-EG"),
+        at: new Date().toLocaleTimeString(dateLocale),
         result: result.result,
         message: result.message,
         name: result.registration?.fullName,
@@ -156,7 +190,7 @@ export function ScannerScreen({ onLogout }: Props) {
     setMessage(result.message);
     setDetails(
       result.registration
-        ? formatRegistrationDetails(result.registration)
+        ? formatRegistrationDetails(result.registration, formatSeat)
         : ""
     );
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -168,7 +202,7 @@ export function ScannerScreen({ onLogout }: Props) {
 
     pushRecentScan({
       id: raw,
-      at: new Date().toLocaleTimeString("ar-EG"),
+      at: new Date().toLocaleTimeString(dateLocale),
       result: result.result,
       message: result.message,
       name: result.registration?.fullName,
@@ -182,7 +216,7 @@ export function ScannerScreen({ onLogout }: Props) {
 
     if (!eventId) {
       setFeedback("error");
-      setMessage("يرجى اختيار الفعالية أولاً");
+      setMessage(t("scanner.selectEventFirst"));
       setResultCode(null);
       return;
     }
@@ -190,13 +224,13 @@ export function ScannerScreen({ onLogout }: Props) {
     const qrToken = extractQrToken(raw);
     if (!isLikelyQrPayload(raw)) {
       setFeedback("error");
-      setMessage("رمز QR غير معروف — تأكد من مسح رمز الحضور الصحيح");
+      setMessage(t("scanner.unknownQr"));
       setDetails("");
       setResultCode("INVALID");
       setScanning(false);
       setTimeout(() => {
         setFeedback("idle");
-        setMessage("وجّه الكاميرا نحو رمز QR");
+        setMessage(t("scanner.pointCamera"));
         setDetails("");
         setResultCode(null);
         setScanning(true);
@@ -210,7 +244,7 @@ export function ScannerScreen({ onLogout }: Props) {
     const scannedAt = new Date().toISOString();
 
     try {
-      if (!token) throw new ApiError("انتهت الجلسة", 401);
+      if (!token) throw new ApiError(t("scanner.sessionExpired"), 401);
 
       const result = await scanQr(token, {
         qrToken,
@@ -235,9 +269,9 @@ export function ScannerScreen({ onLogout }: Props) {
           scannedAt,
         });
         await refreshPendingCount();
-        void logActivity("offline_queue", "حفظ مسح بانتظار المزامنة");
+        void logActivity("offline_queue", t("scanner.offlineQueueActivity"));
         setFeedback("offline");
-        setMessage("لا يوجد اتصال — تم الحفظ محلياً للمزامنة لاحقاً");
+        setMessage(t("scanner.offlineSaved"));
         setDetails("");
         setResultCode(null);
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -246,7 +280,7 @@ export function ScannerScreen({ onLogout }: Props) {
 
       setFeedback("error");
       setMessage(
-        error instanceof Error ? error.message : "تعذّر إتمام المسح"
+        error instanceof Error ? error.message : t("scanner.scanFailed")
       );
       setDetails("");
       setResultCode(null);
@@ -255,7 +289,7 @@ export function ScannerScreen({ onLogout }: Props) {
 
     setTimeout(() => {
       setFeedback("idle");
-      setMessage("وجّه الكاميرا نحو رمز QR");
+      setMessage(t("scanner.pointCamera"));
       setDetails("");
       setResultCode(null);
       setScanning(true);
@@ -265,9 +299,9 @@ export function ScannerScreen({ onLogout }: Props) {
   if (!permission?.granted) {
     return (
       <View style={styles.center}>
-        <Text style={styles.msg}>يلزم إذن الكاميرا لمسح الرموز</Text>
+        <Text style={styles.msg}>{t("scanner.cameraPermission")}</Text>
         <TouchableOpacity style={styles.button} onPress={requestPermission}>
-          <Text style={styles.buttonText}>منح الإذن</Text>
+          <Text style={styles.buttonText}>{t("scanner.grantPermission")}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -275,15 +309,31 @@ export function ScannerScreen({ onLogout }: Props) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>مسح الحضور</Text>
-        <Text style={styles.headerUser}>{userName}</Text>
+      <View style={[styles.header, { flexDirection: rowDirection }]}>
+        <Text style={styles.headerTitle}>{t("scanner.title")}</Text>
+        <View style={styles.headerActions}>
+          {eventHasSeating ? (
+            <TouchableOpacity
+              style={styles.mapBtn}
+              onPress={() => {
+                setGuideTarget(null);
+                setGuideVisible(true);
+              }}
+            >
+              <Text style={styles.mapBtnText}>{t("scanner.openSeatMap")}</Text>
+            </TouchableOpacity>
+          ) : null}
+          <Text style={styles.headerUser}>{userName}</Text>
+        </View>
       </View>
 
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.eventPicker}
+        contentContainerStyle={[
+          styles.eventPicker,
+          { flexDirection: rowDirection },
+        ]}
       >
         {events.map((e) => (
           <TouchableOpacity
@@ -294,6 +344,7 @@ export function ScannerScreen({ onLogout }: Props) {
             <Text
               style={[
                 styles.chipText,
+                { textAlign },
                 eventId === e.id && styles.chipTextActive,
               ]}
               numberOfLines={2}
@@ -305,14 +356,16 @@ export function ScannerScreen({ onLogout }: Props) {
       </ScrollView>
 
       {selectedEvent ? (
-        <Text style={styles.eventHint}>الفعالية النشطة: {selectedEvent.name}</Text>
+        <Text style={styles.eventHint}>
+          {t("scanner.activeEvent", { name: selectedEvent.name })}
+        </Text>
       ) : (
-        <Text style={styles.eventHint}>لا توجد فعاليات نشطة</Text>
+        <Text style={styles.eventHint}>{t("scanner.noActiveEvents")}</Text>
       )}
 
       {pendingSync > 0 ? (
         <Text style={styles.syncHint}>
-          {pendingSync} مسح محفوظ بانتظار المزامنة
+          {t("scanner.pendingSync", { count: pendingSync })}
         </Text>
       ) : null}
 
@@ -337,10 +390,18 @@ export function ScannerScreen({ onLogout }: Props) {
                   : "📷"}
         </Text>
         {resultCode ? (
-          <Text style={styles.resultBadge}>{RESULT_LABELS[resultCode]}</Text>
+          <Text style={styles.resultBadge}>{t(`scanResult.${resultCode}`)}</Text>
         ) : null}
         <Text style={styles.feedbackMsg}>{message}</Text>
         {details ? <Text style={styles.feedbackDetails}>{details}</Text> : null}
+        {lastSeatRegistration && eventHasSeating ? (
+          <TouchableOpacity
+            style={styles.guideBtn}
+            onPress={() => openSeatGuide(lastSeatRegistration)}
+          >
+            <Text style={styles.guideBtnText}>{t("seatGuide.open")}</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       <View style={styles.cameraWrap}>
@@ -356,23 +417,42 @@ export function ScannerScreen({ onLogout }: Props) {
 
       {recentScans.length > 0 ? (
         <View style={styles.history}>
-          <Text style={styles.historyTitle}>آخر المسوحات</Text>
+          <Text style={[styles.historyTitle, { textAlign }]}>
+            {t("scanner.recentScans")}
+          </Text>
           {recentScans.map((scan) => (
-            <View key={`${scan.id}-${scan.at}`} style={styles.historyRow}>
+            <View
+              key={`${scan.id}-${scan.at}`}
+              style={[styles.historyRow, { flexDirection: rowDirection }]}
+            >
               <Text style={styles.historyTime}>{scan.at}</Text>
               <View style={styles.historyBody}>
-                <Text style={styles.historyName}>
-                  {scan.name ?? RESULT_LABELS[scan.result]}
+                <Text style={[styles.historyName, { textAlign }]}>
+                  {scan.name ?? t(`scanResult.${scan.result}`)}
                 </Text>
                 {scan.seatLabel ? (
-                  <Text style={styles.historySeat}>المقعد: {scan.seatLabel}</Text>
+                  <Text style={[styles.historySeat, { textAlign }]}>
+                    {t("common.seat", { label: scan.seatLabel })}
+                  </Text>
                 ) : null}
-                <Text style={styles.historyMsg}>{scan.message}</Text>
+                <Text style={[styles.historyMsg, { textAlign }]}>
+                  {scan.message}
+                </Text>
               </View>
             </View>
           ))}
         </View>
       ) : null}
+
+      <SeatGuideModal
+        visible={guideVisible}
+        eventId={eventId}
+        target={guideTarget}
+        onClose={() => {
+          setGuideVisible(false);
+          setGuideTarget(null);
+        }}
+      />
     </View>
   );
 }
@@ -386,7 +466,6 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   header: {
-    flexDirection: "row-reverse",
     alignItems: "center",
     justifyContent: "space-between",
     padding: 16,
@@ -394,9 +473,18 @@ const styles = StyleSheet.create({
     backgroundColor: "#5c3d1e",
   },
   headerTitle: { color: "#fff", fontSize: 18, fontWeight: "700" },
+  headerActions: { alignItems: "flex-end", gap: 4 },
   headerUser: { color: "#e8dcc8", fontSize: 12 },
+  mapBtn: {
+    backgroundColor: "rgba(212, 168, 75, 0.25)",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#d4a84b",
+  },
+  mapBtnText: { color: "#d4a84b", fontSize: 11, fontWeight: "700" },
   eventPicker: {
-    flexDirection: "row-reverse",
     gap: 8,
     paddingHorizontal: 12,
     paddingVertical: 12,
@@ -411,7 +499,7 @@ const styles = StyleSheet.create({
     maxWidth: 220,
   },
   chipActive: { backgroundColor: "#5c3d1e", borderColor: "#5c3d1e" },
-  chipText: { fontSize: 12, color: "#5c3d1e", textAlign: "right" },
+  chipText: { fontSize: 12, color: "#5c3d1e" },
   chipTextActive: { color: "#fff" },
   eventHint: {
     textAlign: "center",
@@ -459,6 +547,18 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 22,
   },
+  guideBtn: {
+    marginTop: 12,
+    backgroundColor: "#5c3d1e",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  guideBtnText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 14,
+  },
   cameraWrap: {
     flex: 1,
     minHeight: 220,
@@ -481,31 +581,27 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     color: "#5c3d1e",
-    textAlign: "right",
     marginBottom: 6,
   },
   historyRow: {
-    flexDirection: "row-reverse",
     gap: 8,
     paddingVertical: 4,
     borderTopWidth: 1,
     borderTopColor: "#f5f0e8",
   },
-  historyTime: { fontSize: 10, color: "#8b6914", minWidth: 52, textAlign: "left" },
+  historyTime: { fontSize: 10, color: "#8b6914", minWidth: 52 },
   historyBody: { flex: 1 },
   historyName: {
     fontSize: 12,
     fontWeight: "600",
     color: "#2c1810",
-    textAlign: "right",
   },
   historySeat: {
     fontSize: 11,
     color: "#b8860b",
-    textAlign: "right",
     fontWeight: "600",
   },
-  historyMsg: { fontSize: 10, color: "#8b6914", textAlign: "right" },
+  historyMsg: { fontSize: 10, color: "#8b6914" },
   msg: { fontSize: 16, marginBottom: 16, textAlign: "center" },
   button: {
     backgroundColor: "#5c3d1e",

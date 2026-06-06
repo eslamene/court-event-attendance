@@ -11,6 +11,8 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { API_BASE_URL } from "../config";
+import { useI18n } from "../context/I18nContext";
+import type { Locale } from "../i18n/types";
 import { getBiometricSupport } from "../lib/biometric";
 import { logActivity } from "../lib/activity-log";
 import {
@@ -26,10 +28,11 @@ type Props = {
 };
 
 export function SettingsScreen({ onLogout, onOpenActivityLog }: Props) {
+  const { t, locale, setLocale, textAlign, rowDirection } = useI18n();
   const [userName, setUserName] = useState("");
   const [userEmail, setUserEmail] = useState("");
   const [biometricOn, setBiometricOn] = useState(false);
-  const [biometricLabel, setBiometricLabel] = useState("المصادقة البيومترية");
+  const [biometricLabel, setBiometricLabel] = useState("");
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [passwordPrompt, setPasswordPrompt] = useState("");
   const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
@@ -37,10 +40,18 @@ export function SettingsScreen({ onLogout, onOpenActivityLog }: Props) {
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
+    const labels = {
+      generic: t("biometric.generic"),
+      faceId: t("biometric.faceId"),
+      fingerprint: t("biometric.fingerprint"),
+      iris: t("biometric.iris"),
+      cancel: t("biometric.cancel"),
+      usePassword: t("biometric.usePassword"),
+    };
     const [user, enabled, support, queue] = await Promise.all([
       getUser(),
       isBiometricEnabled(),
-      getBiometricSupport(),
+      getBiometricSupport(labels),
       getOfflineQueue(),
     ]);
     setUserName(user?.name ?? "");
@@ -49,7 +60,7 @@ export function SettingsScreen({ onLogout, onOpenActivityLog }: Props) {
     setBiometricLabel(support.label);
     setBiometricAvailable(support.available && support.enrolled);
     setPendingSync(queue.length);
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void load();
@@ -59,15 +70,12 @@ export function SettingsScreen({ onLogout, onOpenActivityLog }: Props) {
     if (!value) {
       await clearBiometricCredentials();
       setBiometricOn(false);
-      await logActivity("settings", "تم إيقاف الدخول البيومتري");
+      await logActivity("settings", t("settings.biometricDisabled"));
       return;
     }
 
     if (!biometricAvailable) {
-      Alert.alert(
-        "غير متاح",
-        "لم يتم إعداد بصمة الوجه أو بصمة الإصبع على هذا الجهاز"
-      );
+      Alert.alert(t("common.unavailable"), t("settings.biometricUnavailableMsg"));
       return;
     }
 
@@ -76,55 +84,57 @@ export function SettingsScreen({ onLogout, onOpenActivityLog }: Props) {
 
   async function confirmBiometricSetup() {
     if (!passwordPrompt.trim()) {
-      Alert.alert("مطلوب", "أدخل كلمة المرور لتأكيد تفعيل الدخول البيومتري");
+      Alert.alert(t("common.required"), t("settings.passwordRequired"));
       return;
     }
 
     setBusy(true);
     try {
-      await saveBiometricCredentials({
-        email: userEmail,
-        password: passwordPrompt,
-      });
+      await saveBiometricCredentials(
+        { email: userEmail, password: passwordPrompt },
+        t("biometric.credentialsPrompt")
+      );
       setBiometricOn(true);
       setShowPasswordPrompt(false);
       setPasswordPrompt("");
-      await logActivity("settings", `تم تفعيل الدخول عبر ${biometricLabel}`);
-      Alert.alert("تم", `تم تفعيل الدخول عبر ${biometricLabel}`);
+      await logActivity(
+        "settings",
+        t("settings.biometricEnabled", { method: biometricLabel })
+      );
+      Alert.alert(
+        t("common.done"),
+        t("settings.biometricEnabled", { method: biometricLabel })
+      );
     } catch {
-      Alert.alert("خطأ", "تعذّر حفظ بيانات الدخول في التخزين المشفّر");
+      Alert.alert(t("common.error"), t("settings.credentialsSaveFailed"));
     } finally {
       setBusy(false);
     }
   }
 
   async function handleClearOfflineQueue() {
-    Alert.alert(
-      "مسح الطابور",
-      "هل تريد حذف المسوحات المحفوظة محلياً؟",
-      [
-        { text: "إلغاء", style: "cancel" },
-        {
-          text: "مسح",
-          style: "destructive",
-          onPress: async () => {
-            await setOfflineQueue([]);
-            setPendingSync(0);
-            await logActivity("settings", "تم مسح طابور المزامنة المحلي");
-          },
+    Alert.alert(t("settings.clearQueueTitle"), t("settings.clearQueueMessage"), [
+      { text: t("common.cancel"), style: "cancel" },
+      {
+        text: t("common.clear"),
+        style: "destructive",
+        onPress: async () => {
+          await setOfflineQueue([]);
+          setPendingSync(0);
+          await logActivity("settings", t("settings.queueCleared"));
         },
-      ]
-    );
+      },
+    ]);
   }
 
   async function handleLogout() {
-    Alert.alert("تسجيل الخروج", "هل تريد تسجيل الخروج؟", [
-      { text: "إلغاء", style: "cancel" },
+    Alert.alert(t("settings.logoutTitle"), t("settings.logoutMessage"), [
+      { text: t("common.cancel"), style: "cancel" },
       {
-        text: "خروج",
+        text: t("common.logout"),
         style: "destructive",
         onPress: async () => {
-          await logActivity("logout", "تسجيل خروج من الإعدادات");
+          await logActivity("settings", t("settings.logoutActivity"));
           await clearSession();
           onLogout();
         },
@@ -132,17 +142,49 @@ export function SettingsScreen({ onLogout, onOpenActivityLog }: Props) {
     ]);
   }
 
+  function LanguageOption({
+    value,
+    label,
+  }: {
+    value: Locale;
+    label: string;
+  }) {
+    const active = locale === value;
+    return (
+      <TouchableOpacity
+        style={[styles.langOption, active && styles.langOptionActive]}
+        onPress={() => void setLocale(value)}
+      >
+        <Text style={[styles.langOptionText, active && styles.langOptionTextActive]}>
+          {label}
+        </Text>
+      </TouchableOpacity>
+    );
+  }
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
-        <Text style={styles.title}>الإعدادات</Text>
-        <Text style={styles.subtitle}>{userName}</Text>
-        <Text style={styles.email}>{userEmail}</Text>
+        <Text style={[styles.title, { textAlign }]}>{t("settings.title")}</Text>
+        <Text style={[styles.subtitle, { textAlign }]}>{userName}</Text>
+        <Text style={[styles.email, { textAlign }]}>{userEmail}</Text>
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>الأمان</Text>
-        <View style={styles.row}>
+        <Text style={[styles.sectionTitle, { textAlign }]}>
+          {t("settings.language")}
+        </Text>
+        <View style={[styles.langRow, { flexDirection: rowDirection }]}>
+          <LanguageOption value="ar" label={t("settings.languageArabic")} />
+          <LanguageOption value="en" label={t("settings.languageEnglish")} />
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { textAlign }]}>
+          {t("settings.security")}
+        </Text>
+        <View style={[styles.row, { flexDirection: rowDirection }]}>
           <Switch
             value={biometricOn}
             onValueChange={(v) => void handleBiometricToggle(v)}
@@ -151,29 +193,30 @@ export function SettingsScreen({ onLogout, onOpenActivityLog }: Props) {
             thumbColor={biometricOn ? "#5c3d1e" : "#fff"}
           />
           <View style={styles.rowText}>
-            <Text style={styles.rowLabel}>الدخول عبر {biometricLabel}</Text>
-            <Text style={styles.rowHint}>
+            <Text style={[styles.rowLabel, { textAlign }]}>
+              {t("settings.biometricLogin", { method: biometricLabel })}
+            </Text>
+            <Text style={[styles.rowHint, { textAlign }]}>
               {biometricAvailable
-                ? "يُخزَّن في التخزين المشفّر للجهاز (Keychain / Keystore)"
-                : "غير متاح على هذا الجهاز"}
+                ? t("settings.biometricHintAvailable")
+                : t("settings.biometricHintUnavailable")}
             </Text>
           </View>
         </View>
 
         {showPasswordPrompt ? (
           <View style={styles.passwordBox}>
-            <Text style={styles.passwordLabel}>
-              أدخل كلمة المرور لتأكيد التفعيل
+            <Text style={[styles.passwordLabel, { textAlign }]}>
+              {t("settings.passwordConfirm")}
             </Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { textAlign }]}
               secureTextEntry
               value={passwordPrompt}
               onChangeText={setPasswordPrompt}
-              placeholder="كلمة المرور"
-              textAlign="right"
+              placeholder={t("login.password")}
             />
-            <View style={styles.passwordActions}>
+            <View style={[styles.passwordActions, { flexDirection: rowDirection }]}>
               <TouchableOpacity
                 style={styles.secondaryBtn}
                 onPress={() => {
@@ -181,7 +224,7 @@ export function SettingsScreen({ onLogout, onOpenActivityLog }: Props) {
                   setPasswordPrompt("");
                 }}
               >
-                <Text style={styles.secondaryBtnText}>إلغاء</Text>
+                <Text style={styles.secondaryBtnText}>{t("common.cancel")}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.primaryBtn}
@@ -191,7 +234,7 @@ export function SettingsScreen({ onLogout, onOpenActivityLog }: Props) {
                 {busy ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={styles.primaryBtnText}>تأكيد</Text>
+                  <Text style={styles.primaryBtnText}>{t("common.confirm")}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -200,33 +243,38 @@ export function SettingsScreen({ onLogout, onOpenActivityLog }: Props) {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>البيانات</Text>
-        <TouchableOpacity style={styles.linkRow} onPress={onOpenActivityLog}>
-          <Text style={styles.linkArrow}>‹</Text>
-          <Text style={styles.linkLabel}>سجل نشاط التطبيق</Text>
+        <Text style={[styles.sectionTitle, { textAlign }]}>{t("settings.data")}</Text>
+        <TouchableOpacity
+          style={[styles.linkRow, { flexDirection: rowDirection }]}
+          onPress={onOpenActivityLog}
+        >
+          <Text style={styles.linkArrow}>{locale === "ar" ? "‹" : "›"}</Text>
+          <Text style={styles.linkLabel}>{t("settings.activityLog")}</Text>
         </TouchableOpacity>
         {pendingSync > 0 ? (
-          <View style={styles.offlineRow}>
+          <View style={[styles.offlineRow, { flexDirection: rowDirection }]}>
             <TouchableOpacity onPress={() => void handleClearOfflineQueue()}>
-              <Text style={styles.dangerText}>مسح</Text>
+              <Text style={styles.dangerText}>{t("common.clear")}</Text>
             </TouchableOpacity>
             <Text style={styles.offlineText}>
-              {pendingSync} مسح بانتظار المزامنة
+              {t("settings.pendingSync", { count: pendingSync })}
             </Text>
           </View>
         ) : null}
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>حول التطبيق</Text>
-        <Text style={styles.infoRow}>الإصدار: 1.1.0</Text>
-        <Text style={styles.infoRow} numberOfLines={2}>
-          الخادم: {API_BASE_URL}
+        <Text style={[styles.sectionTitle, { textAlign }]}>{t("settings.about")}</Text>
+        <Text style={[styles.infoRow, { textAlign }]}>
+          {t("common.version", { version: "1.1.0" })}
+        </Text>
+        <Text style={[styles.infoRow, { textAlign }]} numberOfLines={2}>
+          {t("common.server", { url: API_BASE_URL })}
         </Text>
       </View>
 
       <TouchableOpacity style={styles.logoutBtn} onPress={() => void handleLogout()}>
-        <Text style={styles.logoutText}>تسجيل الخروج</Text>
+        <Text style={styles.logoutText}>{t("settings.logout")}</Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -241,15 +289,14 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     backgroundColor: "#5c3d1e",
   },
-  title: { color: "#fff", fontSize: 18, fontWeight: "700", textAlign: "right" },
+  title: { color: "#fff", fontSize: 18, fontWeight: "700" },
   subtitle: {
     color: "#fff",
     fontSize: 15,
-    textAlign: "right",
     marginTop: 8,
     fontWeight: "600",
   },
-  email: { color: "#e8dcc8", fontSize: 12, textAlign: "right", marginTop: 2 },
+  email: { color: "#e8dcc8", fontSize: 12, marginTop: 2 },
   section: {
     marginTop: 16,
     marginHorizontal: 12,
@@ -263,11 +310,25 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: "#8b6914",
-    textAlign: "right",
     marginBottom: 12,
   },
+  langRow: { gap: 8 },
+  langOption: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e8dcc8",
+    alignItems: "center",
+    backgroundColor: "#faf8f5",
+  },
+  langOptionActive: {
+    backgroundColor: "#5c3d1e",
+    borderColor: "#5c3d1e",
+  },
+  langOptionText: { fontWeight: "600", color: "#5c3d1e" },
+  langOptionTextActive: { color: "#fff" },
   row: {
-    flexDirection: "row-reverse",
     alignItems: "center",
     gap: 12,
   },
@@ -276,9 +337,8 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
     color: "#2c1810",
-    textAlign: "right",
   },
-  rowHint: { fontSize: 11, color: "#8b6914", textAlign: "right", marginTop: 4 },
+  rowHint: { fontSize: 11, color: "#8b6914", marginTop: 4 },
   passwordBox: {
     marginTop: 12,
     paddingTop: 12,
@@ -288,7 +348,6 @@ const styles = StyleSheet.create({
   passwordLabel: {
     fontSize: 12,
     color: "#5c3d1e",
-    textAlign: "right",
     marginBottom: 8,
   },
   input: {
@@ -299,10 +358,7 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 10,
   },
-  passwordActions: {
-    flexDirection: "row-reverse",
-    gap: 8,
-  },
+  passwordActions: { gap: 8 },
   primaryBtn: {
     flex: 1,
     backgroundColor: "#5c3d1e",
@@ -320,7 +376,6 @@ const styles = StyleSheet.create({
   },
   secondaryBtnText: { color: "#5c3d1e", fontWeight: "600" },
   linkRow: {
-    flexDirection: "row-reverse",
     alignItems: "center",
     justifyContent: "space-between",
     paddingVertical: 8,
@@ -328,7 +383,6 @@ const styles = StyleSheet.create({
   linkLabel: { fontSize: 15, color: "#2c1810", fontWeight: "600" },
   linkArrow: { fontSize: 20, color: "#8b6914" },
   offlineRow: {
-    flexDirection: "row-reverse",
     justifyContent: "space-between",
     alignItems: "center",
     marginTop: 8,
@@ -341,7 +395,6 @@ const styles = StyleSheet.create({
   infoRow: {
     fontSize: 13,
     color: "#5c3d1e",
-    textAlign: "right",
     marginBottom: 6,
   },
   logoutBtn: {

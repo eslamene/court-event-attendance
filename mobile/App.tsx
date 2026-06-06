@@ -3,6 +3,8 @@ import { StatusBar } from "expo-status-bar";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
 import { LoginScreen } from "./src/screens/LoginScreen";
 import { MainTabs } from "./src/navigation/MainTabs";
+import { I18nProvider } from "./src/context/I18nContext";
+import { getStoredLocale, translate } from "./src/i18n";
 import { ApiError, fetchSession, staffLogin } from "./src/api";
 import { authenticateWithBiometric } from "./src/lib/biometric";
 import { logActivity } from "./src/lib/activity-log";
@@ -12,18 +14,25 @@ import {
 } from "./src/lib/settings";
 import { clearSession, getToken, saveEvents, saveSession, saveUser } from "./src/storage";
 
-export default function App() {
+function AppRoot() {
   const [ready, setReady] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
 
   useEffect(() => {
     async function restoreSession() {
+      const locale = await getStoredLocale();
+      const t = (key: string) => translate(locale, key);
+
       try {
         const biometricEnabled = await isBiometricEnabled();
 
         if (biometricEnabled) {
           const unlocked = await authenticateWithBiometric(
-            "تحقق من هويتك لفتح التطبيق"
+            t("biometric.unlockApp"),
+            {
+              cancel: t("biometric.cancel"),
+              usePassword: t("biometric.usePassword"),
+            }
           );
           if (!unlocked) {
             setLoggedIn(false);
@@ -37,7 +46,7 @@ export default function App() {
               await saveUser(session.user);
               await saveEvents(session.events);
               setLoggedIn(true);
-              await logActivity("session_refresh", "استعادة الجلسة بعد التحقق البيومتري");
+              await logActivity("session_refresh", t("session.refreshBiometric"));
               return;
             } catch (error) {
               if (!(error instanceof ApiError && error.status === 401)) {
@@ -47,12 +56,14 @@ export default function App() {
             }
           }
 
-          const credentials = await getBiometricCredentials();
+          const credentials = await getBiometricCredentials(
+            t("biometric.credentialsPrompt")
+          );
           if (credentials) {
             const data = await staffLogin(credentials.email, credentials.password);
             await saveSession(data.token, data.user, data.events);
             setLoggedIn(true);
-            await logActivity("biometric_login", "تسجيل دخول بيومتري تلقائي");
+            await logActivity("session_refresh", t("session.autoBiometricLogin"));
             return;
           }
         }
@@ -67,7 +78,7 @@ export default function App() {
         await saveUser(session.user);
         await saveEvents(session.events);
         setLoggedIn(true);
-        await logActivity("session_refresh", "استعادة الجلسة");
+        await logActivity("session_refresh", t("session.refresh"));
       } catch (error) {
         if (error instanceof ApiError && error.status === 401) {
           await clearSession();
@@ -82,7 +93,8 @@ export default function App() {
   }, []);
 
   async function handleLogout() {
-    await logActivity("logout", "تسجيل خروج");
+    const locale = await getStoredLocale();
+    await logActivity("logout", translate(locale, "session.logout"));
     await clearSession();
     setLoggedIn(false);
   }
@@ -105,6 +117,14 @@ export default function App() {
         <LoginScreen onLogin={() => setLoggedIn(true)} />
       )}
     </>
+  );
+}
+
+export default function App() {
+  return (
+    <I18nProvider>
+      <AppRoot />
+    </I18nProvider>
   );
 }
 

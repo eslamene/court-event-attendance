@@ -7,40 +7,46 @@ import {
   StyleSheet,
   Image,
   ActivityIndicator,
-  I18nManager,
 } from "react-native";
 import { staffLogin } from "../api";
+import { useI18n } from "../context/I18nContext";
 import { canUseBiometricLogin, getBiometricSupport } from "../lib/biometric";
 import { logActivity } from "../lib/activity-log";
 import { getBiometricCredentials } from "../lib/settings";
 import { saveSession } from "../storage";
-
-I18nManager.allowRTL(true);
-I18nManager.forceRTL(true);
 
 type Props = {
   onLogin: () => void;
 };
 
 export function LoginScreen({ onLogin }: Props) {
+  const { t, textAlign } = useI18n();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [biometricReady, setBiometricReady] = useState(false);
-  const [biometricLabel, setBiometricLabel] = useState("المصادقة البيومترية");
+  const [biometricLabel, setBiometricLabel] = useState("");
 
   useEffect(() => {
     async function checkBiometric() {
+      const labels = {
+        generic: t("biometric.generic"),
+        faceId: t("biometric.faceId"),
+        fingerprint: t("biometric.fingerprint"),
+        iris: t("biometric.iris"),
+        cancel: t("biometric.cancel"),
+        usePassword: t("biometric.usePassword"),
+      };
       const [ready, support] = await Promise.all([
-        canUseBiometricLogin(),
-        getBiometricSupport(),
+        canUseBiometricLogin(t("biometric.credentialsPrompt")),
+        getBiometricSupport(labels),
       ]);
       setBiometricReady(ready);
       setBiometricLabel(support.label);
     }
     void checkBiometric();
-  }, []);
+  }, [t]);
 
   async function completeLogin(
     loginEmail: string,
@@ -55,13 +61,13 @@ export function LoginScreen({ onLogin }: Props) {
       await logActivity(
         viaBiometric ? "biometric_login" : "login",
         viaBiometric
-          ? `دخول عبر ${biometricLabel}`
-          : `تسجيل دخول: ${data.user.name}`
+          ? t("login.biometricActivity", { method: biometricLabel })
+          : t("login.loginActivity", { name: data.user.name })
       );
       onLogin();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "خطأ غير متوقع");
-      await logActivity("error", "فشل تسجيل الدخول");
+      setError(e instanceof Error ? e.message : t("login.unexpectedError"));
+      await logActivity("error", t("login.loginFailed"));
     } finally {
       setLoading(false);
     }
@@ -75,15 +81,17 @@ export function LoginScreen({ onLogin }: Props) {
     setError("");
     setLoading(true);
     try {
-      const credentials = await getBiometricCredentials();
+      const credentials = await getBiometricCredentials(
+        t("biometric.credentialsPrompt")
+      );
       if (!credentials) {
-        setError("لم يتم العثور على بيانات الدخول المحفوظة");
+        setError(t("login.credentialsNotFound"));
         setBiometricReady(false);
         return;
       }
       await completeLogin(credentials.email, credentials.password, true);
     } catch {
-      setError("فشل التحقق البيومتري");
+      setError(t("login.biometricFailed"));
     } finally {
       setLoading(false);
     }
@@ -92,9 +100,9 @@ export function LoginScreen({ onLogin }: Props) {
   return (
     <View style={styles.container}>
       <Image source={require("../../assets/logo.png")} style={styles.logo} />
-      <Text style={styles.title}>مسح حضور الفعاليات</Text>
-      <Text style={styles.subtitle}>تسجيل دخول طاقم الاستقبال</Text>
-      <Text style={styles.version}>الإصدار 1.1.0</Text>
+      <Text style={styles.title}>{t("login.title")}</Text>
+      <Text style={styles.subtitle}>{t("login.subtitle")}</Text>
+      <Text style={styles.version}>{t("common.version", { version: "1.1.0" })}</Text>
 
       {biometricReady ? (
         <TouchableOpacity
@@ -103,30 +111,30 @@ export function LoginScreen({ onLogin }: Props) {
           disabled={loading}
         >
           <Text style={styles.biometricIcon}>🔐</Text>
-          <Text style={styles.biometricText}>الدخول عبر {biometricLabel}</Text>
+          <Text style={styles.biometricText}>
+            {t("login.biometricLogin", { method: biometricLabel })}
+          </Text>
         </TouchableOpacity>
       ) : null}
 
       {biometricReady ? (
-        <Text style={styles.orDivider}>— أو —</Text>
+        <Text style={styles.orDivider}>{t("common.or")}</Text>
       ) : null}
 
       <TextInput
-        style={styles.input}
-        placeholder="البريد الإلكتروني"
+        style={[styles.input, { textAlign }]}
+        placeholder={t("login.email")}
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
         keyboardType="email-address"
-        textAlign="right"
       />
       <TextInput
-        style={styles.input}
-        placeholder="كلمة المرور"
+        style={[styles.input, { textAlign }]}
+        placeholder={t("login.password")}
         value={password}
         onChangeText={setPassword}
         secureTextEntry
-        textAlign="right"
       />
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -139,13 +147,11 @@ export function LoginScreen({ onLogin }: Props) {
         {loading ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.buttonText}>دخول</Text>
+          <Text style={styles.buttonText}>{t("login.submit")}</Text>
         )}
       </TouchableOpacity>
 
-      <Text style={styles.hint}>
-        يمكنك تفعيل الدخول البيومتري من الإعدادات بعد تسجيل الدخول
-      </Text>
+      <Text style={styles.hint}>{t("login.hint")}</Text>
     </View>
   );
 }

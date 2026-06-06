@@ -33,7 +33,13 @@ export async function POST(req: Request) {
   const events = await prisma.event.findMany({
     where: { isActive: true },
     orderBy: { date: "desc" },
-    select: { id: true, name: true, date: true, slug: true },
+    select: {
+      id: true,
+      name: true,
+      date: true,
+      slug: true,
+      seatingEnabled: true,
+    },
   });
 
   return NextResponse.json({

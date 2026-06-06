@@ -8,11 +8,13 @@ export type StoredCredentials = {
   password: string;
 };
 
-const SECURE_OPTIONS: SecureStore.SecureStoreOptions = {
-  requireAuthentication: true,
-  authenticationPrompt: "تحقق من هويتك للوصول إلى بيانات تسجيل الدخول",
-  keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-};
+function secureOptions(prompt: string): SecureStore.SecureStoreOptions {
+  return {
+    requireAuthentication: true,
+    authenticationPrompt: prompt,
+    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+  };
+}
 
 export async function isBiometricEnabled(): Promise<boolean> {
   const value = await SecureStore.getItemAsync(BIOMETRIC_ENABLED_KEY);
@@ -28,17 +30,23 @@ export async function setBiometricEnabled(enabled: boolean) {
   await SecureStore.deleteItemAsync(CREDENTIALS_KEY);
 }
 
-export async function saveBiometricCredentials(credentials: StoredCredentials) {
+export async function saveBiometricCredentials(
+  credentials: StoredCredentials,
+  authPrompt: string
+) {
   await SecureStore.setItemAsync(
     CREDENTIALS_KEY,
     JSON.stringify(credentials),
-    SECURE_OPTIONS
+    secureOptions(authPrompt)
   );
   await setBiometricEnabled(true);
 }
 
-export async function getBiometricCredentials(): Promise<StoredCredentials | null> {
-  const raw = await SecureStore.getItemAsync(CREDENTIALS_KEY, SECURE_OPTIONS);
+export async function getBiometricCredentials(
+  authPrompt?: string
+): Promise<StoredCredentials | null> {
+  const options = authPrompt ? secureOptions(authPrompt) : undefined;
+  const raw = await SecureStore.getItemAsync(CREDENTIALS_KEY, options);
   if (!raw) return null;
   try {
     return JSON.parse(raw) as StoredCredentials;

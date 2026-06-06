@@ -8,27 +8,16 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from "react-native";
+import { useI18n } from "../context/I18nContext";
 import {
   clearActivityLog,
   getActivityLog,
   type ActivityEntry,
+  type ActivityType,
 } from "../lib/activity-log";
 
-const TYPE_LABELS: Record<string, string> = {
-  login: "تسجيل دخول",
-  logout: "تسجيل خروج",
-  biometric_login: "دخول بيومتري",
-  scan_success: "مسح ناجح",
-  scan_warning: "مسح تحذير",
-  scan_error: "مسح فاشل",
-  offline_queue: "حفظ دون اتصال",
-  sync: "مزامنة",
-  settings: "إعدادات",
-  session_refresh: "تحديث الجلسة",
-  error: "خطأ",
-};
-
 export function ActivityLogScreen() {
+  const { t, textAlign, rowDirection, dateLocale } = useI18n();
   const [entries, setEntries] = useState<ActivityEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -51,6 +40,10 @@ export function ActivityLogScreen() {
     setEntries([]);
   }
 
+  function typeLabel(type: ActivityType) {
+    return t(`activityLog.types.${type}`);
+  }
+
   if (loading && entries.length === 0) {
     return (
       <View style={styles.center}>
@@ -61,11 +54,13 @@ export function ActivityLogScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.toolbar}>
+      <View style={[styles.toolbar, { flexDirection: rowDirection }]}>
         <TouchableOpacity onPress={() => void handleClear()}>
-          <Text style={styles.clearBtn}>مسح السجل</Text>
+          <Text style={styles.clearBtn}>{t("activityLog.clearLog")}</Text>
         </TouchableOpacity>
-        <Text style={styles.count}>{entries.length} حدث</Text>
+        <Text style={styles.count}>
+          {t("common.eventsCount", { count: entries.length })}
+        </Text>
       </View>
 
       <FlatList
@@ -81,22 +76,20 @@ export function ActivityLogScreen() {
           entries.length === 0 ? styles.emptyContainer : undefined
         }
         ListEmptyComponent={
-          <Text style={styles.empty}>لا يوجد نشاط مسجّل بعد</Text>
+          <Text style={styles.empty}>{t("activityLog.empty")}</Text>
         }
         renderItem={({ item }) => (
           <View style={styles.row}>
-            <View style={styles.rowHeader}>
-              <Text style={styles.type}>
-                {TYPE_LABELS[item.type] ?? item.type}
-              </Text>
+            <View style={[styles.rowHeader, { flexDirection: rowDirection }]}>
+              <Text style={styles.type}>{typeLabel(item.type)}</Text>
               <Text style={styles.time}>
-                {new Date(item.at).toLocaleString("ar-EG", {
+                {new Date(item.at).toLocaleString(dateLocale, {
                   dateStyle: "short",
                   timeStyle: "medium",
                 })}
               </Text>
             </View>
-            <Text style={styles.message}>{item.message}</Text>
+            <Text style={[styles.message, { textAlign }]}>{item.message}</Text>
           </View>
         )}
       />
@@ -108,7 +101,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#faf8f5" },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   toolbar: {
-    flexDirection: "row-reverse",
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 16,
@@ -128,11 +120,10 @@ const styles = StyleSheet.create({
     borderColor: "#e8dcc8",
   },
   rowHeader: {
-    flexDirection: "row-reverse",
     justifyContent: "space-between",
     marginBottom: 4,
   },
   type: { fontSize: 11, fontWeight: "700", color: "#5c3d1e" },
   time: { fontSize: 10, color: "#8b6914" },
-  message: { fontSize: 13, color: "#2c1810", textAlign: "right" },
+  message: { fontSize: 13, color: "#2c1810" },
 });

@@ -1,10 +1,13 @@
 import { API_BASE_URL } from "./config";
+import { getStoredLocale, type Locale } from "./i18n";
+import { getToken } from "./storage";
 
 export type EventItem = {
   id: string;
   name: string;
   date: string;
   slug: string;
+  seatingEnabled?: boolean;
 };
 
 export type ScanResultCode =
@@ -19,6 +22,29 @@ export type ScanRegistration = {
   entity: string;
   eventName: string;
   seatLabel?: string | null;
+  seatTierId?: string | null;
+  seatTierName?: string | null;
+  seatNumber?: number | null;
+};
+
+export type SeatCellStatus = "free" | "approved" | "attended";
+
+export type SeatingMap = {
+  eventId: string;
+  eventName: string;
+  seatingEnabled: boolean;
+  layoutType: string;
+  venue: {
+    stage: { x: number; y: number; width: number; height: number; label: string };
+    seats: Array<{
+      number: number;
+      tierId: string;
+      tierName: string;
+      x: number;
+      y: number;
+      seat: { status: SeatCellStatus };
+    }>;
+  };
 };
 
 export type ScanResult = {
@@ -44,6 +70,18 @@ export class ApiError extends Error {
   }
 }
 
+async function mobileHeaders(
+  token?: string,
+  locale?: Locale
+): Promise<Record<string, string>> {
+  const lang = locale ?? (await getStoredLocale());
+  const headers: Record<string, string> = {
+    "Accept-Language": lang,
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
+
 async function parseJson(res: Response): Promise<Record<string, unknown>> {
   try {
     return (await res.json()) as Record<string, unknown>;
@@ -53,9 +91,10 @@ async function parseJson(res: Response): Promise<Record<string, unknown>> {
 }
 
 export async function staffLogin(email: string, password: string) {
+  const headers = await mobileHeaders();
   const res = await fetch(`${API_BASE_URL}/api/mobile/login`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...headers, "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
   });
   const data = await parseJson(res);
@@ -71,7 +110,7 @@ export async function staffLogin(email: string, password: string) {
 
 export async function fetchSession(token: string) {
   const res = await fetch(`${API_BASE_URL}/api/mobile/session`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: await mobileHeaders(token),
   });
   const data = await parseJson(res);
   if (!res.ok) {
@@ -95,8 +134,8 @@ export async function scanQr(
   const res = await fetch(`${API_BASE_URL}/api/mobile/scan`, {
     method: "POST",
     headers: {
+      ...(await mobileHeaders(token)),
       "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(payload),
   });
@@ -127,6 +166,9 @@ export type AttendanceScan = {
     rank: string;
     entity: string;
     seatLabel: string | null;
+    seatTierId?: string | null;
+    seatTierName?: string | null;
+    seatNumber?: number | null;
   } | null;
 };
 
@@ -144,7 +186,7 @@ export async function fetchEventScans(
 ): Promise<AttendanceLogResponse> {
   const res = await fetch(
     `${API_BASE_URL}/api/mobile/events/${eventId}/scans?scope=${scope}&limit=200`,
-    { headers: { Authorization: `Bearer ${token}` } }
+    { headers: await mobileHeaders(token) }
   );
   const data = await parseJson(res);
   if (!res.ok) {
@@ -153,8 +195,42 @@ export async function fetchEventScans(
   return data as AttendanceLogResponse;
 }
 
+export async function fetchEventSeating(eventId: string): Promise<SeatingMap> {
+  const token = await getToken();
+  if (!token) {
+    throw new ApiError("Session expired", 401);
+  }
+  const res = await fetch(
+    `${API_BASE_URL}/api/mobile/events/${eventId}/seating`,
+    { headers: await mobileHeaders(token) }
+  );
+  const data = await parseJson(res);
+  if (!res.ok) {
+    throw new ApiError(String(data.error || "Failed to load seating map"), res.status);
+  }
+  return data as SeatingMap;
+}
+
+export function hasSeatAssignment(
+  reg?: Pick<
+    ScanRegistration,
+    "seatTierId" | "seatNumber" | "seatLabel"
+  > | null
+): reg is ScanRegistration & {
+  seatTierId: string;
+  seatNumber: number;
+  seatLabel: string;
+} {
+  return Boolean(
+    reg?.seatTierId &&
+      reg.seatNumber != null &&
+      reg.seatLabel
+  );
+}
+
 export function formatRegistrationDetails(
-  registration?: ScanRegistration
+  registration?: ScanRegistration,
+  formatSeat?: (label: string) => string
 ): string {
   if (!registration) return "";
   const lines = [
@@ -163,7 +239,11 @@ export function formatRegistrationDetails(
     registration.entity,
   ];
   if (registration.seatLabel) {
-    lines.push(`المقعد: ${registration.seatLabel}`);
+    lines.push(
+      formatSeat
+        ? formatSeat(registration.seatLabel)
+        : registration.seatLabel
+    );
   }
   return lines.filter(Boolean).join("\n");
 }

@@ -51,7 +51,7 @@ export async function GET(req: Request, { params }: Params) {
           rank: true,
           entity: true,
           seatNumber: true,
-          seatTier: { select: { name: true } },
+          seatTier: { select: { id: true, name: true } },
         },
       },
     },
@@ -83,6 +83,9 @@ export async function GET(req: Request, { params }: Params) {
                     log.registration.seatNumber
                   )
                 : null,
+            seatTierId: log.registration.seatTier?.id ?? null,
+            seatTierName: log.registration.seatTier?.name ?? null,
+            seatNumber: log.registration.seatNumber,
           }
         : null,
     })),
