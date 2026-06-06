@@ -501,6 +501,38 @@ export function resolveSeatOverlaps(
   return result.map(({ vx: _vx, vy: _vy, index: _index, ...s }) => s);
 }
 
+/** Shift seat cloud into canvas without scaling — preserves row spacing. */
+function translateLayoutToBounds(seats: PositionedSeat[], margin = 6): PositionedSeat[] {
+  if (seats.length === 0) return seats;
+
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+
+  for (const s of seats) {
+    minX = Math.min(minX, s.x);
+    maxX = Math.max(maxX, s.x);
+    minY = Math.min(minY, s.y);
+    maxY = Math.max(maxY, s.y);
+  }
+
+  let dx = 0;
+  let dy = 0;
+  if (minX < BOUNDS.min + margin) dx = BOUNDS.min + margin - minX;
+  else if (maxX > BOUNDS.max - margin) dx = BOUNDS.max - margin - maxX;
+
+  if (minY < BOUNDS.min + margin) dy = BOUNDS.min + margin - minY;
+  else if (maxY > BOUNDS.max - margin) dy = BOUNDS.max - margin - maxY;
+
+  if (dx === 0 && dy === 0) return seats;
+
+  return seats.map((s) => {
+    const c = clampPoint(s.x + dx, s.y + dy);
+    return { ...s, x: c.x, y: c.y };
+  });
+}
+
 /** Scale & translate seat cloud to fit canvas if layout overflows. */
 function fitLayoutToBounds(seats: PositionedSeat[]): PositionedSeat[] {
   if (seats.length === 0) return seats;
@@ -572,7 +604,37 @@ function groupSeatsIntoRows(seats: PositionedSeat[], tolerance = 2): PositionedS
 
 /** Force every row to a single Y so grids stay straight. */
 function snapHorizontalRows(seats: PositionedSeat[]): PositionedSeat[] {
-  return groupSeatsIntoRows(seats).flatMap((row) => {
+  const rows = groupSeatsIntoRows(seats);
+  if (rows.length < 2) {
+    return rows.flatMap((row) => {
+      const rowY = row.reduce((sum, s) => sum + s.y, 0) / row.length;
+      return row.map((s) => ({ ...s, y: rowY }));
+    });
+  }
+
+  const centers = rows.map(
+    (row) => row.reduce((sum, s) => sum + s.y, 0) / row.length
+  );
+  const gaps: number[] = [];
+  for (let i = 1; i < centers.length; i++) {
+    gaps.push(Math.abs(centers[i] - centers[i - 1]));
+  }
+  gaps.sort((a, b) => a - b);
+  const medianGap = gaps[Math.floor(gaps.length / 2)] ?? 2;
+  const tolerance = Math.min(1.25, medianGap * 0.28);
+
+  const sorted = [...seats].sort((a, b) => a.y - b.y || a.x - b.x);
+  const snappedRows: PositionedSeat[][] = [];
+  for (const seat of sorted) {
+    const last = snappedRows[snappedRows.length - 1];
+    if (!last || Math.abs(seat.y - last[0].y) > tolerance) {
+      snappedRows.push([seat]);
+    } else {
+      last.push(seat);
+    }
+  }
+
+  return snappedRows.flatMap((row) => {
     const rowY = row.reduce((sum, s) => sum + s.y, 0) / row.length;
     return row.map((s) => ({ ...s, y: rowY }));
   });
@@ -650,17 +712,21 @@ function applyStageClearanceRows(
 
   const rows = groupSeatsIntoRows(seats);
   const stageMidY = stage.y + stage.height / 2;
-  let yShift = 0;
+  const rowPitch = estimateRowPitch(rows, minDist);
+  let nextBelowY = stage.y + stage.height + minDist * 0.85;
+  let nextAboveY = stage.y - minDist * 0.85;
 
   for (const row of rows) {
-    let rowY = row[0].y + yShift;
+    let rowY = row[0].y;
     const hitsStage = row.some((s) => pointInRect(s.x, rowY, zone));
 
     if (hitsStage) {
       if (rowY >= stageMidY) {
-        rowY = stage.y + stage.height + minDist * 0.85;
+        rowY = nextBelowY;
+        nextBelowY += rowPitch;
       } else {
-        rowY = stage.y - minDist * 0.85;
+        rowY = nextAboveY;
+        nextAboveY -= rowPitch;
       }
     }
 
@@ -671,6 +737,20 @@ function applyStageClearanceRows(
   }
 
   return result;
+}
+
+function estimateRowPitch(rows: PositionedSeat[][], fallback: number): number {
+  if (rows.length < 2) return fallback;
+  const centers = rows.map(
+    (row) => row.reduce((sum, s) => sum + s.y, 0) / row.length
+  );
+  const gaps: number[] = [];
+  for (let i = 1; i < centers.length; i++) {
+    gaps.push(Math.abs(centers[i] - centers[i - 1]));
+  }
+  gaps.sort((a, b) => a - b);
+  const median = gaps[Math.floor(gaps.length / 2)] ?? fallback;
+  return Math.max(fallback * 0.72, median);
 }
 
 function layoutOverflowsBounds(seats: PositionedSeat[], margin = 5): boolean {
@@ -718,8 +798,8 @@ function finalizeLayout(
     let result = snapRowAlignedSeats(seats, orientation);
     result = applyStageClearanceRows(result, stage, minDist, orientation);
 
-    if (!densityScaled || layoutOverflowsBounds(result)) {
-      result = fitLayoutToBounds(result);
+    if (layoutOverflowsBounds(result)) {
+      result = translateLayoutToBounds(result);
       result = snapRowAlignedSeats(result, orientation);
     }
 
