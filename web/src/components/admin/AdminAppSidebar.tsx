@@ -16,6 +16,7 @@ import {
   Mail,
   Radio,
   ScrollText,
+  Shield,
   SlidersHorizontal,
   Users,
 } from "lucide-react";
@@ -61,15 +62,19 @@ const mainNavItems = [
     labelKey: "admin.nav.events" as const,
     adminOnly: true,
   },
-  {
-    href: "/admin/users",
-    icon: Users,
-    labelKey: "admin.nav.users" as const,
-    adminOnly: true,
-  },
 ] as const;
 
 const systemNavItems = [
+  {
+    href: "/admin/settings/users",
+    icon: Users,
+    labelKey: "admin.settings.tabUsers" as const,
+  },
+  {
+    href: "/admin/settings/roles",
+    icon: Shield,
+    labelKey: "admin.settings.tabRoles" as const,
+  },
   {
     href: "/admin/settings/channels",
     icon: Radio,

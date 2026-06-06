@@ -43,6 +43,30 @@ export async function PATCH(
   }
 
   const data = parsed.data;
+  const existing = await prisma.user.findUnique({ where: { id } });
+  if (!existing) {
+    return NextResponse.json(
+      { error: await apiT("api.userNotFound") },
+      { status: 404 }
+    );
+  }
+
+  if (
+    existing.role === "ADMIN" &&
+    ((data.role && data.role !== "ADMIN") ||
+      data.isActive === false)
+  ) {
+    const activeAdmins = await prisma.user.count({
+      where: { role: "ADMIN", isActive: true, NOT: { id } },
+    });
+    if (activeAdmins === 0) {
+      return NextResponse.json(
+        { error: await apiT("api.lastAdminRequired") },
+        { status: 400 }
+      );
+    }
+  }
+
   if (data.email) {
     const dup = await prisma.user.findFirst({
       where: { email: data.email.toLowerCase(), NOT: { id } },

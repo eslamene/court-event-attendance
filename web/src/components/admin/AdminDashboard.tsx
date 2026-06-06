@@ -11,6 +11,7 @@ import {
   HandWaving,
   Prohibit,
   Scroll,
+  Shield,
   Users,
   ArrowLeft,
   ArrowRight,
@@ -177,9 +178,15 @@ export function AdminDashboard() {
       show: isAdmin,
     },
     {
-      href: "/admin/users",
+      href: "/admin/settings/users",
       icon: Users,
-      label: t("admin.nav.users"),
+      label: t("admin.settings.tabUsers"),
+      show: isAdmin,
+    },
+    {
+      href: "/admin/settings/roles",
+      icon: Shield,
+      label: t("admin.settings.tabRoles"),
       show: isAdmin,
     },
     {

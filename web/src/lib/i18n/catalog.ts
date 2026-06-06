@@ -114,6 +114,7 @@ export const TRANSLATION_CATALOG: Record<string, Record<string, string>> = {
       "تم تسجيل اعتذاركم وإلغاء التسجيل بنجاح.",
     "api.emailInUse": "البريد الإلكتروني مستخدم مسبقاً",
     "api.cannotEditSelf": "لا يمكن تعديل حسابك من هذه الشاشة",
+    "api.lastAdminRequired": "يجب الإبقاء على مدير نظام نشط واحد على الأقل",
     "api.cannotDeleteSelf": "لا يمكن حذف حسابك الحالي",
     "api.cannotReject": "لا يمكن رفض هذا التسجيل",
     "api.approveSuccess": "تمت الموافقة وإرسال رمز QR",
@@ -380,6 +381,34 @@ export const TRANSLATION_CATALOG: Record<string, Record<string, string>> = {
     "admin.users.passwordPrompt": "كلمة المرور الجديدة (8 أحرف على الأقل)",
     "admin.users.passwordUpdated": "تم تحديث كلمة المرور",
     "admin.users.updateFailed": "فشل التحديث",
+    "admin.users.changeRole": "تغيير الدور",
+    "admin.users.changeRoleTitle": "تغيير دور المستخدم",
+    "admin.users.changeRoleMessage": "اختر دوراً جديداً لـ {name}.",
+    "admin.users.roleUpdated": "تم تحديث الدور",
+
+    "admin.roles.intro":
+      "أدوار النظام محددة مسبقاً. عيّن المستخدمين من شاشة المستخدمين أو اعرضهم حسب الدور أدناه.",
+    "admin.roles.loadFailed": "تعذر تحميل الأدوار",
+    "admin.roles.userCount": "{active} نشط / {total} إجمالي",
+    "admin.roles.viewUsers": "عرض المستخدمين",
+    "admin.roles.fixedRolesHint":
+      "لا يمكن إنشاء أدوار مخصصة حالياً — الأدوار ثابتة في النظام.",
+    "admin.roles.description.ADMIN":
+      "وصول كامل للوحة الإدارة: الفعاليات، المستخدمون، الإعدادات، والتدقيق.",
+    "admin.roles.description.APPROVAL_MANAGER":
+      "مراجعة التسجيلات والموافقة عليها وعرض سجل التدقيق.",
+    "admin.roles.description.EVENT_STAFF":
+      "تسجيل الحضور عبر تطبيق الجوال فقط — بدون دخول لوحة الإدارة.",
+    "admin.roles.permission.manage_events": "إدارة الفعاليات",
+    "admin.roles.permission.manage_users": "إدارة المستخدمين",
+    "admin.roles.permission.manage_roles": "عرض الأدوار",
+    "admin.roles.permission.manage_settings": "إعدادات النظام",
+    "admin.roles.permission.manage_registrations": "إدارة التسجيلات",
+    "admin.roles.permission.approve_registrations": "الموافقة على التسجيلات",
+    "admin.roles.permission.view_audit": "سجل التدقيق",
+    "admin.roles.permission.manage_seating": "مقاعد الفعاليات",
+    "admin.roles.permission.manage_dictionary": "القاموس",
+    "admin.roles.permission.mobile_scan": "مسح الحضور (جوال)",
 
     "admin.settings.title": "حالة الإشعارات",
     "admin.settings.email": "البريد ({provider})",
@@ -395,6 +424,12 @@ export const TRANSLATION_CATALOG: Record<string, Record<string, string>> = {
       "عنوان EMAIL_FROM غير مطابق لمرسل موثّق في Twilio. انسخ البريد بالضبط من Console → Email → Sender Identities.",
     "admin.settings.verifiedSenders": "عناوين موثّقة (Single Sender):",
     "admin.settings.verifiedDomains": "نطاقات موثّقة (Domain Auth):",
+    "admin.settings.tabUsers": "المستخدمون",
+    "admin.settings.tabRoles": "الأدوار والصلاحيات",
+    "admin.settings.usersDescription":
+      "إنشاء حسابات الإدارة وتعيين الأدوار وإعادة تعيين كلمات المرور.",
+    "admin.settings.rolesDescription":
+      "عرض صلاحيات كل دور وعدد المستخدمين المرتبطين به.",
     "admin.settings.tabChannels": "قنوات الإرسال",
     "admin.settings.channelsDescription":
       "حالة البريد وواتساب وSMS وإرسال رسائل الاختبار.",
@@ -965,6 +1000,7 @@ export const TRANSLATION_CATALOG: Record<string, Record<string, string>> = {
       "Your apology was recorded and your registration was cancelled.",
     "api.emailInUse": "Email already in use",
     "api.cannotEditSelf": "You cannot edit your own account here",
+    "api.lastAdminRequired": "At least one active system administrator is required",
     "api.cannotDeleteSelf": "You cannot delete your current account",
     "api.cannotReject": "This registration cannot be rejected",
     "api.approveSuccess": "Approved and QR sent",
@@ -1230,6 +1266,34 @@ export const TRANSLATION_CATALOG: Record<string, Record<string, string>> = {
     "admin.users.passwordPrompt": "New password (at least 8 characters)",
     "admin.users.passwordUpdated": "Password updated",
     "admin.users.updateFailed": "Update failed",
+    "admin.users.changeRole": "Change role",
+    "admin.users.changeRoleTitle": "Change user role",
+    "admin.users.changeRoleMessage": "Choose a new role for {name}.",
+    "admin.users.roleUpdated": "Role updated",
+
+    "admin.roles.intro":
+      "System roles are predefined. Assign users from the Users screen or browse by role below.",
+    "admin.roles.loadFailed": "Could not load roles",
+    "admin.roles.userCount": "{active} active / {total} total",
+    "admin.roles.viewUsers": "View users",
+    "admin.roles.fixedRolesHint":
+      "Custom roles are not supported yet — these roles are fixed in the system.",
+    "admin.roles.description.ADMIN":
+      "Full admin access: events, users, settings, and audit logs.",
+    "admin.roles.description.APPROVAL_MANAGER":
+      "Review and approve registrations; view audit logs.",
+    "admin.roles.description.EVENT_STAFF":
+      "Check-in via the mobile app only — no admin panel login.",
+    "admin.roles.permission.manage_events": "Manage events",
+    "admin.roles.permission.manage_users": "Manage users",
+    "admin.roles.permission.manage_roles": "View roles",
+    "admin.roles.permission.manage_settings": "System settings",
+    "admin.roles.permission.manage_registrations": "Manage registrations",
+    "admin.roles.permission.approve_registrations": "Approve registrations",
+    "admin.roles.permission.view_audit": "Audit log",
+    "admin.roles.permission.manage_seating": "Event seating",
+    "admin.roles.permission.manage_dictionary": "Dictionary",
+    "admin.roles.permission.mobile_scan": "Mobile check-in",
 
     "admin.settings.title": "Notification status",
     "admin.settings.email": "Email ({provider})",
@@ -1244,6 +1308,12 @@ export const TRANSLATION_CATALOG: Record<string, Record<string, string>> = {
       "EMAIL_FROM does not match a verified Twilio sender. Copy the exact address from Console → Email → Sender Identities.",
     "admin.settings.verifiedSenders": "Verified single senders:",
     "admin.settings.verifiedDomains": "Authenticated domains:",
+    "admin.settings.tabUsers": "Users",
+    "admin.settings.tabRoles": "Roles & permissions",
+    "admin.settings.usersDescription":
+      "Create admin accounts, assign roles, and reset passwords.",
+    "admin.settings.rolesDescription":
+      "Review what each role can do and how many users are assigned.",
     "admin.settings.tabChannels": "Delivery channels",
     "admin.settings.channelsDescription":
       "Email, WhatsApp, and SMS status plus test messages.",

@@ -1,7 +1,8 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { KeyRound, Plus, UserMinus, UserPlus } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { KeyRound, Plus, UserCog, UserMinus, UserPlus } from "lucide-react";
 import { TextField, SelectField } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
 import { VisualStatusBadge } from "@/components/admin/VisualStatusBadge";
@@ -31,9 +32,12 @@ type UserRow = {
 
 export function UsersPanel() {
   const { t } = useI18n();
+  const searchParams = useSearchParams();
   const { toastSuccess, toastError, prompt } = useFeedback();
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
+  const [editingRole, setEditingRole] = useState<UserRow | null>(null);
+  const [roleError, setRoleError] = useState("");
 
   const table = useAdminTable<UserRow>({
     fetchUrl: "/api/admin/users",
@@ -86,6 +90,13 @@ export function UsersPanel() {
     [t]
   );
 
+  useEffect(() => {
+    const role = searchParams.get("role");
+    if (role) {
+      table.setColumnFilter("role", role);
+    }
+  }, [searchParams, table.setColumnFilter]);
+
   async function onCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
@@ -115,6 +126,27 @@ export function UsersPanel() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ isActive: !user.isActive }),
     });
+    table.reload();
+  }
+
+  async function onChangeRole(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!editingRole) return;
+    setRoleError("");
+    const form = new FormData(e.currentTarget);
+    const role = String(form.get("role") ?? "");
+    const res = await fetch(`/api/admin/users/${editingRole.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setRoleError(data.error || t("admin.users.updateFailed"));
+      return;
+    }
+    toastSuccess(t("admin.users.roleUpdated"));
+    setEditingRole(null);
     table.reload();
   }
 
@@ -189,6 +221,15 @@ export function UsersPanel() {
             <td className="px-4 py-3">
               <div className="flex flex-wrap gap-2">
                 <ActionButton
+                  icon={UserCog}
+                  onClick={() => {
+                    setRoleError("");
+                    setEditingRole(u);
+                  }}
+                >
+                  {t("admin.users.changeRole")}
+                </ActionButton>
+                <ActionButton
                   icon={u.isActive ? UserMinus : UserPlus}
                   onClick={() => toggleActive(u)}
                 >
@@ -207,6 +248,49 @@ export function UsersPanel() {
           </tr>
         ))}
       </AdminDataTable>
+
+      {editingRole ? (
+        <Modal
+          title={t("admin.users.changeRoleTitle")}
+          onClose={() => {
+            setEditingRole(null);
+            setRoleError("");
+          }}
+        >
+          <form onSubmit={onChangeRole} className="space-y-4">
+            <p className="text-sm text-bronze">
+              {t("admin.users.changeRoleMessage", { name: editingRole.name })}
+            </p>
+            <SelectField
+              name="role"
+              label={t("admin.users.role")}
+              required
+              defaultValue={editingRole.role}
+            >
+              {USER_ROLES.map((r) => (
+                <option key={r} value={r}>
+                  {t(`roles.${r}`)}
+                </option>
+              ))}
+            </SelectField>
+            {roleError ? <p className="text-sm text-error">{roleError}</p> : null}
+            <div className="flex gap-3 pt-2">
+              <PrimaryFormButton icon={UserCog}>
+                {t("admin.common.save")}
+              </PrimaryFormButton>
+              <CancelFormButton
+                type="button"
+                onClick={() => {
+                  setEditingRole(null);
+                  setRoleError("");
+                }}
+              >
+                {t("admin.common.cancel")}
+              </CancelFormButton>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
 
       {creating && (
         <Modal
