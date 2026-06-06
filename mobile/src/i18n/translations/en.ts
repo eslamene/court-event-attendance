@@ -24,6 +24,17 @@ export const en: TranslationTree = {
     myScans: "My Scans",
     settings: "Settings",
   },
+  eventPicker: {
+    label: "Event",
+    title: "Select event",
+    open: "Choose event",
+    noEvents: "No events available",
+    seated: "Seated event",
+  },
+  branding: {
+    platformLogo: "Court of Cassation emblem",
+    eventLogo: "Logo for {{name}}",
+  },
   login: {
     title: "Event Attendance Scanner",
     subtitle: "Reception staff sign in",

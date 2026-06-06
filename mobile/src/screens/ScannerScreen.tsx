@@ -378,14 +378,6 @@ export function ScannerScreen({ onLogout }: Props) {
         rowDirection={rowDirection}
       />
 
-      {selectedEvent ? (
-        <Text style={styles.eventHint} numberOfLines={2}>
-          {t("scanner.activeEvent", { name: selectedEvent.name })}
-        </Text>
-      ) : (
-        <Text style={styles.eventHint}>{t("scanner.noActiveEvents")}</Text>
-      )}
-
       {pendingSync > 0 ? (
         <Text style={styles.syncHint}>
           {t("scanner.pendingSync", { count: pendingSync })}
@@ -512,12 +504,6 @@ const styles = StyleSheet.create({
   headerUser: { color: colors.textOnGoldMuted, fontSize: 12, flexShrink: 1 },
   mapBtn: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md, minHeight: 36 },
   main: { flex: 1, minHeight: 0 },
-  eventHint: {
-    textAlign: "center",
-    ...typography.caption,
-    color: colors.goldLight,
-    paddingHorizontal: spacing.lg,
-  },
   syncHint: {
     textAlign: "center",
     ...typography.caption,

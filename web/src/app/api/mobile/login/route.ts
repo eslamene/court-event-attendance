@@ -38,6 +38,7 @@ export async function POST(req: Request) {
       name: true,
       date: true,
       slug: true,
+      logoPath: true,
       seatingEnabled: true,
     },
   });

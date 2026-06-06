@@ -7,6 +7,7 @@ export type EventItem = {
   name: string;
   date: string;
   slug: string;
+  logoPath?: string | null;
   seatingEnabled?: boolean;
 };
 

@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -11,6 +10,7 @@ import {
 } from "react-native";
 import { Fingerprint, SignIn } from "phosphor-react-native";
 import { staffLogin } from "../api";
+import { AppLogo } from "../components/ui/AppLogo";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Screen } from "../components/ui/Screen";
@@ -93,7 +93,12 @@ export function LoginScreen({ onLogin }: Props) {
           keyboardShouldPersistTaps="handled"
         >
           <View style={[styles.form, { width: formWidth, maxWidth: "100%" }]}>
-            <Image source={require("../../assets/logo.png")} style={styles.logo} />
+            <AppLogo
+              size={120}
+              variant="platform"
+              style={styles.logo}
+              accessibilityLabel={t("branding.platformLogo")}
+            />
             <Text style={styles.title}>{t("login.title")}</Text>
             <Text style={styles.subtitle}>{t("login.subtitle")}</Text>
             <Text style={styles.version}>
@@ -178,11 +183,8 @@ const styles = StyleSheet.create({
   },
   form: { alignSelf: "center" },
   logo: {
-    width: 96,
-    height: 96,
     alignSelf: "center",
     marginBottom: spacing.lg,
-    borderRadius: 48,
   },
   title: {
     ...typography.title,

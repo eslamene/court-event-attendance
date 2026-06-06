@@ -25,6 +25,12 @@ import {
 } from "@/lib/seating-layout";
 import { reorderList } from "@/components/admin/TierSortableList";
 import {
+  buildTierSeatCountErrors,
+  SEAT_TIER_LIMITS,
+  seatTierIssueMessageKey,
+  validateSeatTierLimits,
+} from "@/lib/seating-limits";
+import {
   findDuplicateTierNames,
   suggestUniqueTierName,
   tierNameKey,
@@ -129,17 +135,20 @@ export function EventSeatingEditor({
   }, [load]);
 
   function addTier() {
-    setTiers((prev) => [
-      ...prev,
-      {
-        clientKey: nanoid(),
-        name: suggestUniqueTierName(
-          t("seating.newTierName"),
-          prev.map((tier) => tier.name)
-        ),
-        seatCount: 50,
-      },
-    ]);
+    setTiers((prev) => {
+      if (prev.length >= SEAT_TIER_LIMITS.tierCount.max) return prev;
+      return [
+        ...prev,
+        {
+          clientKey: nanoid(),
+          name: suggestUniqueTierName(
+            t("seating.newTierName"),
+            prev.map((tier) => tier.name)
+          ),
+          seatCount: 50,
+        },
+      ];
+    });
   }
 
   const tierNameErrors = useMemo(() => {
@@ -162,6 +171,18 @@ export function EventSeatingEditor({
     return errors;
   }, [tiers, t]);
 
+  const tierSeatCountErrors = useMemo(
+    () => buildTierSeatCountErrors(tiers, t),
+    [tiers, t]
+  );
+
+  const tierCountError =
+    tiers.length > SEAT_TIER_LIMITS.tierCount.max
+      ? t("seating.tierCountTooHigh", {
+          max: String(SEAT_TIER_LIMITS.tierCount.max),
+        })
+      : null;
+
   function updateTier(index: number, patch: Partial<TierRow>) {
     setTiers((prev) =>
       prev.map((tier, i) => (i === index ? { ...tier, ...patch } : tier))
@@ -182,6 +203,12 @@ export function EventSeatingEditor({
       const duplicate = findDuplicateTierNames(tiers);
       if (duplicate) {
         toastError(t("seating.tierNameDuplicate"));
+        return;
+      }
+      const limits = validateSeatTierLimits(tiers);
+      if (!limits.ok) {
+        const { key, vars } = seatTierIssueMessageKey(limits.issue);
+        toastError(t(key, vars));
         return;
       }
     }
@@ -308,11 +335,21 @@ export function EventSeatingEditor({
                 size="sm"
                 className="h-7 gap-1 px-2 text-[11px]"
                 onClick={addTier}
+                disabled={tiers.length >= SEAT_TIER_LIMITS.tierCount.max}
               >
                 <Plus className="size-3.5" />
                 {t("seating.addTier")}
               </Button>
             </div>
+            <p className="text-[10px] text-bronze/80">
+              {t("seating.seatCountLimitsHint", {
+                max: String(SEAT_TIER_LIMITS.seatsPerTier.max),
+                totalMax: String(SEAT_TIER_LIMITS.totalSeats.max),
+              })}
+            </p>
+            {tierCountError ? (
+              <p className="text-[10px] text-destructive">{tierCountError}</p>
+            ) : null}
 
             {tiers.length === 0 ? (
               <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-bronze">
@@ -322,6 +359,7 @@ export function EventSeatingEditor({
               <div className="space-y-1">
                 {tiers.map((tier, index) => {
                   const nameError = tierNameErrors[index];
+                  const seatError = tierSeatCountErrors[index];
                   return (
                     <div
                       key={tier.id ?? tier.clientKey ?? `new-${index}`}
@@ -352,19 +390,31 @@ export function EventSeatingEditor({
                           </p>
                         ) : null}
                       </div>
-                      <Input
-                        type="number"
-                        min={1}
-                        value={String(tier.seatCount)}
-                        onChange={(e) =>
-                          updateTier(index, {
-                            seatCount: Number(e.target.value) || 0,
-                          })
-                        }
-                        dir="ltr"
-                        aria-label={t("seating.seatCount")}
-                        className="h-7 px-2 text-left text-xs"
-                      />
+                      <div className="space-y-0.5">
+                        <Input
+                          type="number"
+                          min={SEAT_TIER_LIMITS.seatsPerTier.min}
+                          max={SEAT_TIER_LIMITS.seatsPerTier.max}
+                          value={String(tier.seatCount)}
+                          onChange={(e) =>
+                            updateTier(index, {
+                              seatCount: Number(e.target.value) || 0,
+                            })
+                          }
+                          dir="ltr"
+                          aria-label={t("seating.seatCount")}
+                          aria-invalid={Boolean(seatError)}
+                          className={cn(
+                            "h-7 px-2 text-left text-xs",
+                            seatError && "border-destructive"
+                          )}
+                        />
+                        {seatError ? (
+                          <p className="text-[9px] leading-tight text-destructive">
+                            {seatError}
+                          </p>
+                        ) : null}
+                      </div>
                       <Button
                         type="button"
                         variant="ghost"

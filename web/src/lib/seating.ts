@@ -10,6 +10,10 @@ import {
   parseLayoutConfig,
   serializeLayoutConfig,
 } from "./seating-layout";
+import {
+  collectSeatTierValidationIssues,
+  SEAT_TIER_LIMITS,
+} from "./seating-limits";
 import { findDuplicateTierNames } from "./seating-tier-names";
 
 const OCCUPIED_STATUSES = ["APPROVED", "ATTENDED"] as const;
@@ -93,6 +97,28 @@ export function validateSeatTiers(
       error: "At least one seat tier is required when seating is enabled",
     };
   }
+
+  const limitIssues = collectSeatTierValidationIssues(tiers);
+  if (limitIssues.length > 0) {
+    const first = limitIssues[0];
+    if (first.type === "tier_count") {
+      return {
+        ok: false,
+        error: `Maximum ${first.max} seat tiers allowed`,
+      };
+    }
+    if (first.type === "total_seats") {
+      return {
+        ok: false,
+        error: `Total seats (${first.count}) exceeds the maximum of ${first.max}`,
+      };
+    }
+    return {
+      ok: false,
+      error: `Tier "${first.name}" has ${first.count} seats; maximum per tier is ${first.max}`,
+    };
+  }
+
   const normalized: SeatTierInput[] = [];
   for (const tier of tiers) {
     const name = tier.name.trim();
@@ -100,8 +126,15 @@ export function validateSeatTiers(
     if (!name) {
       return { ok: false, error: "Each tier needs a name" };
     }
-    if (!Number.isInteger(seatCount) || seatCount < 1 || seatCount > 10000) {
-      return { ok: false, error: `Invalid seat count for tier "${name}"` };
+    if (
+      !Number.isInteger(seatCount) ||
+      seatCount < SEAT_TIER_LIMITS.seatsPerTier.min ||
+      seatCount > SEAT_TIER_LIMITS.seatsPerTier.max
+    ) {
+      return {
+        ok: false,
+        error: `Invalid seat count for tier "${name}" (allowed: ${SEAT_TIER_LIMITS.seatsPerTier.min}–${SEAT_TIER_LIMITS.seatsPerTier.max})`,
+      };
     }
     normalized.push({
       id: tier.id,

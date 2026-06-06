@@ -52,13 +52,18 @@ import {
   type StagePosition,
 } from "@/lib/seating-layout";
 import type { SeatingMapTier } from "@/lib/seating";
+import {
+  buildTierSeatCountErrors,
+  collectSeatTierValidationIssues,
+  SEAT_TIER_LIMITS,
+} from "@/lib/seating-limits";
 import { tierNameKey } from "@/lib/seating-tier-names";
 import { Input } from "@/components/ui/input";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
 import { cn } from "@/lib/utils";
 
 const layoutIcons: Record<SeatingLayoutType, typeof Theater> = {
@@ -147,38 +152,6 @@ function tiersToPreviewTiers(tiers: TierPreview[]): SeatingMapTier[] {
   }));
 }
 
-function SectionInfoTip({
-  content,
-  label,
-}: {
-  content: string;
-  label: string;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <button
-            type="button"
-            className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-bronze/65 transition-colors hover:bg-gold/10 hover:text-gold-dark"
-            aria-label={label}
-            onClick={(e) => e.stopPropagation()}
-          />
-        }
-      >
-        <Info className="size-3.5" aria-hidden />
-      </TooltipTrigger>
-      <TooltipContent
-        side="bottom"
-        align="start"
-        className="max-w-[15rem] text-start leading-snug"
-      >
-        {content}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
 function DesignerSection({
   title,
   icon: Icon,
@@ -199,9 +172,10 @@ function DesignerSection({
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  const [infoOpen, setInfoOpen] = useState(false);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+    <div className="rounded-xl border border-border bg-card shadow-sm">
       <div className="flex items-center gap-2 px-3 py-2.5">
         <button
           type="button"
@@ -221,12 +195,31 @@ function DesignerSection({
           />
         </button>
         {info && infoLabel ? (
-          <SectionInfoTip content={info} label={infoLabel} />
+          <button
+            type="button"
+            className={cn(
+              "inline-flex size-5 shrink-0 items-center justify-center rounded-full text-bronze/65 transition-colors hover:bg-gold/10 hover:text-gold-dark",
+              infoOpen && "bg-gold/10 text-gold-dark"
+            )}
+            aria-label={infoLabel}
+            aria-expanded={infoOpen}
+            onClick={() => {
+              setInfoOpen((value) => !value);
+              setOpen(true);
+            }}
+          >
+            <Info className="size-3.5" aria-hidden />
+          </button>
         ) : null}
         {headerAction}
       </div>
       {open ? (
-        <div className="space-y-3 border-t border-border bg-[#faf8f5]/40 px-3 pb-3 pt-2.5">
+        <div className="space-y-3 overflow-hidden border-t border-border bg-[#faf8f5]/40 px-3 pb-3 pt-2.5">
+          {infoOpen && info ? (
+            <p className="rounded-lg border border-border bg-card px-2.5 py-2 text-xs leading-relaxed text-bronze">
+              {info}
+            </p>
+          ) : null}
           {children}
         </div>
       ) : null}
@@ -444,14 +437,21 @@ export function SeatingLayoutDesigner({
     0
   );
 
+  const seatLimitIssues = useMemo(
+    () => collectSeatTierValidationIssues(tiers),
+    [tiers]
+  );
+  const hasSeatLimitIssues = seatLimitIssues.length > 0;
+
   const previewVenue = useMemo(() => {
+    if (hasSeatLimitIssues) return null;
     const previewTiers = tiersToPreviewTiers(activeTiers);
     if (previewTiers.length === 0) return null;
     return computeVenueLayout(previewTiers, layoutType, {
       ...layoutConfig,
       stagePosition,
     });
-  }, [activeTiers, layoutType, layoutConfig, stagePosition]);
+  }, [activeTiers, hasSeatLimitIssues, layoutType, layoutConfig, stagePosition]);
 
   const layoutStats = useMemo(
     () =>
@@ -498,6 +498,18 @@ export function SeatingLayoutDesigner({
     }
     return errors;
   }, [tiers, t]);
+
+  const tierSeatCountErrors = useMemo(
+    () => buildTierSeatCountErrors(tiers, t),
+    [tiers, t]
+  );
+
+  const tierCountError =
+    tiers.length > SEAT_TIER_LIMITS.tierCount.max
+      ? t("seating.tierCountTooHigh", {
+          max: String(SEAT_TIER_LIMITS.tierCount.max),
+        })
+      : null;
 
   const seatsPerRowMax = Math.min(
     ROW_LAYOUT_LIMITS.seatsPerRow.max,
@@ -605,27 +617,19 @@ export function SeatingLayoutDesigner({
   }
 
   return (
-    <div
-      className={cn(
-        "flex min-h-0 flex-col",
-        expandedPreview && "h-full min-h-0"
-      )}
-    >
-      <div
-        className={cn(
-          "grid min-h-0 flex-1 grid-cols-1 gap-4 md:gap-5",
-          "xl:grid-cols-[minmax(0,min(100%,24rem))_minmax(0,1fr)]",
-          expandedPreview && "h-full min-h-0"
-        )}
+    <div className="flex h-full min-h-0 flex-col">
+      <ResizablePanelGroup
+        orientation="horizontal"
+        className="min-h-0 flex-1"
       >
-        {/* ——— Settings panel ——— */}
-        <aside
-          className={cn(
-            "flex min-w-0 flex-col gap-3",
-            "xl:max-h-[min(82vh,820px)] xl:overflow-y-auto xl:overscroll-contain xl:pe-1",
-            expandedPreview && "xl:max-h-none xl:h-full"
-          )}
-        >
+          <ResizablePanel
+            id="seating-designer-settings"
+            defaultSize={32}
+            minSize={22}
+            maxSize={48}
+            className="min-h-0"
+          >
+            <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto overscroll-contain pe-1">
           <div className="flex items-center justify-between gap-2 rounded-xl border border-border bg-[#faf8f5] px-3 py-2">
             <div className="min-w-0">
               <p className="text-xs font-medium text-gold-dark">
@@ -667,12 +671,22 @@ export function SeatingLayoutDesigner({
                 size="sm"
                 className="h-7 gap-1 px-2 text-[11px]"
                 onClick={onAddTier}
+                disabled={tiers.length >= SEAT_TIER_LIMITS.tierCount.max}
               >
                 <Plus className="size-3.5" />
                 {t("seating.addTier")}
               </Button>
             }
           >
+            <p className="text-[10px] text-bronze/80">
+              {t("seating.seatCountLimitsHint", {
+                max: String(SEAT_TIER_LIMITS.seatsPerTier.max),
+                totalMax: String(SEAT_TIER_LIMITS.totalSeats.max),
+              })}
+            </p>
+            {tierCountError ? (
+              <p className="text-[10px] text-destructive">{tierCountError}</p>
+            ) : null}
             {tiers.length === 0 ? (
               <p className="rounded-lg border border-dashed border-border bg-card px-2 py-3 text-center text-[11px] text-bronze">
                 {t("seating.noTiers")}
@@ -697,6 +711,7 @@ export function SeatingLayoutDesigner({
                   const ringValue =
                     getTierPlacement(layoutConfig, tierKey).ring ?? 0;
                   const nameError = tierNameErrors[index];
+                  const seatError = tierSeatCountErrors[index];
 
                   return (
                     <>
@@ -719,19 +734,31 @@ export function SeatingLayoutDesigner({
                             <p className="text-[10px] text-destructive">{nameError}</p>
                           ) : null}
                         </div>
-                        <Input
-                          type="number"
-                          min={1}
-                          value={String(tier.seatCount)}
-                          onChange={(e) =>
-                            onUpdateTier(index, {
-                              seatCount: Number(e.target.value) || 0,
-                            })
-                          }
-                          dir="ltr"
-                          aria-label={t("seating.seatCount")}
-                          className="h-7 px-2 text-left text-xs"
-                        />
+                        <div className="min-w-0 space-y-0.5">
+                          <Input
+                            type="number"
+                            min={SEAT_TIER_LIMITS.seatsPerTier.min}
+                            max={SEAT_TIER_LIMITS.seatsPerTier.max}
+                            value={String(tier.seatCount)}
+                            onChange={(e) =>
+                              onUpdateTier(index, {
+                                seatCount: Number(e.target.value) || 0,
+                              })
+                            }
+                            dir="ltr"
+                            aria-label={t("seating.seatCount")}
+                            aria-invalid={Boolean(seatError)}
+                            className={cn(
+                              "h-7 px-2 text-left text-xs",
+                              seatError && "border-destructive"
+                            )}
+                          />
+                          {seatError ? (
+                            <p className="text-[9px] leading-tight text-destructive">
+                              {seatError}
+                            </p>
+                          ) : null}
+                        </div>
                       </div>
                       {showArenaRings ? (
                         <select
@@ -971,10 +998,21 @@ export function SeatingLayoutDesigner({
               onChange={(v) => patchConfig({ seatPadding: v })}
             />
           </DesignerSection>
-        </aside>
+            </div>
+          </ResizablePanel>
 
-        {/* ——— Preview ——— */}
-        <section className="flex min-h-0 min-h-[min(280px,52vh)] flex-col gap-2 xl:min-h-[min(420px,72vh)]">
+          <ResizableHandle
+            withHandle
+            className="mx-1 w-2 shrink-0 border-s border-border/70 bg-[#faf8f5]/60 transition-colors hover:bg-gold/10"
+          />
+
+          <ResizablePanel
+            id="seating-designer-preview"
+            defaultSize={68}
+            minSize={52}
+            className="min-h-0"
+          >
+            <section className="flex h-full min-h-0 flex-col gap-2">
           <div className="flex shrink-0 flex-wrap items-start justify-between gap-2">
             <div>
               <h4 className="text-sm font-semibold text-gold-dark">
@@ -1078,15 +1116,18 @@ export function SeatingLayoutDesigner({
             ) : (
               <div className="flex h-full min-h-[240px] w-full items-center justify-center rounded-xl border border-dashed border-border bg-card/50">
                 <p className="px-4 text-center text-sm text-bronze">
-                  {t("seating.layoutPreviewEmpty")}
+                  {hasSeatLimitIssues
+                    ? t("seating.layoutPreviewLimitExceeded")
+                    : t("seating.layoutPreviewEmpty")}
                 </p>
               </div>
             )}
           </SeatingDesignerViewport>
 
           <p className="shrink-0 text-[11px] text-bronze/70">{t("seating.panHint")}</p>
-        </section>
-      </div>
+            </section>
+          </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
 }

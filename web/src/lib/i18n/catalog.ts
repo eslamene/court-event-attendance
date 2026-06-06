@@ -631,6 +631,13 @@ export const TRANSLATION_CATALOG: Record<string, Record<string, string>> = {
     "seating.noTiers": "أضف فئة واحدة على الأقل.",
     "seating.tierName": "اسم الفئة",
     "seating.seatCount": "عدد المقاعد",
+    "seating.seatCountLimitsHint":
+      "من 1 إلى {max} مقعد لكل فئة، بحد أقصى {totalMax} مقعد إجمالاً.",
+    "seating.seatCountTooHigh":
+      "«{name}»: {count} مقعد يتجاوز الحد الأقصى ({max}) لكل فئة.",
+    "seating.seatCountTotalTooHigh":
+      "إجمالي المقاعد ({count}) يتجاوز الحد الأقصى ({max}).",
+    "seating.tierCountTooHigh": "الحد الأقصى {max} فئات للمقاعد.",
     "seating.newTierName": "فئة جديدة",
     "seating.tierNameDuplicate": "اسم الفئة مستخدم بالفعل",
     "seating.tierStats": "{assigned} / {total} محجوز",
@@ -695,6 +702,8 @@ export const TRANSLATION_CATALOG: Record<string, Record<string, string>> = {
     "seating.exitFullscreen": "الخروج من ملء الشاشة",
     "seating.layoutPreview": "معاينة التوزيع",
     "seating.layoutPreviewEmpty": "أضف فئة مقاعد واحدة على الأقل للمعاينة.",
+    "seating.layoutPreviewLimitExceeded":
+      "أصلح أعداد المقاعد ضمن الحدود المسموحة لعرض المعاينة.",
     "seating.stagePosition": "موقع المسرح / المركز",
     "seating.stageLabel": "تسمية المسرح",
     "seating.stageLabelPlaceholder": "مسرح",
@@ -1447,6 +1456,13 @@ export const TRANSLATION_CATALOG: Record<string, Record<string, string>> = {
     "seating.noTiers": "Add at least one tier.",
     "seating.tierName": "Tier name",
     "seating.seatCount": "Number of seats",
+    "seating.seatCountLimitsHint":
+      "1–{max} seats per tier, up to {totalMax} seats in total.",
+    "seating.seatCountTooHigh":
+      "«{name}»: {count} seats exceeds the per-tier maximum ({max}).",
+    "seating.seatCountTotalTooHigh":
+      "Total seats ({count}) exceeds the maximum ({max}).",
+    "seating.tierCountTooHigh": "Maximum {max} seat tiers allowed.",
     "seating.newTierName": "New tier",
     "seating.tierNameDuplicate": "This tier name is already used",
     "seating.tierStats": "{assigned} / {total} assigned",
@@ -1513,6 +1529,8 @@ export const TRANSLATION_CATALOG: Record<string, Record<string, string>> = {
     "seating.exitFullscreen": "Exit full screen",
     "seating.layoutPreview": "Layout preview",
     "seating.layoutPreviewEmpty": "Add at least one seat tier to preview.",
+    "seating.layoutPreviewLimitExceeded":
+      "Fix seat counts to stay within the limits before previewing the layout.",
     "seating.stagePosition": "Stage / center position",
     "seating.stageLabel": "Stage label",
     "seating.stageLabelPlaceholder": "Stage",

@@ -22,6 +22,17 @@ export const ar = {
     myScans: "مسوحاتي",
     settings: "الإعدادات",
   },
+  eventPicker: {
+    label: "الفعالية",
+    title: "اختر فعالية",
+    open: "اختيار الفعالية",
+    noEvents: "لا توجد فعاليات متاحة",
+    seated: "فعالية بمقاعد",
+  },
+  branding: {
+    platformLogo: "شعار محكمة النقض",
+    eventLogo: "شعار {{name}}",
+  },
   login: {
     title: "مسح حضور الفعاليات",
     subtitle: "تسجيل دخول طاقم الاستقبال",

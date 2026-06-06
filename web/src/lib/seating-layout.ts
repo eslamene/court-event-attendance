@@ -796,14 +796,20 @@ function finalizeLayout(
 
   if (rowAligned) {
     let result = snapRowAlignedSeats(seats, orientation);
-    result = applyStageClearanceRows(result, stage, minDist, orientation);
+    const centerStage = config.stagePosition === "center";
+
+    if (!centerStage) {
+      result = applyStageClearanceRows(result, stage, minDist, orientation);
+    }
 
     if (layoutOverflowsBounds(result)) {
       result = translateLayoutToBounds(result);
       result = snapRowAlignedSeats(result, orientation);
     }
 
-    result = applyStageClearanceRows(result, stage, minDist * 0.9, orientation);
+    if (!centerStage) {
+      result = applyStageClearanceRows(result, stage, minDist * 0.9, orientation);
+    }
     return snapRowAlignedSeats(result, orientation);
   }
 
@@ -1058,6 +1064,65 @@ function resolveTierRowLayout(
   return { spr, totalRows: Math.ceil(tier.seatCount / spr) };
 }
 
+function rowDeltaForStage(
+  orientation: RowOrientation,
+  position: StagePosition,
+  metrics: LayoutMetrics
+): { dx: number; dy: number } {
+  if (orientation === "horizontal") {
+    return {
+      dx: 0,
+      dy: position === "bottom" ? -metrics.vPitch : metrics.vPitch,
+    };
+  }
+  return {
+    dx: position === "right" ? -metrics.hPitch : metrics.hPitch,
+    dy: 0,
+  };
+}
+
+function adaptMetricsToStageBand(
+  stage: StageRect,
+  position: StagePosition,
+  tiers: SeatingMapTier[],
+  config: SeatingLayoutConfig,
+  metrics: LayoutMetrics,
+  seatsPerRowByTier: Map<string, number>
+): LayoutMetrics {
+  const orientation = rowOrientationForStage(position);
+  const gap = metrics.tierGap + metrics.minDist * 0.35;
+  const margin = BOUNDS.min + 4;
+  const tierGaps = Math.max(0, tiers.length - 1) * metrics.tierGap;
+
+  let rowSum = 0;
+  for (const tier of tiers) {
+    rowSum += resolveTierRowLayout(tier, config, metrics, seatsPerRowByTier).totalRows;
+  }
+  if (rowSum <= 0) return metrics;
+
+  const minPitch = metrics.minDist * 0.72;
+
+  if (orientation === "horizontal") {
+    const usable =
+      position === "bottom"
+        ? stage.y - gap - margin
+        : BOUNDS.max - margin - (stage.y + stage.height + gap);
+    const needed = rowSum * metrics.vPitch + tierGaps;
+    if (needed <= usable) return metrics;
+    const rowPitch = Math.max(minPitch, (usable - tierGaps) / rowSum);
+    return { ...metrics, vPitch: Math.min(metrics.vPitch, rowPitch) };
+  }
+
+  const usable =
+    position === "right"
+      ? stage.x - gap - margin
+      : BOUNDS.max - margin - (stage.x + stage.width + gap);
+  const needed = rowSum * metrics.hPitch + tierGaps;
+  if (needed <= usable) return metrics;
+  const colPitch = Math.max(minPitch, (usable - tierGaps) / rowSum);
+  return { ...metrics, hPitch: Math.min(metrics.hPitch, colPitch) };
+}
+
 function placeTierRows(
   tier: SeatingMapTier,
   origin: { x: number; y: number },
@@ -1067,7 +1132,8 @@ function placeTierRows(
   fanAxis: { x: number; y: number },
   aisleCenter: boolean,
   seatsPerRowByTier?: Map<string, number>,
-  aisleGapOverride?: number
+  aisleGapOverride?: number,
+  rowDelta?: { dx: number; dy: number }
 ): { seats: PositionedSeat[]; end: { x: number; y: number } } {
   const { spr, totalRows } = resolveTierRowLayout(
     tier,
@@ -1075,6 +1141,11 @@ function placeTierRows(
     metrics,
     seatsPerRowByTier
   );
+  const delta =
+    rowDelta ??
+    (orientation === "horizontal"
+      ? { dx: 0, dy: metrics.vPitch }
+      : { dx: metrics.hPitch, dy: 0 });
   const seats: PositionedSeat[] = [];
   let ox = origin.x;
   let oy = origin.y;
@@ -1082,6 +1153,8 @@ function placeTierRows(
   for (let row = 0; row < totalRows; row++) {
     const startIdx = row * spr;
     const seatsInRow = Math.min(spr, tier.seatCount - startIdx);
+    const rowX = origin.x + delta.dx * row;
+    const rowY = origin.y + delta.dy * row;
     const ctx: PlacementContext = {
       metrics,
       orientation,
@@ -1097,19 +1170,16 @@ function placeTierRows(
         seatsInRow,
         spr,
         startIdx,
-        ox,
-        oy,
+        rowX,
+        rowY,
         ctx,
         aisleCenter,
         aisleGapOverride
       )
     );
 
-    if (orientation === "horizontal") {
-      oy += metrics.vPitch;
-    } else {
-      ox += metrics.hPitch;
-    }
+    ox = rowX + delta.dx;
+    oy = rowY + delta.dy;
   }
 
   return {
@@ -1118,45 +1188,29 @@ function placeTierRows(
   };
 }
 
-function centerStageRowPlan(
+function centerStageBandPitch(
   stage: StageRect,
   metrics: LayoutMetrics,
-  totalRows: number
-): { rowPitch: number; rowsBelow: number; rowsAbove: number } {
+  rowsBelow: number,
+  rowsAbove: number,
+  tierCount: number
+): number {
   const { belowHeight, aboveHeight } = centerStageBands(stage, metrics);
   const minPitch = metrics.minDist * 0.72;
+  const tierGaps = Math.max(0, tierCount - 1) * metrics.tierGap;
+  const pBelow =
+    rowsBelow > 0 ? (belowHeight - tierGaps) / rowsBelow : Infinity;
+  const pAbove =
+    rowsAbove > 0 ? (aboveHeight - tierGaps) / rowsAbove : Infinity;
+  return Math.max(minPitch, Math.min(metrics.vPitch, pBelow, pAbove));
+}
 
-  const pitchFor = (rowsBelow: number, rowsAbove: number) => {
-    const pBelow = rowsBelow > 0 ? belowHeight / rowsBelow : Infinity;
-    const pAbove = rowsAbove > 0 ? aboveHeight / rowsAbove : Infinity;
-    return Math.min(metrics.vPitch, pBelow, pAbove);
-  };
-
-  let rowsBelow = Math.ceil(totalRows / 2);
-  let rowsAbove = totalRows - rowsBelow;
-  let rowPitch = pitchFor(rowsBelow, rowsAbove);
-
-  if (rowPitch < minPitch && totalRows > 1) {
-    let bestPitch = rowPitch;
-    let bestBelow = rowsBelow;
-    let bestAbove = rowsAbove;
-    for (let below = 1; below < totalRows; below++) {
-      const above = totalRows - below;
-      const pitch = pitchFor(below, above);
-      if (pitch > bestPitch) {
-        bestPitch = pitch;
-        bestBelow = below;
-        bestAbove = above;
-      }
-    }
-    rowsBelow = bestBelow;
-    rowsAbove = bestAbove;
-    rowPitch = Math.max(bestPitch, minPitch);
-  } else {
-    rowPitch = Math.max(rowPitch, minPitch);
-  }
-
-  return { rowPitch, rowsBelow, rowsAbove };
+function splitTierRowsAroundCenter(totalRows: number): {
+  rowsBelow: number;
+  rowsAbove: number;
+} {
+  const rowsBelow = Math.ceil(totalRows / 2);
+  return { rowsBelow, rowsAbove: totalRows - rowsBelow };
 }
 
 /** Rows above and below a center stage — avoids seating through the stage footprint. */
@@ -1175,23 +1229,32 @@ function layoutRowBasedAroundCenter(
   const aisleGap = centerStageAisleGap(stage, metrics);
   const useAisle = aisleCenter || true;
 
-  let belowY = stageBottom + gap;
-  let aboveY = stageTop - gap;
-
-  for (const tier of tiers) {
+  const tierPlans = tiers.map((tier) => {
     const { spr, totalRows } = resolveTierRowLayout(
       tier,
       config,
       metrics,
       seatsPerRowByTier
     );
-    const { rowPitch, rowsBelow, rowsAbove } = centerStageRowPlan(
-      stage,
-      metrics,
-      totalRows
-    );
-    const placeMetrics = { ...metrics, vPitch: rowPitch };
+    const { rowsBelow, rowsAbove } = splitTierRowsAroundCenter(totalRows);
+    return { tier, spr, rowsBelow, rowsAbove };
+  });
 
+  const totalBelow = tierPlans.reduce((sum, plan) => sum + plan.rowsBelow, 0);
+  const totalAbove = tierPlans.reduce((sum, plan) => sum + plan.rowsAbove, 0);
+  const rowPitch = centerStageBandPitch(
+    stage,
+    metrics,
+    totalBelow,
+    totalAbove,
+    tiers.length
+  );
+  const placeMetrics = { ...metrics, vPitch: rowPitch };
+
+  let belowY = stageBottom + gap;
+  let aboveY = stageTop - gap;
+
+  for (const { tier, spr, rowsBelow, rowsAbove } of tierPlans) {
     let seatIdx = 0;
 
     for (let row = 0; row < rowsBelow; row++) {
@@ -1339,7 +1402,20 @@ function layoutTheaterLike(
     );
   }
 
-  const origin = seatingOriginForStage(stage, position, metrics);
+  const placementMetrics = adaptMetricsToStageBand(
+    stage,
+    position,
+    tiers,
+    config,
+    metrics,
+    seatsPerRowByTier
+  );
+  const origin = seatingOriginForStage(stage, position, placementMetrics);
+  const rowDelta = rowDeltaForStage(origin.orientation, position, placementMetrics);
+  const tierGapSign =
+    origin.orientation === "horizontal"
+      ? Math.sign(rowDelta.dy || 1)
+      : Math.sign(rowDelta.dx || 1);
   const all: PositionedSeat[] = [];
   let cursor = { ...origin };
 
@@ -1348,18 +1424,20 @@ function layoutTheaterLike(
       tier,
       { x: cursor.x, y: cursor.y },
       config,
-      metrics,
+      placementMetrics,
       cursor.orientation,
       { x: 0, y: 0 },
       aisle,
-      seatsPerRowByTier
+      seatsPerRowByTier,
+      undefined,
+      rowDelta
     );
     all.push(...seats);
 
     if (cursor.orientation === "horizontal") {
-      cursor.y = end.y + metrics.tierGap;
+      cursor.y = end.y + tierGapSign * placementMetrics.tierGap;
     } else {
-      cursor.x = end.x + metrics.tierGap;
+      cursor.x = end.x + tierGapSign * placementMetrics.tierGap;
     }
   }
 

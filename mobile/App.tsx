@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { CircleNotch } from "phosphor-react-native";
 import { LoginScreen } from "./src/screens/LoginScreen";
+import { AppLogo } from "./src/components/ui/AppLogo";
 import { MainTabs } from "./src/navigation/MainTabs";
 import { I18nProvider } from "./src/context/I18nContext";
 import { getStoredLocale, translate } from "./src/i18n";
@@ -106,8 +106,8 @@ function AppRoot() {
     return (
       <SafeAreaProvider>
         <View style={styles.boot}>
-          <CircleNotch size={40} color={colors.goldAccent} weight="bold" />
-          <ActivityIndicator size="large" color={colors.goldAccent} style={styles.spinner} />
+          <AppLogo size={88} variant="platform" style={styles.bootLogo} />
+          <ActivityIndicator size="large" color={colors.goldAccent} />
           <StatusBar style="light" />
         </View>
       </SafeAreaProvider>
@@ -142,5 +142,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.gold,
     gap: spacing.lg,
   },
-  spinner: { marginTop: spacing.sm },
+  bootLogo: { marginBottom: spacing.xs },
 });

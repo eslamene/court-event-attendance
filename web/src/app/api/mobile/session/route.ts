@@ -38,6 +38,7 @@ export async function GET(req: Request) {
       name: true,
       date: true,
       slug: true,
+      logoPath: true,
       seatingEnabled: true,
     },
   });
