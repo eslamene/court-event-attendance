@@ -5,7 +5,7 @@ import {
   auditActorFromSession,
   recordAudit,
 } from "@/lib/audit-log";
-import { auth } from "@/lib/auth";
+import { auth, canManageDictionary } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { namespaceFromKey } from "@/lib/i18n/catalog";
 import { apiT } from "@/lib/i18n/api";
@@ -22,7 +22,7 @@ const ENTRY_FILTER = ["key", "namespace", "value"] as const;
 
 export async function GET(req: Request) {
   const session = await auth();
-  if (session?.user?.role !== "ADMIN") {
+  if (!session?.user || !(await canManageDictionary(session.user.roleId))) {
     return NextResponse.json({ error: await apiT("api.forbidden") }, { status: 403 });
   }
 
@@ -104,7 +104,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const session = await auth();
-  if (session?.user?.role !== "ADMIN") {
+  if (!session?.user || !(await canManageDictionary(session.user.roleId))) {
     return NextResponse.json({ error: await apiT("api.forbidden") }, { status: 403 });
   }
 
@@ -160,7 +160,7 @@ export async function POST(req: Request) {
 
 export async function PUT(req: Request) {
   const session = await auth();
-  if (session?.user?.role !== "ADMIN") {
+  if (!session?.user || !(await canManageDictionary(session.user.roleId))) {
     return NextResponse.json({ error: await apiT("api.forbidden") }, { status: 403 });
   }
 

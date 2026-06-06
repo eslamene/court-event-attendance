@@ -1,4 +1,16 @@
+import { defaultTierColor } from "./seat-tier-style";
 import type { SeatCell, SeatingMapTier } from "./seating";
+import {
+  designBounds,
+  legacyPercentToM,
+  meterRectToPercent,
+  meterXToPercent,
+  meterYToPercent,
+  SEAT_SPECS,
+  STAGE_SPECS,
+  venueExtentsFromLayout,
+  VENUE_SPECS,
+} from "./seating-units";
 
 export type SeatingLayoutType =
   | "grid"
@@ -13,10 +25,28 @@ export type StagePosition = "top" | "bottom" | "left" | "right" | "center";
 /** Arena only: rings around center, or tiered rows radiating from center stage */
 export type ArenaArrangement = "rings" | "rows";
 
+/** Horizontal alignment of seats within a row (audience left / center / right). */
+export type RowAlignment = "left" | "center" | "right";
+
 /** Per-tier placement overrides (key = tier id or stable client key). */
 export type TierPlacement = {
   /** Arena rings: 1-based ring index. 0 / omitted = auto from tier order. */
   ring?: number;
+  /** 0 / omitted = auto. Overrides global seatsPerRow for this tier. */
+  seatsPerRow?: number;
+  /** 0 / omitted = auto. Overrides global numberOfRows for this tier. */
+  numberOfRows?: number;
+  /** 0 / omitted = auto (one section band per tier order). 1 = front row of sections. */
+  sectionRow?: number;
+  /** Whole tier block position in the section band (stadium / room zones). */
+  sectionAlign?: RowAlignment;
+};
+
+export type TierRowLayoutSummary = {
+  seatsPerRow: number;
+  totalRows: number;
+  seatsPerRowAuto: boolean;
+  rowsAuto: boolean;
 };
 
 export type SeatingLayoutConfig = {
@@ -72,6 +102,11 @@ export type VenueLayout = {
   config: SeatingLayoutConfig;
   stage: StageRect;
   seats: PositionedSeat[];
+  /** Venue floor width in meters (for rendering). */
+  widthM: number;
+  /** Venue floor depth in meters (for rendering). */
+  depthM: number;
+  unit: "m";
   renderMode?: SeatingMapRenderMode;
   sectionBounds?: SectionBound[];
   focusedTierId?: string;
@@ -112,6 +147,10 @@ export const ROW_LAYOUT_LIMITS = {
   numberOfRows: { min: 0, max: 30, step: 1 },
 } as const;
 
+export const SECTION_LAYOUT_LIMITS = {
+  sectionRow: { min: 0, max: 24, step: 1 },
+} as const;
+
 export const ARENA_RING_LIMITS = {
   numberOfRings: { min: 0, max: 12, step: 1 },
 } as const;
@@ -123,8 +162,11 @@ export const SPACING_LIMITS = {
   padding: { min: 1, max: 2.5, step: 0.05 },
 } as const;
 
-/** Usable canvas (% coordinates). */
-const BOUNDS = { min: 4, max: 96, cx: 50, cy: 50, usableW: 88, usableH: 88 };
+/** Design-time layout bounds in meters. */
+const BOUNDS = designBounds();
+
+/** Legacy percent constants from the old 0–100 canvas → meters. */
+const P = legacyPercentToM;
 
 type LayoutMetrics = {
   minDist: number;
@@ -164,16 +206,173 @@ function clampSpacing(
 }
 
 export function minSeatCenterDistance(config: SeatingLayoutConfig): number {
-  return 3.8 * spacingMult(config.seatPadding, 1.2);
+  return SEAT_SPECS.minCenterM * spacingMult(config.seatPadding, 1.2);
+}
+
+function clampM(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+export { meterRectToPercent, meterXToPercent, meterYToPercent } from "./seating-units";
+
+export function layoutRectToPercentStyle(
+  rect: { x: number; y: number; width: number; height: number },
+  venue: Pick<VenueLayout, "widthM" | "depthM">
+) {
+  const p = meterRectToPercent(rect, venue);
+  return {
+    left: `${p.x}%`,
+    top: `${p.y}%`,
+    width: `${p.width}%`,
+    height: `${p.height}%`,
+  };
+}
+
+type SeatBounds = {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  cx: number;
+  cy: number;
+  width: number;
+  height: number;
+};
+
+function computeSeatBounds(seats: PositionedSeat[]): SeatBounds | null {
+  if (seats.length === 0) return null;
+
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+
+  for (const seat of seats) {
+    minX = Math.min(minX, seat.x);
+    maxX = Math.max(maxX, seat.x);
+    minY = Math.min(minY, seat.y);
+    maxY = Math.max(maxY, seat.y);
+  }
+
+  const pad = STAGE_SPECS.seatBoundsPadM;
+  return {
+    minX: minX - pad,
+    maxX: maxX + pad,
+    minY: minY - pad,
+    maxY: maxY + pad,
+    cx: (minX + maxX) / 2,
+    cy: (minY + maxY) / 2,
+    width: Math.max(maxX - minX + pad * 2, P(14)),
+    height: Math.max(maxY - minY + pad * 2, P(14)),
+  };
+}
+
+/** Median horizontal row pitch in meters. */
+export function estimateMedianSeatPitchM(seats: PositionedSeat[]): number {
+  if (seats.length < 2) return SEAT_SPECS.centerPitchM;
+
+  const byRow = new Map<number, number[]>();
+  for (const seat of seats) {
+    const key = Math.round((seat.y / SEAT_SPECS.rowPitchM) * 2);
+    const row = byRow.get(key) ?? [];
+    row.push(seat.x);
+    byRow.set(key, row);
+  }
+
+  const minGap = SEAT_SPECS.centerPitchM * 0.35;
+  const gaps: number[] = [];
+  for (const xs of byRow.values()) {
+    if (xs.length < 2) continue;
+    xs.sort((a, b) => a - b);
+    for (let i = 1; i < xs.length; i++) {
+      const gap = xs[i]! - xs[i - 1]!;
+      if (gap > minGap) gaps.push(gap);
+    }
+  }
+
+  if (gaps.length === 0) return SEAT_SPECS.centerPitchM;
+  gaps.sort((a, b) => a - b);
+  return gaps[Math.floor(gaps.length / 2)] ?? SEAT_SPECS.centerPitchM;
+}
+
+/** Median horizontal row pitch as % of venue width — for sizing seat dots in the UI. */
+export function estimateMedianSeatPitchPercent(
+  seats: PositionedSeat[],
+  widthM: number = VENUE_SPECS.designWidthM
+): number {
+  return meterXToPercent(estimateMedianSeatPitchM(seats), widthM);
+}
+
+/** Median vertical row pitch in meters. */
+export function estimateMedianRowPitchM(seats: PositionedSeat[]): number {
+  if (seats.length < 2) return SEAT_SPECS.rowPitchM;
+
+  const byCol = new Map<number, number[]>();
+  for (const seat of seats) {
+    const key = Math.round((seat.x / SEAT_SPECS.centerPitchM) * 2);
+    const col = byCol.get(key) ?? [];
+    col.push(seat.y);
+    byCol.set(key, col);
+  }
+
+  const minGap = SEAT_SPECS.rowPitchM * 0.35;
+  const gaps: number[] = [];
+  for (const ys of byCol.values()) {
+    if (ys.length < 2) continue;
+    ys.sort((a, b) => a - b);
+    for (let i = 1; i < ys.length; i++) {
+      const gap = ys[i]! - ys[i - 1]!;
+      if (gap > minGap) gaps.push(gap);
+    }
+  }
+
+  if (gaps.length === 0) return SEAT_SPECS.rowPitchM;
+  gaps.sort((a, b) => a - b);
+  return gaps[Math.floor(gaps.length / 2)] ?? SEAT_SPECS.rowPitchM;
+}
+
+export function estimateRowPitchPercent(
+  seats: PositionedSeat[],
+  depthM: number = VENUE_SPECS.designDepthM
+): number {
+  return meterYToPercent(estimateMedianRowPitchM(seats), depthM);
+}
+
+/**
+ * CSS seat dot size — diameter is ~62% of center pitch so gaps stay visible.
+ * Never exceeds the smaller of horizontal / vertical pitch on screen.
+ */
+export function seatDotSizeCss(
+  pitchPercent: number,
+  rowPitchPercent?: number
+): string {
+  const rowPct = rowPitchPercent ?? pitchPercent;
+  const pitch = Math.min(pitchPercent, rowPct);
+  const maxDiameter = pitch * 0.62;
+  const size = clampM(maxDiameter, 0.35, pitch * 0.78);
+  // Use % sizing so CSS zoom re-lays out seats crisply (no transform blur).
+  return `${size.toFixed(2)}%`;
+}
+
+export function seatDotSizeCssForVenue(venue: Pick<VenueLayout, "seats" | "widthM" | "depthM">): string {
+  const pitchH = estimateMedianSeatPitchPercent(venue.seats, venue.widthM);
+  const pitchV = estimateRowPitchPercent(venue.seats, venue.depthM);
+  return seatDotSizeCss(pitchH, pitchV);
 }
 
 function centerStageTemplate(): StageRect {
-  return { x: 38, y: 38, width: 24, height: 24, label: "" };
+  return {
+    x: P(38),
+    y: P(38),
+    width: P(24),
+    height: P(24),
+    label: "",
+  };
 }
 
 function centerStageBands(stage: StageRect, metrics: LayoutMetrics) {
   const gap = metrics.tierGap + metrics.minDist * 0.35;
-  const margin = BOUNDS.min + 4;
+  const margin = BOUNDS.min + P(4);
   const belowHeight = BOUNDS.max - (stage.y + stage.height) - gap - margin;
   const aboveHeight = stage.y - gap - margin;
   return { gap, belowHeight, aboveHeight };
@@ -219,10 +418,10 @@ function metricsFromConfig(
 
   const base: LayoutMetrics = {
     minDist: baseMinDist,
-    hPitch: Math.max(baseMinDist * 0.92, 3.6 * hMult),
-    vPitch: Math.max(baseMinDist * 0.95, 4.8 * vMult),
-    tierGap: Math.max(2.5, 3.2 * tierMult),
-    aisleGap: Math.max(baseMinDist * 0.65, 2.8),
+    hPitch: Math.max(baseMinDist * 1.08, SEAT_SPECS.centerPitchM * hMult),
+    vPitch: Math.max(baseMinDist * 1.12, SEAT_SPECS.rowPitchM * vMult),
+    tierGap: Math.max(P(3), P(3.6) * tierMult),
+    aisleGap: Math.max(baseMinDist * 0.7, P(3.2)),
   };
 
   if (!seatCount || seatCount <= 0) return base;
@@ -231,11 +430,11 @@ function metricsFromConfig(
   if (density >= 0.999) return base;
 
   return {
-    minDist: baseMinDist * density,
-    hPitch: base.hPitch * density,
-    vPitch: base.vPitch * density,
-    tierGap: base.tierGap * density,
-    aisleGap: base.aisleGap * density,
+    minDist: Math.max(baseMinDist * density, SEAT_SPECS.widthM),
+    hPitch: Math.max(base.hPitch * density, SEAT_SPECS.centerPitchM),
+    vPitch: Math.max(base.vPitch * density, SEAT_SPECS.rowPitchM),
+    tierGap: Math.max(base.tierGap * density, SEAT_SPECS.rowPitchM * 0.5),
+    aisleGap: Math.max(base.aisleGap * density, SEAT_SPECS.widthM),
   };
 }
 
@@ -260,16 +459,97 @@ export function tierPlacementKey(
   return tier.id ?? tier.clientKey ?? `preview-${index}`;
 }
 
+function normalizeRowAlignment(value: unknown): RowAlignment | null {
+  if (value === "left" || value === "center" || value === "right") return value;
+  return null;
+}
+
+function clampRowLayoutValue(
+  value: number | undefined,
+  limits: { min: number; max: number }
+): number {
+  if (value == null || value <= 0) return 0;
+  return Math.min(limits.max, Math.max(limits.min, Math.round(value)));
+}
+
+function tierRowLayoutOverrides(
+  tier: SeatingMapTier,
+  tierIndex: number,
+  config: SeatingLayoutConfig
+): { spr: number; rows: number } {
+  const placement = getTierPlacement(config, tierPlacementKey(tier, tierIndex));
+  const tierSpr = clampRowLayoutValue(
+    placement.seatsPerRow,
+    ROW_LAYOUT_LIMITS.seatsPerRow
+  );
+  const tierRows = clampRowLayoutValue(
+    placement.numberOfRows,
+    ROW_LAYOUT_LIMITS.numberOfRows
+  );
+  const globalSpr = clampRowLayoutValue(
+    config.seatsPerRow,
+    ROW_LAYOUT_LIMITS.seatsPerRow
+  );
+  const globalRows = clampRowLayoutValue(
+    config.numberOfRows,
+    ROW_LAYOUT_LIMITS.numberOfRows
+  );
+  return {
+    spr: tierSpr || globalSpr,
+    rows: tierRows || globalRows,
+  };
+}
+
 function normalizeTierPlacements(
   raw: Record<string, TierPlacement> | undefined
 ): Record<string, TierPlacement> | undefined {
   if (!raw) return undefined;
   const result: Record<string, TierPlacement> = {};
   for (const [key, value] of Object.entries(raw)) {
-    const ring = clampRingCount(value?.ring);
-    if (ring > 0) result[key] = { ring };
+    if (!value) continue;
+    const ring = clampRingCount(value.ring);
+    const seatsPerRow = clampRowLayoutValue(
+      value.seatsPerRow,
+      ROW_LAYOUT_LIMITS.seatsPerRow
+    );
+    const numberOfRows = clampRowLayoutValue(
+      value.numberOfRows,
+      ROW_LAYOUT_LIMITS.numberOfRows
+    );
+    const sectionRow = clampRowLayoutValue(
+      value.sectionRow,
+      SECTION_LAYOUT_LIMITS.sectionRow
+    );
+    const sectionAlign = normalizeRowAlignment(value.sectionAlign) ?? undefined;
+    const placement: TierPlacement = {};
+    if (ring > 0) placement.ring = ring;
+    if (seatsPerRow > 0) placement.seatsPerRow = seatsPerRow;
+    if (numberOfRows > 0) placement.numberOfRows = numberOfRows;
+    if (sectionRow > 0) placement.sectionRow = sectionRow;
+    if (sectionAlign) placement.sectionAlign = sectionAlign;
+    if (Object.keys(placement).length > 0) result[key] = placement;
   }
   return Object.keys(result).length > 0 ? result : undefined;
+}
+
+/** 0-based section band index (depth from stage). Auto = tier order. */
+export function resolveSectionRow(
+  placement: TierPlacement | undefined,
+  tierIndex: number
+): number {
+  const row = clampRowLayoutValue(
+    placement?.sectionRow,
+    SECTION_LAYOUT_LIMITS.sectionRow
+  );
+  return row > 0 ? row - 1 : tierIndex;
+}
+
+export function resolveSectionAlign(
+  placement: TierPlacement | undefined
+): RowAlignment {
+  const align = placement?.sectionAlign;
+  if (align === "left" || align === "center" || align === "right") return align;
+  return "center";
 }
 
 export function getTierPlacement(
@@ -277,6 +557,56 @@ export function getTierPlacement(
   tierKey: string
 ): TierPlacement {
   return config.tierPlacements?.[tierKey] ?? {};
+}
+
+/**
+ * Re-key tier placements to match persisted tier ids (e.g. after save or reload).
+ * Matches by tier id, clientKey, or index-order fallback for legacy JSON.
+ */
+export function remapTierPlacementsToTiers(
+  config: SeatingLayoutConfig,
+  tiers: { id?: string; clientKey?: string }[]
+): SeatingLayoutConfig {
+  if (!config.tierPlacements || tiers.length === 0) return config;
+
+  const placements = config.tierPlacements;
+  const next: Record<string, TierPlacement> = {};
+  const consumed = new Set<string>();
+
+  for (let i = 0; i < tiers.length; i++) {
+    const tier = tiers[i];
+    const targetKey = tierPlacementKey(tier, i);
+    const lookupKeys = [
+      tier.id,
+      tier.clientKey,
+      `preview-${i}`,
+    ].filter((key): key is string => Boolean(key));
+
+    for (const key of lookupKeys) {
+      const placement = placements[key];
+      if (placement) {
+        next[targetKey] = placement;
+        consumed.add(key);
+        break;
+      }
+    }
+  }
+
+  const orphans = Object.entries(placements).filter(([key]) => !consumed.has(key));
+  if (orphans.length > 0) {
+    for (let i = 0; i < tiers.length; i++) {
+      const targetKey = tierPlacementKey(tiers[i], i);
+      if (next[targetKey]) continue;
+      const orphan = orphans.shift();
+      if (!orphan) break;
+      next[targetKey] = orphan[1];
+    }
+  }
+
+  return {
+    ...config,
+    tierPlacements: Object.keys(next).length > 0 ? next : undefined,
+  };
 }
 
 /** Drop ring placements for removed tiers so layout auto-redistributes. */
@@ -310,30 +640,10 @@ function mergeLayoutConfig(parsed: Partial<SeatingLayoutConfig>): SeatingLayoutC
     aisleCenter: Boolean(parsed.aisleCenter),
     arenaArrangement: normalizeArenaArrangement(parsed.arenaArrangement),
     tierPlacements: normalizeTierPlacements(parsed.tierPlacements),
-    horizontalSpacing: clampSpacing(
-      parsed.horizontalSpacing,
-      SPACING_LIMITS.horizontal.min,
-      SPACING_LIMITS.horizontal.max,
-      DEFAULT_LAYOUT_CONFIG.horizontalSpacing!
-    ),
-    verticalSpacing: clampSpacing(
-      parsed.verticalSpacing,
-      SPACING_LIMITS.vertical.min,
-      SPACING_LIMITS.vertical.max,
-      DEFAULT_LAYOUT_CONFIG.verticalSpacing!
-    ),
-    tierSpacing: clampSpacing(
-      parsed.tierSpacing,
-      SPACING_LIMITS.tier.min,
-      SPACING_LIMITS.tier.max,
-      DEFAULT_LAYOUT_CONFIG.tierSpacing!
-    ),
-    seatPadding: clampSpacing(
-      parsed.seatPadding,
-      SPACING_LIMITS.padding.min,
-      SPACING_LIMITS.padding.max,
-      DEFAULT_LAYOUT_CONFIG.seatPadding!
-    ),
+    horizontalSpacing: DEFAULT_LAYOUT_CONFIG.horizontalSpacing!,
+    verticalSpacing: DEFAULT_LAYOUT_CONFIG.verticalSpacing!,
+    tierSpacing: DEFAULT_LAYOUT_CONFIG.tierSpacing!,
+    seatPadding: DEFAULT_LAYOUT_CONFIG.seatPadding!,
   };
 }
 
@@ -368,10 +678,6 @@ export function serializeLayoutConfig(config: SeatingLayoutConfig): string {
     aisleCenter: Boolean(merged.aisleCenter),
     arenaArrangement: normalizeArenaArrangement(merged.arenaArrangement),
     tierPlacements: merged.tierPlacements,
-    horizontalSpacing: merged.horizontalSpacing,
-    verticalSpacing: merged.verticalSpacing,
-    tierSpacing: merged.tierSpacing,
-    seatPadding: merged.seatPadding,
   });
 }
 
@@ -441,10 +747,10 @@ function clampPointSpread(
   let cy = Math.min(BOUNDS.max, Math.max(BOUNDS.min, y));
 
   const onEdge =
-    cx <= BOUNDS.min + 0.05 ||
-    cx >= BOUNDS.max - 0.05 ||
-    cy <= BOUNDS.min + 0.05 ||
-    cy >= BOUNDS.max - 0.05;
+    cx <= BOUNDS.min + P(0.05) ||
+    cx >= BOUNDS.max - P(0.05) ||
+    cy <= BOUNDS.min + P(0.05) ||
+    cy >= BOUNDS.max - P(0.05);
 
   if (onEdge) {
     const angle = spreadKey * 2.399963229728653;
@@ -646,8 +952,8 @@ function groupSeatsIntoRows(seats: PositionedSeat[], tolerance = 2): PositionedS
   return rows;
 }
 
-/** Force every row to a single Y so grids stay straight. */
-function snapHorizontalRows(seats: PositionedSeat[]): PositionedSeat[] {
+/** Force every row within a tier to a single Y so grids stay straight. */
+function snapHorizontalRowsForTier(seats: PositionedSeat[]): PositionedSeat[] {
   const rows = groupSeatsIntoRows(seats);
   if (rows.length < 2) {
     return rows.flatMap((row) => {
@@ -665,7 +971,7 @@ function snapHorizontalRows(seats: PositionedSeat[]): PositionedSeat[] {
   }
   gaps.sort((a, b) => a - b);
   const medianGap = gaps[Math.floor(gaps.length / 2)] ?? 2;
-  const tolerance = Math.min(1.25, medianGap * 0.28);
+  const tolerance = Math.min(0.85, medianGap * 0.22);
 
   const sorted = [...seats].sort((a, b) => a.y - b.y || a.x - b.x);
   const snappedRows: PositionedSeat[][] = [];
@@ -682,6 +988,21 @@ function snapHorizontalRows(seats: PositionedSeat[]): PositionedSeat[] {
     const rowY = row.reduce((sum, s) => sum + s.y, 0) / row.length;
     return row.map((s) => ({ ...s, y: rowY }));
   });
+}
+
+function snapHorizontalRows(seats: PositionedSeat[]): PositionedSeat[] {
+  const byTier = new Map<string, PositionedSeat[]>();
+  for (const seat of seats) {
+    const group = byTier.get(seat.tierId) ?? [];
+    group.push(seat);
+    byTier.set(seat.tierId, group);
+  }
+
+  const result: PositionedSeat[] = [];
+  for (const tierSeats of byTier.values()) {
+    result.push(...snapHorizontalRowsForTier(tierSeats));
+  }
+  return result;
 }
 
 function groupSeatsIntoColumns(seats: PositionedSeat[], tolerance = 2): PositionedSeat[][] {
@@ -703,11 +1024,26 @@ function groupSeatsIntoColumns(seats: PositionedSeat[], tolerance = 2): Position
   return columns;
 }
 
-function snapVerticalColumns(seats: PositionedSeat[]): PositionedSeat[] {
+function snapVerticalColumnsForTier(seats: PositionedSeat[]): PositionedSeat[] {
   return groupSeatsIntoColumns(seats).flatMap((col) => {
     const colX = col.reduce((sum, s) => sum + s.x, 0) / col.length;
     return col.map((s) => ({ ...s, x: colX }));
   });
+}
+
+function snapVerticalColumns(seats: PositionedSeat[]): PositionedSeat[] {
+  const byTier = new Map<string, PositionedSeat[]>();
+  for (const seat of seats) {
+    const group = byTier.get(seat.tierId) ?? [];
+    group.push(seat);
+    byTier.set(seat.tierId, group);
+  }
+
+  const result: PositionedSeat[] = [];
+  for (const tierSeats of byTier.values()) {
+    result.push(...snapVerticalColumnsForTier(tierSeats));
+  }
+  return result;
 }
 
 function rowOrientationForStage(position: StagePosition): RowOrientation {
@@ -872,14 +1208,14 @@ function finalizeLayout(
 
 // ——— Row / tier placement ———
 
-function usableSeatingHeight(stageClearance = 14): number {
+function usableSeatingHeight(stageClearance = P(14)): number {
   return BOUNDS.usableH - stageClearance;
 }
 
 function autoSeatsPerRow(
   count: number,
   metrics: LayoutMetrics,
-  maxWidth = BOUNDS.usableW - 8
+  maxWidth = BOUNDS.usableW - P(8)
 ): number {
   const byWidth = Math.max(1, Math.floor(maxWidth / metrics.hPitch));
 
@@ -917,21 +1253,31 @@ function computeSeatsPerRowByTier(
   metrics: LayoutMetrics,
   config: SeatingLayoutConfig
 ): Map<string, number> {
-  if (config.seatsPerRow && config.seatsPerRow > 0) {
-    return new Map(tiers.map((t) => [t.id, config.seatsPerRow!]));
+  const result = new Map<string, number>();
+  const autoTiers: SeatingMapTier[] = [];
+
+  for (let i = 0; i < tiers.length; i++) {
+    const tier = tiers[i];
+    const { spr, rows } = tierRowLayoutOverrides(tier, i, config);
+
+    if (spr > 0 && rows > 0) {
+      result.set(tier.id, spr);
+    } else if (rows > 0) {
+      result.set(tier.id, Math.max(1, Math.ceil(tier.seatCount / rows)));
+    } else if (spr > 0) {
+      result.set(tier.id, spr);
+    } else {
+      autoTiers.push(tier);
+    }
   }
 
-  if (config.numberOfRows && config.numberOfRows > 0) {
-    return new Map(
-      tiers.map((t) => [t.id, Math.max(1, Math.ceil(t.seatCount / config.numberOfRows!))])
-    );
-  }
+  if (autoTiers.length === 0) return result;
 
-  const maxWidth = BOUNDS.usableW - 8;
+  const maxWidth = BOUNDS.usableW - P(8);
   const byWidth = Math.max(1, Math.floor(maxWidth / metrics.hPitch));
   const rowSlots = totalRowSlotsForTiers(tiers.length, metrics, config);
 
-  const sprByTier = tiers.map((tier) => ({
+  const sprByTier = autoTiers.map((tier) => ({
     id: tier.id,
     count: tier.seatCount,
     spr: Math.min(byWidth, autoSeatsPerRow(tier.seatCount, metrics, maxWidth)),
@@ -957,7 +1303,11 @@ function computeSeatsPerRowByTier(
     sprByTier[pick].spr++;
   }
 
-  return new Map(sprByTier.map((t) => [t.id, t.spr]));
+  for (const entry of sprByTier) {
+    result.set(entry.id, entry.spr);
+  }
+
+  return result;
 }
 
 function fanOffset(
@@ -1077,11 +1427,27 @@ function resolveTierRowLayout(
   tier: SeatingMapTier,
   config: SeatingLayoutConfig,
   metrics: LayoutMetrics,
-  seatsPerRowByTier?: Map<string, number>
+  seatsPerRowByTier?: Map<string, number>,
+  tierPlacement?: TierPlacement
 ): { spr: number; totalRows: number } {
-  const configSpr = config.seatsPerRow && config.seatsPerRow > 0 ? config.seatsPerRow : 0;
-  const configRows =
-    config.numberOfRows && config.numberOfRows > 0 ? config.numberOfRows : 0;
+  const tierSpr = clampRowLayoutValue(
+    tierPlacement?.seatsPerRow,
+    ROW_LAYOUT_LIMITS.seatsPerRow
+  );
+  const tierRows = clampRowLayoutValue(
+    tierPlacement?.numberOfRows,
+    ROW_LAYOUT_LIMITS.numberOfRows
+  );
+  const globalSpr = clampRowLayoutValue(
+    config.seatsPerRow,
+    ROW_LAYOUT_LIMITS.seatsPerRow
+  );
+  const globalRows = clampRowLayoutValue(
+    config.numberOfRows,
+    ROW_LAYOUT_LIMITS.numberOfRows
+  );
+  const configSpr = tierSpr || globalSpr;
+  const configRows = tierRows || globalRows;
 
   let spr =
     seatsPerRowByTier?.get(tier.id) ??
@@ -1135,12 +1501,20 @@ function adaptMetricsToStageBand(
 ): LayoutMetrics {
   const orientation = rowOrientationForStage(position);
   const gap = metrics.tierGap + metrics.minDist * 0.35;
-  const margin = BOUNDS.min + 4;
+  const margin = BOUNDS.min + P(4);
   const tierGaps = Math.max(0, tiers.length - 1) * metrics.tierGap;
 
   let rowSum = 0;
-  for (const tier of tiers) {
-    rowSum += resolveTierRowLayout(tier, config, metrics, seatsPerRowByTier).totalRows;
+  for (let i = 0; i < tiers.length; i++) {
+    const tier = tiers[i];
+    const placement = getTierPlacement(config, tierPlacementKey(tier, i));
+    rowSum += resolveTierRowLayout(
+      tier,
+      config,
+      metrics,
+      seatsPerRowByTier,
+      placement
+    ).totalRows;
   }
   if (rowSum <= 0) return metrics;
 
@@ -1177,13 +1551,15 @@ function placeTierRows(
   aisleCenter: boolean,
   seatsPerRowByTier?: Map<string, number>,
   aisleGapOverride?: number,
-  rowDelta?: { dx: number; dy: number }
+  rowDelta?: { dx: number; dy: number },
+  tierPlacement?: TierPlacement
 ): { seats: PositionedSeat[]; end: { x: number; y: number } } {
   const { spr, totalRows } = resolveTierRowLayout(
     tier,
     config,
     metrics,
-    seatsPerRowByTier
+    seatsPerRowByTier,
+    tierPlacement
   );
   const delta =
     rowDelta ??
@@ -1273,15 +1649,17 @@ function layoutRowBasedAroundCenter(
   const aisleGap = centerStageAisleGap(stage, metrics);
   const useAisle = aisleCenter || true;
 
-  const tierPlans = tiers.map((tier) => {
+  const tierPlans = tiers.map((tier, tierIndex) => {
+    const placement = getTierPlacement(config, tierPlacementKey(tier, tierIndex));
     const { spr, totalRows } = resolveTierRowLayout(
       tier,
       config,
       metrics,
-      seatsPerRowByTier
+      seatsPerRowByTier,
+      placement
     );
     const { rowsBelow, rowsAbove } = splitTierRowsAroundCenter(totalRows);
-    return { tier, spr, rowsBelow, rowsAbove };
+    return { tier, spr, rowsBelow, rowsAbove, placement };
   });
 
   const totalBelow = tierPlans.reduce((sum, plan) => sum + plan.rowsBelow, 0);
@@ -1298,7 +1676,7 @@ function layoutRowBasedAroundCenter(
   let belowY = stageBottom + gap;
   let aboveY = stageTop - gap;
 
-  for (const { tier, spr, rowsBelow, rowsAbove } of tierPlans) {
+  for (const { tier, spr, rowsBelow, rowsAbove, placement } of tierPlans) {
     let seatIdx = 0;
 
     for (let row = 0; row < rowsBelow; row++) {
@@ -1343,7 +1721,7 @@ function layoutRowBasedAroundCenter(
       all.push(
         ...placeRowSeats(
           tier,
-          row,
+          rowsBelow + row,
           seatsInRow,
           spr,
           seatIdx,
@@ -1404,22 +1782,315 @@ function stageRect(config: SeatingLayoutConfig, layoutType: SeatingLayoutType): 
   const pos = config.stagePosition;
 
   if (layoutType === "arena" || layoutType === "banquet") {
-    return { x: 42, y: 42, width: 16, height: 16, label };
+    return { x: P(42), y: P(42), width: P(16), height: P(16), label };
   }
 
   switch (pos) {
     case "bottom":
-      return { x: 22, y: 86, width: 56, height: 8, label };
+      return { x: P(22), y: P(86), width: P(56), height: P(8), label };
     case "left":
-      return { x: 4, y: 38, width: 10, height: 24, label };
+      return { x: P(4), y: P(38), width: P(10), height: P(24), label };
     case "right":
-      return { x: 86, y: 38, width: 10, height: 24, label };
+      return { x: P(86), y: P(38), width: P(10), height: P(24), label };
     case "center":
-      return { x: 38, y: 38, width: 24, height: 24, label };
+      return { x: P(38), y: P(38), width: P(24), height: P(24), label };
     case "top":
     default:
-      return { x: 22, y: 4, width: 56, height: 8, label };
+      return { x: P(22), y: P(4), width: P(56), height: P(8), label };
   }
+}
+
+/** Size the stage to ~80% of the seated area (per axis), with minimum dimensions. */
+function stageRectFromSeatBounds(
+  seats: PositionedSeat[],
+  config: SeatingLayoutConfig,
+  layoutType: SeatingLayoutType
+): StageRect {
+  const label = config.stageLabel?.trim() || DEFAULT_LAYOUT_CONFIG.stageLabel!;
+  const fallback = stageRect(config, layoutType);
+  const bounds = computeSeatBounds(seats);
+  if (!bounds) return { ...fallback, label };
+
+  const pos = config.stagePosition;
+  const ratio = STAGE_SPECS.widthRatio;
+  const gap = STAGE_SPECS.gapFromSeatsM;
+
+  if (layoutType === "arena" || layoutType === "banquet") {
+    const span = Math.max(bounds.width, bounds.height) * ratio;
+    const size = clampM(
+      span,
+      STAGE_SPECS.minCenterSizeM,
+      STAGE_SPECS.maxCenterSizeM
+    );
+    return {
+      x: clampM(bounds.cx - size / 2, BOUNDS.min, BOUNDS.max - size),
+      y: clampM(bounds.cy - size / 2, BOUNDS.min, BOUNDS.max - size),
+      width: size,
+      height: size,
+      label,
+    };
+  }
+
+  if (pos === "center") {
+    const span = Math.max(bounds.width, bounds.height) * ratio;
+    const size = clampM(
+      span,
+      STAGE_SPECS.minCenterSizeM,
+      STAGE_SPECS.maxCenterSizeM
+    );
+    return {
+      x: clampM(bounds.cx - size / 2, BOUNDS.min, BOUNDS.max - size),
+      y: clampM(bounds.cy - size / 2, BOUNDS.min, BOUNDS.max - size),
+      width: size,
+      height: size,
+      label,
+    };
+  }
+
+  if (pos === "top" || pos === "bottom") {
+    const width = clampM(
+      bounds.width * ratio,
+      STAGE_SPECS.minWidthM,
+      STAGE_SPECS.maxWidthM
+    );
+    const height = clampM(
+      fallback.height,
+      STAGE_SPECS.minHeightM,
+      STAGE_SPECS.maxHeightM
+    );
+    const x = clampM(bounds.cx - width / 2, BOUNDS.min, BOUNDS.max - width);
+    const y =
+      pos === "top"
+        ? clampM(
+            bounds.minY - height - gap,
+            BOUNDS.min,
+            Math.max(BOUNDS.min, bounds.minY - height)
+          )
+        : clampM(
+            bounds.maxY + gap,
+            Math.min(bounds.maxY, BOUNDS.max - height),
+            BOUNDS.max - height
+          );
+    return { x, y, width, height, label };
+  }
+
+  const height = clampM(
+    bounds.height * ratio,
+    STAGE_SPECS.minSideSpanM,
+    STAGE_SPECS.maxSideSpanM
+  );
+  const width = clampM(fallback.width, P(8), P(14));
+  const y = clampM(bounds.cy - height / 2, BOUNDS.min, BOUNDS.max - height);
+  const x =
+    pos === "left"
+      ? clampM(
+          bounds.minX - width - gap,
+          BOUNDS.min,
+          Math.max(BOUNDS.min, bounds.minX - width)
+        )
+      : clampM(
+          bounds.maxX + gap,
+          Math.min(bounds.maxX, BOUNDS.max - width),
+          BOUNDS.max - width
+        );
+  return { x, y, width, height, label };
+}
+
+type TierBlockPlan = {
+  tier: SeatingMapTier;
+  tierIndex: number;
+  placement: TierPlacement;
+  spr: number;
+  totalRows: number;
+  blockWidth: number;
+  blockHeight: number;
+};
+
+function computeTierBlockPlan(
+  tier: SeatingMapTier,
+  tierIndex: number,
+  config: SeatingLayoutConfig,
+  metrics: LayoutMetrics,
+  orientation: RowOrientation,
+  seatsPerRowByTier: Map<string, number>
+): TierBlockPlan {
+  const placement = getTierPlacement(config, tierPlacementKey(tier, tierIndex));
+  const { spr, totalRows } = resolveTierRowLayout(
+    tier,
+    config,
+    metrics,
+    seatsPerRowByTier,
+    placement
+  );
+  const blockWidth =
+    orientation === "horizontal"
+      ? Math.max((spr - 1) * metrics.hPitch, 0)
+      : Math.max((totalRows - 1) * metrics.vPitch, 0);
+  const blockHeight =
+    orientation === "horizontal"
+      ? Math.max((totalRows - 1) * metrics.vPitch, 0)
+      : Math.max((spr - 1) * metrics.hPitch, 0);
+  return { tier, tierIndex, placement, spr, totalRows, blockWidth, blockHeight };
+}
+
+function packSectionBandOrigins(
+  plans: TierBlockPlan[],
+  metrics: LayoutMetrics,
+  orientation: RowOrientation
+): Map<string, { x: number; y: number }> {
+  const margin = BOUNDS.min + P(4);
+  const edge = BOUNDS.max - P(4);
+  const origins = new Map<string, { x: number; y: number }>();
+  const gap = metrics.tierGap;
+
+  const byAlign = (align: RowAlignment) =>
+    plans.filter((p) => resolveSectionAlign(p.placement) === align);
+
+  if (orientation === "horizontal") {
+    let x = margin;
+    for (const plan of byAlign("left")) {
+      const w = plan.blockWidth;
+      origins.set(plan.tier.id, { x: x + w / 2, y: 0 });
+      x += w + gap;
+    }
+
+    let rx = edge;
+    for (const plan of [...byAlign("right")].reverse()) {
+      const w = plan.blockWidth;
+      origins.set(plan.tier.id, { x: rx - w / 2, y: 0 });
+      rx -= w + gap;
+    }
+
+    const centerPlans = byAlign("center");
+    if (centerPlans.length === 1) {
+      origins.set(centerPlans[0].tier.id, { x: BOUNDS.cx, y: 0 });
+    } else if (centerPlans.length > 1) {
+      const totalW =
+        centerPlans.reduce((sum, plan) => sum + plan.blockWidth, 0) +
+        (centerPlans.length - 1) * gap;
+      let cx = BOUNDS.cx - totalW / 2;
+      for (const plan of centerPlans) {
+        origins.set(plan.tier.id, { x: cx + plan.blockWidth / 2, y: 0 });
+        cx += plan.blockWidth + gap;
+      }
+    }
+  } else {
+    let y = margin;
+    for (const plan of byAlign("left")) {
+      const h = plan.blockHeight;
+      origins.set(plan.tier.id, { x: 0, y: y + h / 2 });
+      y += h + gap;
+    }
+
+    let by = edge;
+    for (const plan of [...byAlign("right")].reverse()) {
+      const h = plan.blockHeight;
+      origins.set(plan.tier.id, { x: 0, y: by - h / 2 });
+      by -= h + gap;
+    }
+
+    const centerPlans = byAlign("center");
+    if (centerPlans.length === 1) {
+      origins.set(centerPlans[0].tier.id, { x: 0, y: BOUNDS.cy });
+    } else if (centerPlans.length > 1) {
+      const totalH =
+        centerPlans.reduce((sum, plan) => sum + plan.blockHeight, 0) +
+        (centerPlans.length - 1) * gap;
+      let cy = BOUNDS.cy - totalH / 2;
+      for (const plan of centerPlans) {
+        origins.set(plan.tier.id, { x: 0, y: cy + plan.blockHeight / 2 });
+        cy += plan.blockHeight + gap;
+      }
+    }
+  }
+
+  return origins;
+}
+
+/**
+ * Stadium / room layout: tier blocks sit on section bands (rows) and can be
+ * anchored left, center, or right — multiple tiers can share one band.
+ */
+function layoutSectionedTiers(
+  tiers: SeatingMapTier[],
+  config: SeatingLayoutConfig,
+  metrics: LayoutMetrics,
+  startOrigin: { x: number; y: number },
+  orientation: RowOrientation,
+  aisleCenter: boolean,
+  seatsPerRowByTier: Map<string, number>,
+  rowDelta: { dx: number; dy: number },
+  aisleGapOverride?: number
+): PositionedSeat[] {
+  const all: PositionedSeat[] = [];
+  const plans = tiers.map((tier, index) =>
+    computeTierBlockPlan(
+      tier,
+      index,
+      config,
+      metrics,
+      orientation,
+      seatsPerRowByTier
+    )
+  );
+
+  const bands = new Map<number, TierBlockPlan[]>();
+  for (const plan of plans) {
+    const band = resolveSectionRow(plan.placement, plan.tierIndex);
+    const group = bands.get(band) ?? [];
+    group.push(plan);
+    bands.set(band, group);
+  }
+
+  const sortedBands = [...bands.keys()].sort((a, b) => a - b);
+  const depthSign =
+    orientation === "horizontal"
+      ? Math.sign(rowDelta.dy || 1)
+      : Math.sign(rowDelta.dx || 1);
+
+  let depthCursor = orientation === "horizontal" ? startOrigin.y : startOrigin.x;
+
+  for (const bandKey of sortedBands) {
+    const bandPlans = bands.get(bandKey) ?? [];
+    bandPlans.sort((a, b) => a.tierIndex - b.tierIndex);
+    const bandDepth =
+      orientation === "horizontal"
+        ? Math.max(...bandPlans.map((plan) => plan.blockHeight), 0)
+        : Math.max(...bandPlans.map((plan) => plan.blockWidth), 0);
+
+    const packed = packSectionBandOrigins(bandPlans, metrics, orientation);
+
+    for (const plan of bandPlans) {
+      const anchor = packed.get(plan.tier.id);
+      const originX =
+        orientation === "horizontal"
+          ? (anchor?.x ?? BOUNDS.cx)
+          : depthCursor;
+      const originY =
+        orientation === "horizontal"
+          ? depthCursor
+          : (anchor?.y ?? BOUNDS.cy);
+
+      const { seats } = placeTierRows(
+        plan.tier,
+        { x: originX, y: originY },
+        config,
+        metrics,
+        orientation,
+        { x: 0, y: 0 },
+        aisleCenter,
+        seatsPerRowByTier,
+        aisleGapOverride,
+        rowDelta,
+        plan.placement
+      );
+      all.push(...seats);
+    }
+
+    depthCursor += depthSign * (bandDepth + metrics.tierGap);
+  }
+
+  return all;
 }
 
 // ——— Layout algorithms ———
@@ -1456,36 +2127,16 @@ function layoutTheaterLike(
   );
   const origin = seatingOriginForStage(stage, position, placementMetrics);
   const rowDelta = rowDeltaForStage(origin.orientation, position, placementMetrics);
-  const tierGapSign =
-    origin.orientation === "horizontal"
-      ? Math.sign(rowDelta.dy || 1)
-      : Math.sign(rowDelta.dx || 1);
-  const all: PositionedSeat[] = [];
-  let cursor = { ...origin };
-
-  for (const tier of tiers) {
-    const { seats, end } = placeTierRows(
-      tier,
-      { x: cursor.x, y: cursor.y },
-      config,
-      placementMetrics,
-      cursor.orientation,
-      { x: 0, y: 0 },
-      aisle,
-      seatsPerRowByTier,
-      undefined,
-      rowDelta
-    );
-    all.push(...seats);
-
-    if (cursor.orientation === "horizontal") {
-      cursor.y = end.y + tierGapSign * placementMetrics.tierGap;
-    } else {
-      cursor.x = end.x + tierGapSign * placementMetrics.tierGap;
-    }
-  }
-
-  return all;
+  return layoutSectionedTiers(
+    tiers,
+    config,
+    placementMetrics,
+    { x: origin.x, y: origin.y },
+    origin.orientation,
+    aisle,
+    seatsPerRowByTier,
+    rowDelta
+  );
 }
 
 /** Minimum ring radius so arc length fits `seatCount` seats at `minDist` apart. */
@@ -1728,25 +2379,16 @@ function layoutArenaRows(
   };
   const seatsPerRowByTier = computeSeatsPerRowByTier(tiers, metrics, config);
 
-  const all: PositionedSeat[] = [];
-  let oy = origin.y;
-
-  for (const tier of tiers) {
-    const { seats, end } = placeTierRows(
-      tier,
-      { x: origin.x, y: oy },
-      config,
-      metrics,
-      "horizontal",
-      { x: 0, y: 0 },
-      false,
-      seatsPerRowByTier
-    );
-    all.push(...seats);
-    oy = end.y + metrics.tierGap;
-  }
-
-  return all;
+  return layoutSectionedTiers(
+    tiers,
+    config,
+    metrics,
+    origin,
+    "horizontal",
+    false,
+    seatsPerRowByTier,
+    { dx: 0, dy: metrics.vPitch }
+  );
 }
 
 function layoutArena(
@@ -1917,73 +2559,227 @@ function layoutGrid(
     );
   }
 
-  const all: PositionedSeat[] = [];
-  let yOffset = 14 + metrics.tierGap;
-
-  for (const tier of tiers) {
-    const { seats, end } = placeTierRows(
-      tier,
-      { x: BOUNDS.cx, y: yOffset },
-      config,
-      metrics,
-      "horizontal",
-      { x: 0, y: 0 },
-      false,
-      seatsPerRowByTier
-    );
-    all.push(...seats);
-    yOffset = end.y + metrics.tierGap;
-  }
-
-  return all;
+  return layoutSectionedTiers(
+    tiers,
+    config,
+    metrics,
+    { x: BOUNDS.cx, y: P(14) + metrics.tierGap },
+    "horizontal",
+    Boolean(config.aisleCenter),
+    seatsPerRowByTier,
+    { dx: 0, dy: metrics.vPitch }
+  );
 }
 
-export type SpacingFieldKey = "horizontal" | "vertical" | "tier" | "padding";
-
-export type SpacingFieldMeta = {
-  key: SpacingFieldKey;
-  /** 0–1 emphasis for the current layout (UI only). */
-  relevance: number;
+export type SectionBandTier = {
+  tierKey: string;
+  tierIndex: number;
+  name: string;
+  color: string;
+  seatCount: number;
+  price: number | null;
 };
 
-export function getSpacingFieldsForLayout(
-  layoutType: SeatingLayoutType,
-  config: SeatingLayoutConfig
-): SpacingFieldMeta[] {
-  const arenaRings =
-    layoutType === "arena" &&
-    normalizeArenaArrangement(config.arenaArrangement) === "rings";
+export type SectionBandModel = {
+  rowNumber: number;
+  left: SectionBandTier[];
+  center: SectionBandTier[];
+  right: SectionBandTier[];
+};
 
-  if (arenaRings) {
-    return [
-      { key: "horizontal", relevance: 0.85 },
-      { key: "vertical", relevance: 0.25 },
-      { key: "tier", relevance: 1 },
-      { key: "padding", relevance: 1 },
-    ];
+export type SectionBandLayout = {
+  bands: SectionBandModel[];
+  /** Tiers not yet placed on a section row (drag onto a row to assign). */
+  unassigned: SectionBandTier[];
+};
+
+/** Visual section-row builder: explicit row slots + unassigned tier pool. */
+export function buildSectionBandLayout(
+  tiers: {
+    id?: string;
+    clientKey?: string;
+    name: string;
+    seatCount: number;
+    color: string;
+    price?: number | null;
+  }[],
+  config: SeatingLayoutConfig,
+  minRows = 1
+): SectionBandLayout {
+  const byRow = new Map<number, SectionBandModel>();
+  const unassigned: SectionBandTier[] = [];
+
+  function ensureRow(rowNum: number): SectionBandModel {
+    const existing = byRow.get(rowNum);
+    if (existing) return existing;
+    const band: SectionBandModel = {
+      rowNumber: rowNum,
+      left: [],
+      center: [],
+      right: [],
+    };
+    byRow.set(rowNum, band);
+    return band;
   }
-  if (layoutType === "banquet") {
-    return [
-      { key: "horizontal", relevance: 0.75 },
-      { key: "vertical", relevance: 0.4 },
-      { key: "tier", relevance: 1 },
-      { key: "padding", relevance: 1 },
-    ];
+
+  tiers.forEach((tier, index) => {
+    if (tier.seatCount <= 0) return;
+    const tierKey = tierPlacementKey(tier, index);
+    const placement = getTierPlacement(config, tierKey);
+    const entry: SectionBandTier = {
+      tierKey,
+      tierIndex: index,
+      name: tier.name,
+      color: tier.color,
+      seatCount: tier.seatCount,
+      price: tier.price ?? null,
+    };
+
+    if (!placement.sectionRow || placement.sectionRow <= 0) {
+      unassigned.push(entry);
+      return;
+    }
+
+    const align = resolveSectionAlign(placement);
+    ensureRow(placement.sectionRow)[align].push(entry);
+  });
+
+  const maxRow = Math.max(minRows, ...byRow.keys(), 1);
+
+  const bands: SectionBandModel[] = [];
+  for (let row = 1; row <= maxRow; row++) {
+    bands.push(
+      byRow.get(row) ?? {
+        rowNumber: row,
+        left: [],
+        center: [],
+        right: [],
+      }
+    );
   }
-  if (layoutType === "u_shape") {
-    return [
-      { key: "horizontal", relevance: 1 },
-      { key: "vertical", relevance: 1 },
-      { key: "tier", relevance: 0.85 },
-      { key: "padding", relevance: 1 },
-    ];
+  return { bands, unassigned };
+}
+
+/** @deprecated Use buildSectionBandLayout */
+export function buildSectionBandModels(
+  tiers: Parameters<typeof buildSectionBandLayout>[0],
+  config: SeatingLayoutConfig,
+  minRows = 0
+): SectionBandModel[] {
+  return buildSectionBandLayout(tiers, config, Math.max(minRows, 1)).bands;
+}
+
+export function sectionSlotPlacementPatch(
+  rowNumber: number,
+  align: RowAlignment
+): Partial<TierPlacement> {
+  if (align === "center") {
+    return { sectionRow: rowNumber, sectionAlign: undefined };
   }
-  return [
-    { key: "horizontal", relevance: 1 },
-    { key: "vertical", relevance: 1 },
-    { key: "tier", relevance: 1 },
-    { key: "padding", relevance: 1 },
-  ];
+  return { sectionRow: rowNumber, sectionAlign: align };
+}
+
+export function clearSectionPlacementPatch(): Partial<TierPlacement> {
+  return { sectionRow: undefined, sectionAlign: undefined };
+}
+
+type TierRowCountInput = { id?: string; seatCount: number };
+
+function previewLayoutTiers(tiers: TierRowCountInput[]): SeatingMapTier[] {
+  return tiers.map((t, index) => ({
+    id: t.id ?? `preview-${index}`,
+    name: "",
+    seatCount: t.seatCount,
+    sortOrder: index + 1,
+    assigned: 0,
+    available: t.seatCount,
+    color: defaultTierColor(index),
+    price: null,
+    seats: [] as SeatCell[],
+  }));
+}
+
+/** Row count for a tier under the current layout config (for designer row-alignment UI). */
+export function getTierRowCount(
+  tierIndex: number,
+  tiers: TierRowCountInput[],
+  _layoutType: SeatingLayoutType,
+  config: SeatingLayoutConfig
+): number {
+  const normalizedConfig = mergeLayoutConfig(config);
+  const totalSeats = tiers.reduce((sum, t) => sum + t.seatCount, 0);
+  const metrics = metricsFromConfig(normalizedConfig, totalSeats, tiers.length);
+  const layoutTiers = previewLayoutTiers(tiers);
+  const target = layoutTiers[tierIndex];
+  if (!target || target.seatCount <= 0) return 0;
+  const seatsPerRowByTier = computeSeatsPerRowByTier(
+    layoutTiers,
+    metrics,
+    normalizedConfig
+  );
+  const placement = getTierPlacement(
+    normalizedConfig,
+    tierPlacementKey(layoutTiers[tierIndex], tierIndex)
+  );
+  return resolveTierRowLayout(
+    target,
+    normalizedConfig,
+    metrics,
+    seatsPerRowByTier,
+    placement
+  ).totalRows;
+}
+
+/** Resolved row grid for a tier (designer summary chips). */
+export function getTierRowLayoutSummary(
+  tierIndex: number,
+  tiers: TierRowCountInput[],
+  _layoutType: SeatingLayoutType,
+  config: SeatingLayoutConfig
+): TierRowLayoutSummary {
+  const normalizedConfig = mergeLayoutConfig(config);
+  const totalSeats = tiers.reduce((sum, t) => sum + t.seatCount, 0);
+  const metrics = metricsFromConfig(normalizedConfig, totalSeats, tiers.length);
+  const layoutTiers = previewLayoutTiers(tiers);
+  const target = layoutTiers[tierIndex];
+  if (!target || target.seatCount <= 0) {
+    return {
+      seatsPerRow: 0,
+      totalRows: 0,
+      seatsPerRowAuto: true,
+      rowsAuto: true,
+    };
+  }
+  const placement = getTierPlacement(
+    normalizedConfig,
+    tierPlacementKey(layoutTiers[tierIndex], tierIndex)
+  );
+  const seatsPerRowByTier = computeSeatsPerRowByTier(
+    layoutTiers,
+    metrics,
+    normalizedConfig
+  );
+  const { spr, totalRows } = resolveTierRowLayout(
+    target,
+    normalizedConfig,
+    metrics,
+    seatsPerRowByTier,
+    placement
+  );
+  const tierSpr = clampRowLayoutValue(
+    placement.seatsPerRow,
+    ROW_LAYOUT_LIMITS.seatsPerRow
+  );
+  const tierRows = clampRowLayoutValue(
+    placement.numberOfRows,
+    ROW_LAYOUT_LIMITS.numberOfRows
+  );
+  return {
+    seatsPerRow: spr,
+    totalRows,
+    seatsPerRowAuto: tierSpr <= 0,
+    rowsAuto: tierRows <= 0,
+  };
 }
 
 export type VenueLayoutAnalysis = {
@@ -2072,7 +2868,7 @@ export function computeVenueLayout(
     ...DEFAULT_LAYOUT_CONFIG,
     ...config,
   });
-  const stage = stageRect(normalizedConfig, type);
+  let stage = stageRect(normalizedConfig, type);
   const totalSeats = tiers.reduce((sum, t) => sum + t.seatCount, 0);
   const metrics = metricsFromConfig(normalizedConfig, totalSeats, tiers.length);
 
@@ -2101,10 +2897,26 @@ export function computeVenueLayout(
 
   seats = finalizeLayout(seats, stage, normalizedConfig, metrics, type);
 
+  stage = stageRectFromSeatBounds(seats, normalizedConfig, type);
+
+  if (isRowAlignedLayout(type, normalizedConfig)) {
+    const orientation = rowOrientationForStage(normalizedConfig.stagePosition);
+    seats = applyStageClearanceRows(seats, stage, metrics.minDist, orientation);
+    seats = snapRowAlignedSeats(seats, orientation);
+  } else {
+    seats = applyStageClearance(seats, stage, metrics.minDist * 0.9);
+    seats = resolveSeatOverlaps(seats, metrics.minDist);
+  }
+
+  const extents = venueExtentsFromLayout(seats, stage);
+
   return {
     type,
     config: normalizedConfig,
     stage,
     seats,
+    widthM: extents.widthM,
+    depthM: extents.depthM,
+    unit: "m",
   };
 }

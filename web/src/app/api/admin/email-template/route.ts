@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth, canManageEvents } from "@/lib/auth";
+import { auth, canManageSettings } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import {
   EMAIL_TEMPLATE_PLACEHOLDERS,
@@ -12,7 +12,7 @@ import { apiT } from "@/lib/i18n/api";
 
 export async function GET() {
   const session = await auth();
-  if (!session?.user || !canManageEvents(session.user.role)) {
+  if (!session?.user || !(await canManageSettings(session.user.roleId))) {
     return NextResponse.json({ error: await apiT("api.forbidden") }, { status: 403 });
   }
 
@@ -30,7 +30,7 @@ export async function GET() {
 
 export async function PUT(req: Request) {
   const session = await auth();
-  if (!session?.user || !canManageEvents(session.user.role)) {
+  if (!session?.user || !(await canManageSettings(session.user.roleId))) {
     return NextResponse.json({ error: await apiT("api.forbidden") }, { status: 403 });
   }
 

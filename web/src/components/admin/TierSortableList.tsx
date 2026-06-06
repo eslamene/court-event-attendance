@@ -84,11 +84,11 @@ export function TierSortableList<T extends SortableTierItem>({
               "rounded-lg border bg-card transition-shadow",
               isDragging && "opacity-50",
               isOver ? "border-gold ring-1 ring-gold/30" : "border-border",
-              compact ? "shadow-none" : "shadow-sm"
+              compact ? "shadow-none hover:border-gold/30" : "shadow-sm"
             )}
           >
             {compact ? (
-              <div className="flex items-start gap-1 p-1">
+              <div className="flex items-start gap-1.5 p-1.5">
                 <button
                   type="button"
                   className="mt-1 flex shrink-0 cursor-grab touch-none items-center justify-center rounded p-0.5 text-bronze hover:bg-gold/10 hover:text-gold-dark active:cursor-grabbing"
@@ -97,10 +97,12 @@ export function TierSortableList<T extends SortableTierItem>({
                 >
                   <GripVertical className="size-3.5" />
                 </button>
-                <div className="min-w-0 flex-1 space-y-0.5">
+                <div className="min-w-0 flex-1 space-y-1">
                   {positionLabel ? (
-                    <p className="truncate text-[9px] font-medium uppercase tracking-wide text-bronze/70">
-                      {t("seating.tierLayer", { n: String(index + 1) })}
+                    <p className="truncate text-[10px] font-medium text-gold-dark/90">
+                      <span className="text-bronze/70">
+                        {t("seating.tierLayer", { n: String(index + 1) })}
+                      </span>
                       {" · "}
                       {positionLabel}
                     </p>

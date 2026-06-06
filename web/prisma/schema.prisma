@@ -7,12 +7,6 @@ datasource db {
   provider = "postgresql"
 }
 
-enum UserRole {
-  ADMIN
-  APPROVAL_MANAGER
-  EVENT_STAFF
-}
-
 enum RegistrationStatus {
   PENDING
   APPROVED
@@ -34,12 +28,27 @@ enum AuditActorType {
   PUBLIC
 }
 
+model Role {
+  id              String   @id @default(cuid())
+  code            String   @unique
+  name            String
+  description     String?  @db.Text
+  isSystem        Boolean  @default(false)
+  sortOrder       Int      @default(0)
+  permissionsJson String   @default("[]") @db.Text
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  users User[]
+}
+
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
   passwordHash String
   name         String
-  role         UserRole @default(APPROVAL_MANAGER)
+  roleId       String
+  role         Role     @relation(fields: [roleId], references: [id], onDelete: Restrict)
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -47,6 +56,8 @@ model User {
   approvedRegistrations Registration[] @relation("ApprovedBy")
   scanLogs              ScanLog[]
   auditLogs             AuditLog[]
+
+  @@index([roleId])
 }
 
 model Event {
@@ -59,6 +70,7 @@ model Event {
   seatingEnabled Boolean  @default(false)
   seatingRevision Int     @default(0)
   seatingLayoutType String @default("theater")
+  /// JSON: stage, spacing, tierPlacements (section row/align, rows, alignments, ring).
   seatingLayoutJson String @default("{}") @db.Text
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -76,6 +88,8 @@ model SeatTier {
   name      String
   seatCount Int
   sortOrder Int      @default(0)
+  color     String   @default("#c9a227")
+  price     Decimal? @db.Decimal(10, 2)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

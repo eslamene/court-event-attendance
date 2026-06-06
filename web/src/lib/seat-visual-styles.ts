@@ -23,7 +23,7 @@ export const SEAT_STATUS_STYLES: Record<SeatCell["status"], string> = {
 };
 
 export const VENUE_CANVAS_CLASS =
-  "relative w-full overflow-hidden rounded-xl border border-border bg-[var(--seat-map-floor)]";
+  "relative w-full overflow-hidden rounded-xl border border-border bg-[var(--seat-map-floor)] [text-rendering:geometricPrecision] antialiased";
 
 export const VENUE_GRID_STYLE = {
   backgroundImage: `linear-gradient(to right, var(--seat-map-grid) 1px, transparent 1px), linear-gradient(to bottom, var(--seat-map-grid) 1px, transparent 1px)`,

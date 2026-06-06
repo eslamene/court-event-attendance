@@ -15,7 +15,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
-  if (!session?.user || !canApprove(session.user.role)) {
+  if (!session?.user || !(await canApprove(session.user.roleId))) {
     return jsonForbidden();
   }
 

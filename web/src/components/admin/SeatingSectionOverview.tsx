@@ -1,7 +1,11 @@
 "use client";
 
 import { useI18n } from "@/components/I18nProvider";
-import type { SectionBound, VenueLayout } from "@/lib/seating-layout";
+import {
+  layoutRectToPercentStyle,
+  type SectionBound,
+  type VenueLayout,
+} from "@/lib/seating-layout";
 import {
   STAGE_VISUAL_CLASS,
   VENUE_CANVAS_CLASS,
@@ -54,12 +58,7 @@ export function SeatingSectionOverview({
             STAGE_VISUAL_CLASS,
             isCircle ? "rounded-full" : "rounded-lg"
           )}
-          style={{
-            left: `${stage.x}%`,
-            top: `${stage.y}%`,
-            width: `${stage.width}%`,
-            height: `${stage.height}%`,
-          }}
+          style={layoutRectToPercentStyle(stage, venue)}
           title={stage.label}
         >
           <span className="px-1 text-[8px] leading-tight sm:text-[9px]">

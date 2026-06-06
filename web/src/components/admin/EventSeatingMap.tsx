@@ -3,10 +3,12 @@
 import { useCallback, useState } from "react";
 import { ArrowLeft, Circle, RadioButton } from "@phosphor-icons/react";
 import { useI18n } from "@/components/I18nProvider";
+import { SeatmapVenueView } from "@/components/admin/SeatmapVenueView";
 import { SeatingVenueCanvas } from "@/components/admin/SeatingVenueCanvas";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useSeatingRealtime } from "@/hooks/useSeatingRealtime";
+import { formatTierPrice } from "@/lib/seat-tier-style";
 import { capacityProfileLabelKey } from "@/lib/seating-map-utils";
 import { SEAT_STATUS_STYLES } from "@/lib/seat-visual-styles";
 import { cn } from "@/lib/utils";
@@ -17,7 +19,7 @@ type Props = {
 };
 
 export function EventSeatingMap({ eventId, enabled }: Props) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [focusedTierId, setFocusedTierId] = useState<string | null>(null);
   const { map, connection, loading, isRecentSeat } = useSeatingRealtime(
     eventId,
@@ -63,6 +65,15 @@ export function EventSeatingMap({ eventId, enabled }: Props) {
     ? map.tiers.find((tier) => tier.id === focusedTierId)
     : null;
   const isSectionView = map.venue.renderMode === "sections" && !focusedTierId;
+  const tierColors = Object.fromEntries(
+    map.tiers.map((tier) => [tier.id, tier.color])
+  );
+  const tierMeta = Object.fromEntries(
+    map.tiers.map((tier) => [
+      tier.id,
+      { color: tier.color, name: tier.name, price: tier.price },
+    ])
+  );
 
   return (
     <div className="space-y-4">
@@ -127,30 +138,56 @@ export function EventSeatingMap({ eventId, enabled }: Props) {
         </p>
       ) : null}
 
-      <SeatingVenueCanvas
-        venue={map.venue}
-        isRecentSeat={isRecentSeat}
-        showTierLabels={map.tiers.length > 1 && !focusedTierId}
-        onSelectSection={isSectionView ? handleSelectSection : undefined}
-      />
+      {isSectionView ? (
+        <SeatingVenueCanvas
+          venue={map.venue}
+          isRecentSeat={isRecentSeat}
+          showTierLabels={false}
+          onSelectSection={handleSelectSection}
+        />
+      ) : (
+        <SeatmapVenueView
+          venue={map.venue}
+          tiers={map.tiers.map((tier) => ({
+            id: tier.id,
+            name: tier.name,
+            color: tier.color,
+            price: tier.price,
+          }))}
+          onBlockSelect={handleSelectSection}
+          className="min-h-[min(360px,60vh)]"
+        />
+      )}
 
       {map.tiers.length > 1 && !focusedTierId ? (
         <div className="flex flex-wrap gap-2 border-t border-border pt-3">
-          {map.tiers.map((tier) => (
-            <button
-              key={tier.id}
-              type="button"
-              onClick={() => handleSelectSection(tier.id)}
-              className="rounded-lg border border-border bg-[#faf8f5] px-3 py-1.5 text-xs text-bronze transition hover:border-gold/50"
-            >
-              <span className="font-semibold text-gold-dark">{tier.name}</span>
-              {" · "}
-              {t("seating.tierStats", {
-                assigned: String(tier.assigned),
-                total: String(tier.seatCount),
-              })}
-            </button>
-          ))}
+          {map.tiers.map((tier) => {
+            const priceLabel =
+              tier.price != null ? formatTierPrice(tier.price, locale) : null;
+            return (
+              <button
+                key={tier.id}
+                type="button"
+                onClick={() => handleSelectSection(tier.id)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-[#faf8f5] px-3 py-1.5 text-xs text-bronze transition hover:border-gold/50"
+              >
+                <span
+                  className="size-2.5 shrink-0 rounded-full border border-black/10"
+                  style={{ backgroundColor: tier.color }}
+                  aria-hidden
+                />
+                <span className="font-semibold text-gold-dark">{tier.name}</span>
+                {priceLabel ? <span>· {priceLabel}</span> : null}
+                <span>
+                  ·{" "}
+                  {t("seating.tierStats", {
+                    assigned: String(tier.assigned),
+                    total: String(tier.seatCount),
+                  })}
+                </span>
+              </button>
+            );
+          })}
         </div>
       ) : null}
     </div>

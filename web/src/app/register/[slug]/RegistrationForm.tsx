@@ -22,13 +22,20 @@ import {
   type RegistrationFormConfigRecord,
   type RegistrationFormFieldConfig,
 } from "@/lib/registration-form-config-shared";
+import { SeatTierPicker } from "@/components/register/SeatTierPicker";
 
 type Props = {
   slug: string;
   eventName: string;
   eventDate: string;
   formConfig: RegistrationFormConfigRecord;
-  seatTiers?: { id: string; name: string; seatCount: number }[];
+  seatTiers?: {
+    id: string;
+    name: string;
+    seatCount: number;
+    color: string;
+    price: number | null;
+  }[];
 };
 
 function renderField(
@@ -250,25 +257,15 @@ export function RegistrationForm({
 
       {fields.map((field) => renderField(field, locale))}
 
-      {showTierSelect && (
-        <SelectField
-          name="seatTierId"
-          label={t("register.seatTier")}
+      {showTierSelect ? (
+        <SeatTierPicker
+          tiers={seatTiers}
           required={seatTiers.length > 1}
-          defaultValue={seatTiers.length === 1 ? seatTiers[0].id : ""}
-        >
-          {seatTiers.length > 1 && (
-            <option value="" disabled>
-              {t("register.seatTierPlaceholder")}
-            </option>
-          )}
-          {seatTiers.map((tier) => (
-            <option key={tier.id} value={tier.id}>
-              {tier.name}
-            </option>
-          ))}
-        </SelectField>
-      )}
+          defaultTierId={
+            seatTiers.length === 1 ? seatTiers[0].id : undefined
+          }
+        />
+      ) : null}
 
       {error && (
         <p className="flex items-start gap-2 rounded-lg bg-red-50 px-4 py-3 text-sm text-error">

@@ -2,9 +2,19 @@
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
-import { Armchair, LayoutGrid, LayoutTemplate, Plus, Save, Trash2 } from "lucide-react";
+import {
+  Armchair,
+  LayoutGrid,
+  LayoutTemplate,
+  Plus,
+  Save,
+  Tag,
+  Trash2,
+} from "lucide-react";
 import { IconTabBar } from "@/components/ui/icon-tabs";
 import { EventSeatingMap } from "@/components/admin/EventSeatingMap";
+import { SeatTierIconInput } from "@/components/admin/SeatTierIconInput";
+import { SeatTierMetaInputs } from "@/components/admin/SeatTierMetaInputs";
 import { useI18n } from "@/components/I18nProvider";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { Modal } from "@/components/ui/Modal";
@@ -17,8 +27,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SEAT_TIER_LIMITS } from "@/lib/seating-limits";
 import { useSeatingFormState } from "@/hooks/useSeatingFormState";
-import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 
 type Props = {
   eventId: string;
@@ -54,9 +62,11 @@ export function EventSeatingEditor({
 
   async function onSave(e: FormEvent) {
     e.preventDefault();
-    const result = await save();
+    const result = await save({ reload: true });
     if (!result.ok) {
-      toastError(result.error);
+      if ("error" in result && result.error) {
+        toastError(result.error);
+      }
       return;
     }
     toastSuccess(result.message);
@@ -106,7 +116,7 @@ export function EventSeatingEditor({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-xs text-bronze">{t("seating.designerPromo")}</p>
                 <Link
-                  href={`/admin/events/${eventId}/seating/designer`}
+                  href={`/admin/seating/designer?event=${encodeURIComponent(eventId)}`}
                   onClick={onClose}
                   className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-input bg-background px-3 text-xs font-medium shadow-xs transition-colors hover:bg-accent hover:text-accent-foreground"
                 >
@@ -167,67 +177,70 @@ export function EventSeatingEditor({
                     return (
                       <div
                         key={tier.id ?? tier.clientKey ?? `new-${index}`}
-                        className="grid grid-cols-[minmax(0,1fr)_4.25rem_auto] items-start gap-1.5 rounded-lg border border-border bg-card p-1.5"
+                        className="space-y-1.5 rounded-lg border border-border bg-card p-1.5"
                       >
-                        <div className="min-w-0 space-y-0.5">
-                          <Input
-                            value={tier.name}
-                            onChange={(e) =>
-                              updateTier(index, { name: e.target.value })
-                            }
-                            placeholder={t("seating.tierName")}
-                            aria-label={t("seating.tierName")}
-                            aria-invalid={Boolean(nameError)}
-                            className={cn(
-                              "h-7 px-2 text-xs",
-                              nameError && "border-destructive"
-                            )}
-                          />
-                          {nameError ? (
-                            <p className="text-[10px] text-destructive">{nameError}</p>
-                          ) : tier.id && tier.assigned != null ? (
-                            <p className="text-[9px] text-bronze/80">
-                              {t("seating.tierStats", {
-                                assigned: String(tier.assigned),
-                                total: String(tier.seatCount),
-                              })}
-                            </p>
-                          ) : null}
+                        <div className="flex items-start gap-1.5">
+                          <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_4.25rem] gap-1.5">
+                            <SeatTierIconInput
+                              icon={Tag}
+                              label={t("seating.tierName")}
+                              value={tier.name}
+                              onChange={(name) => updateTier(index, { name })}
+                              placeholder={t("seating.tierName")}
+                              error={nameError}
+                            />
+                            <SeatTierIconInput
+                              icon={Armchair}
+                              label={t("seating.seatCount")}
+                              type="number"
+                              min={SEAT_TIER_LIMITS.seatsPerTier.min}
+                              max={SEAT_TIER_LIMITS.seatsPerTier.max}
+                              value={String(tier.seatCount)}
+                              onChange={(raw) =>
+                                updateTier(index, {
+                                  seatCount: Number(raw) || 0,
+                                })
+                              }
+                              dir="ltr"
+                              inputClassName="text-left"
+                              error={seatError}
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="size-7 shrink-0 text-destructive hover:text-destructive"
+                            onClick={() => removeTier(index)}
+                            title={t("admin.common.delete")}
+                          >
+                            <Trash2 className="size-3.5" />
+                          </Button>
                         </div>
-                        <div className="space-y-0.5">
-                          <Input
-                            type="number"
-                            min={SEAT_TIER_LIMITS.seatsPerTier.min}
-                            max={SEAT_TIER_LIMITS.seatsPerTier.max}
-                            value={String(tier.seatCount)}
-                            onChange={(e) =>
-                              updateTier(index, {
-                                seatCount: Number(e.target.value) || 0,
-                              })
-                            }
-                            dir="ltr"
-                            aria-label={t("seating.seatCount")}
-                            aria-invalid={Boolean(seatError)}
-                            className={cn(
-                              "h-7 px-2 text-left text-xs",
-                              seatError && "border-destructive"
-                            )}
-                          />
-                          {seatError ? (
-                            <p className="text-[9px] leading-tight text-destructive">
-                              {seatError}
-                            </p>
-                          ) : null}
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="size-7 shrink-0 text-destructive hover:text-destructive"
-                          onClick={() => removeTier(index)}
-                        >
-                          <Trash2 className="size-3.5" />
-                        </Button>
+                        {tier.id && tier.assigned != null ? (
+                          <p
+                            className="flex items-center gap-1 text-[9px] text-bronze/80"
+                            title={t("seating.tierStats", {
+                              assigned: String(tier.assigned),
+                              total: String(tier.seatCount),
+                            })}
+                          >
+                            <Armchair className="size-3 shrink-0" aria-hidden />
+                            <span dir="ltr">
+                              {tier.assigned}/{tier.seatCount}
+                            </span>
+                          </p>
+                        ) : null}
+                        <SeatTierMetaInputs
+                          color={tier.color}
+                          price={tier.price}
+                          onColorChange={(color) =>
+                            updateTier(index, { color })
+                          }
+                          onPriceChange={(price) =>
+                            updateTier(index, { price })
+                          }
+                        />
                       </div>
                     );
                   })}

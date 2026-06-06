@@ -15,7 +15,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
-  if (!session?.user || !canManageEvents(session.user.role)) {
+  if (!session?.user || !(await canManageEvents(session.user.roleId))) {
     return NextResponse.json({ error: await apiT("api.forbidden") }, { status: 403 });
   }
 

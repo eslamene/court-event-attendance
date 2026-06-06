@@ -303,7 +303,7 @@ export function EventsPanel() {
         setClearing(null);
         break;
       case "seatingDesigner":
-        router.push(`/admin/events/${ev.id}/seating/designer`);
+        router.push(`/admin/seating/designer?event=${encodeURIComponent(ev.id)}`);
         break;
       case "seatMap":
         setSeatingInitialTab("map");

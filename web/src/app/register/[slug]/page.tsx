@@ -7,6 +7,7 @@ import { isRegistrationOpen } from "@/lib/system-settings";
 import { resolveRegistrationFormConfigForEvent } from "@/lib/registration-form-config";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
+import { normalizeTierColor } from "@/lib/seat-tier-style";
 
 export default async function RegisterPage({
   params,
@@ -35,7 +36,13 @@ export default async function RegisterPage({
       ? prisma.seatTier.findMany({
           where: { eventId: event.id },
           orderBy: { sortOrder: "asc" },
-          select: { id: true, name: true, seatCount: true },
+          select: {
+            id: true,
+            name: true,
+            seatCount: true,
+            color: true,
+            price: true,
+          },
         })
       : Promise.resolve([]),
   ]);
@@ -67,7 +74,13 @@ export default async function RegisterPage({
               eventName={event.name}
               eventDate={eventDate}
               formConfig={formConfig}
-              seatTiers={seatTiers}
+              seatTiers={seatTiers.map((tier, index) => ({
+                id: tier.id,
+                name: tier.name,
+                seatCount: tier.seatCount,
+                color: normalizeTierColor(tier.color, index),
+                price: tier.price != null ? Number(tier.price) : null,
+              }))}
             />
             <WithdrawRegistrationPanel slug={slug} formConfig={formConfig} />
           </>

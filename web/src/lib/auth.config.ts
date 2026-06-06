@@ -1,5 +1,6 @@
 import type { NextAuthConfig } from "next-auth";
 
+/** Edge-safe config for proxy only. JWT/session callbacks live in auth.ts. */
 export const authConfig: NextAuthConfig = {
   trustHost: true,
   session: { strategy: "jwt" },
@@ -16,20 +17,6 @@ export const authConfig: NextAuthConfig = {
         return Response.redirect(new URL("/admin", request.nextUrl));
       }
       return true;
-    },
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id!;
-        token.role = user.role;
-      }
-      return token;
-    },
-    async session({ session, token }) {
-      if (session.user) {
-        session.user.id = token.id as string;
-        session.user.role = token.role as typeof session.user.role;
-      }
-      return session;
     },
   },
 };

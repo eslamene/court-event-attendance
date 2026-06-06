@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth, canManageEvents } from "@/lib/auth";
+import { auth, canManageSettings } from "@/lib/auth";
 import { apiDict } from "@/lib/i18n/api";
 import { createNotificationTestSchema } from "@/lib/i18n/schemas";
 import {
@@ -11,7 +11,7 @@ import { jsonForbidden, jsonInvalidData } from "@/lib/i18n/responses";
 
 export async function POST(req: Request) {
   const session = await auth();
-  if (!session?.user || !canManageEvents(session.user.role)) {
+  if (!session?.user || !(await canManageSettings(session.user.roleId))) {
     return jsonForbidden();
   }
 

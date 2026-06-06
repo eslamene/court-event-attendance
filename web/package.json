@@ -14,12 +14,14 @@
     "db:seed": "prisma db seed",
     "db:reset": "prisma migrate reset --force",
     "db:setup": "prisma migrate deploy && prisma db seed",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "sync:seatmap": "cp ../packages/seatmap-canvas/dist/esm/seatmap.canvas.js src/lib/seatmap/vendor/seatmap.canvas.js && cp ../packages/seatmap-canvas/dist/seatmap.canvas.css src/styles/seatmap.canvas.css"
   },
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@court-event-attendance/seatmap-canvas": "file:../packages/seatmap-canvas",
     "@base-ui/react": "^1.5.0",
     "@phosphor-icons/react": "^2.1.10",
     "@prisma/adapter-better-sqlite3": "^7.8.0",

@@ -8,6 +8,7 @@ import {
   type VenueLayout,
   normalizeLayoutType,
   parseLayoutConfig,
+  remapTierPlacementsToTiers,
   serializeLayoutConfig,
 } from "./seating-layout";
 import {
@@ -24,6 +25,10 @@ import {
   type OccupiedSeatCell,
   type SparseTierMeta,
 } from "./seating-map-utils";
+import {
+  normalizeTierColor,
+  parseTierPrice,
+} from "./seat-tier-style";
 import { findDuplicateTierNames } from "./seating-tier-names";
 
 const OCCUPIED_STATUSES = ["APPROVED", "ATTENDED"] as const;
@@ -45,6 +50,8 @@ export type SeatingMapTier = {
   sortOrder: number;
   assigned: number;
   available: number;
+  color: string;
+  price: number | null;
   /** Occupied seats only for large venues; full list when small. */
   seats: SeatCell[];
   occupiedSeats?: OccupiedSeatCell[];
@@ -97,8 +104,12 @@ async function emitSeatingUpdate(eventId: string) {
 
 export type SeatTierInput = {
   id?: string;
+  /** Stable client key used in layout tierPlacements before the tier is persisted. */
+  clientKey?: string;
   name: string;
   seatCount: number;
+  color?: string;
+  price?: number | null;
 };
 
 export function formatSeatLabel(tierName: string, seatNumber: number): string {
@@ -141,7 +152,8 @@ export function validateSeatTiers(
   }
 
   const normalized: SeatTierInput[] = [];
-  for (const tier of tiers) {
+  for (let i = 0; i < tiers.length; i++) {
+    const tier = tiers[i];
     const name = tier.name.trim();
     const seatCount = Number(tier.seatCount);
     if (!name) {
@@ -157,10 +169,21 @@ export function validateSeatTiers(
         error: `Invalid seat count for tier "${name}" (allowed: ${SEAT_TIER_LIMITS.seatsPerTier.min}–${SEAT_TIER_LIMITS.seatsPerTier.max})`,
       };
     }
+    const price = parseTierPrice(tier.price);
+    if (
+      tier.price != null &&
+      (typeof tier.price !== "number" || !Number.isFinite(tier.price)) &&
+      price == null
+    ) {
+      return { ok: false, error: `Invalid price for tier "${name}"` };
+    }
     normalized.push({
       id: tier.id,
+      clientKey: tier.clientKey?.trim() || undefined,
       name,
       seatCount,
+      color: normalizeTierColor(tier.color, i),
+      price,
     });
   }
 
@@ -181,32 +204,50 @@ export async function getTierAvailability(eventId: string) {
     orderBy: { sortOrder: "asc" },
   });
 
-  const counts = await prisma.registration.groupBy({
-    by: ["seatTierId"],
-    where: {
-      eventId,
-      seatTierId: { not: null },
-      seatNumber: { not: null },
-      status: { in: [...OCCUPIED_STATUSES] },
-    },
-    _count: { _all: true },
-  });
+  const occupiedWhere = {
+    eventId,
+    seatTierId: { not: null },
+    seatNumber: { not: null },
+    status: { in: [...OCCUPIED_STATUSES] as ("APPROVED" | "ATTENDED")[] },
+  };
+
+  const [counts, maxSeats] = await Promise.all([
+    prisma.registration.groupBy({
+      by: ["seatTierId"],
+      where: occupiedWhere,
+      _count: { _all: true },
+    }),
+    prisma.registration.groupBy({
+      by: ["seatTierId"],
+      where: occupiedWhere,
+      _max: { seatNumber: true },
+    }),
+  ]);
 
   const usedByTier = new Map(
     counts
       .filter((c) => c.seatTierId)
       .map((c) => [c.seatTierId!, c._count._all])
   );
+  const maxSeatByTier = new Map(
+    maxSeats
+      .filter((c) => c.seatTierId)
+      .map((c) => [c.seatTierId!, c._max.seatNumber ?? 0])
+  );
 
-  return tiers.map((tier) => {
+  return tiers.map((tier, index) => {
     const assigned = usedByTier.get(tier.id) ?? 0;
+    const maxAssignedSeat = maxSeatByTier.get(tier.id) ?? 0;
     return {
       id: tier.id,
       name: tier.name,
       seatCount: tier.seatCount,
       sortOrder: tier.sortOrder,
       assigned,
+      maxAssignedSeat,
       available: Math.max(0, tier.seatCount - assigned),
+      color: normalizeTierColor(tier.color, index),
+      price: tier.price != null ? Number(tier.price) : null,
     };
   });
 }
@@ -256,7 +297,10 @@ function shapeVenueForClient(
       : undefined,
   });
 
-  const sectionBounds = computeSectionBounds(fullVenue.seats, tiersMeta);
+  const sectionBounds = computeSectionBounds(fullVenue.seats, tiersMeta, {
+    widthM: fullVenue.widthM,
+    depthM: fullVenue.depthM,
+  });
 
   if (renderMode === "sections") {
     const occupiedOnly = fullVenue.seats.filter((s) => s.seat.status !== "free");
@@ -362,7 +406,7 @@ export async function getSeatingMap(
 
   const occupiedCellsByTier = new Map<string, Map<number, SeatCell>>();
 
-  const tiersMeta: SparseTierMeta[] = tiers.map((tier) => {
+  const tiersMeta: SparseTierMeta[] = tiers.map((tier, index) => {
     const occupied = byTierSeat.get(tier.id) ?? new Map();
     const occupiedSeats: OccupiedSeatCell[] = [];
     const seatCells = new Map<number, SeatCell>();
@@ -387,6 +431,8 @@ export async function getSeatingMap(
       sortOrder: tier.sortOrder,
       assigned,
       available: Math.max(0, tier.seatCount - assigned),
+      color: normalizeTierColor(tier.color, index),
+      price: tier.price != null ? Number(tier.price) : null,
       occupiedSeats,
     };
   });
@@ -437,6 +483,8 @@ export async function getSeatingMap(
       sortOrder: tier.sortOrder,
       assigned: tier.assigned,
       available: tier.available,
+      color: tier.color,
+      price: tier.price,
       seats,
       occupiedSeats,
     };
@@ -585,21 +633,20 @@ export async function saveEventSeating(
   }
 
   await prisma.$transaction(async (tx) => {
-    await tx.event.update({
-      where: { id: eventId },
-      data: {
-        seatingEnabled,
-        ...(layout?.type
-          ? { seatingLayoutType: normalizeLayoutType(layout.type) }
-          : {}),
-        ...(layout?.config
-          ? { seatingLayoutJson: serializeLayoutConfig(layout.config) }
-          : {}),
-      },
-    });
-
     if (!seatingEnabled) {
       await tx.seatTier.deleteMany({ where: { eventId } });
+      await tx.event.update({
+        where: { id: eventId },
+        data: {
+          seatingEnabled,
+          ...(layout?.type
+            ? { seatingLayoutType: normalizeLayoutType(layout.type) }
+            : {}),
+          ...(layout?.config
+            ? { seatingLayoutJson: serializeLayoutConfig(layout.config) }
+            : {}),
+        },
+      });
       return;
     }
 
@@ -624,6 +671,8 @@ export async function saveEventSeating(
         await tx.seatTier.delete({ where: { id: old.id } });
       }
     }
+
+    const savedTiers: { id?: string; clientKey?: string }[] = [];
 
     for (let i = 0; i < validated.tiers.length; i++) {
       const tier = validated.tiers[i];
@@ -651,19 +700,43 @@ export async function saveEventSeating(
             name: tier.name,
             seatCount: tier.seatCount,
             sortOrder: i + 1,
+            color: normalizeTierColor(tier.color, i),
+            price: tier.price,
           },
         });
+        savedTiers.push({ id: tier.id, clientKey: tier.clientKey });
       } else {
-        await tx.seatTier.create({
+        const created = await tx.seatTier.create({
           data: {
             eventId,
             name: tier.name,
             seatCount: tier.seatCount,
             sortOrder: i + 1,
+            color: normalizeTierColor(tier.color, i),
+            price: tier.price,
           },
         });
+        savedTiers.push({ id: created.id, clientKey: tier.clientKey });
       }
     }
+
+    const remappedConfig =
+      layout?.config != null
+        ? remapTierPlacementsToTiers(layout.config, savedTiers)
+        : undefined;
+
+    await tx.event.update({
+      where: { id: eventId },
+      data: {
+        seatingEnabled,
+        ...(layout?.type
+          ? { seatingLayoutType: normalizeLayoutType(layout.type) }
+          : {}),
+        ...(remappedConfig
+          ? { seatingLayoutJson: serializeLayoutConfig(remappedConfig) }
+          : {}),
+      },
+    });
   });
 
   void emitSeatingUpdate(eventId);

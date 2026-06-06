@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
-import { auth } from "@/lib/auth";
+import { auth, canManageDictionary } from "@/lib/auth";
 import { apiT } from "@/lib/i18n/api";
 import {
   AUDIT_ACTIONS,
@@ -11,7 +11,7 @@ import { seedDictionary, seedDictionaryForLocale } from "@/lib/i18n/seed";
 
 export async function POST(req: Request) {
   const session = await auth();
-  if (session?.user?.role !== "ADMIN") {
+  if (!session?.user || !(await canManageDictionary(session.user.roleId))) {
     return NextResponse.json({ error: await apiT("api.forbidden") }, { status: 403 });
   }
 

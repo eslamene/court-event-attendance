@@ -13,8 +13,8 @@ import {
   Mail,
   XCircle,
 } from "lucide-react";
-import { useSession } from "next-auth/react";
 import { useI18n } from "@/components/I18nProvider";
+import { useUserPermissions } from "@/hooks/useUserPermissions";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { AdminListToolbar } from "@/components/admin/AdminListToolbar";
 import {
@@ -100,10 +100,8 @@ export function RegistrationsPanel() {
   const { toastSuccess, toastError, confirm } = useFeedback();
   const ranks = parseJsonStringArray(dict, "options.ranks");
   const entities = parseJsonStringArray(dict, "options.entities");
-  const { data: session } = useSession();
-  const canApprove =
-    session?.user?.role === "ADMIN" ||
-    session?.user?.role === "APPROVAL_MANAGER";
+  const { has } = useUserPermissions();
+  const canApprove = has("approve_registrations");
 
   const [activeTab, setActiveTab] = useState<RegistrationTabId>(() =>
     resolveRegistrationTab(searchParams)

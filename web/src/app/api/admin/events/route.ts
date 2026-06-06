@@ -28,6 +28,7 @@ function mapEvent(e: {
   slug: string;
   logoPath: string | null;
   isActive: boolean;
+  seatingEnabled: boolean;
   _count: { registrations: number };
 }) {
   return {
@@ -37,6 +38,7 @@ function mapEvent(e: {
     slug: e.slug,
     logoPath: e.logoPath,
     isActive: e.isActive,
+    seatingEnabled: e.seatingEnabled,
     registrationCount: e._count.registrations,
     registrationUrl: buildRegistrationUrl(e.slug),
   };
@@ -113,7 +115,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const session = await auth();
-  if (!session?.user || !canManageEvents(session.user.role)) {
+  if (!session?.user || !(await canManageEvents(session.user.roleId))) {
     return NextResponse.json({ error: await apiT("api.forbidden") }, { status: 403 });
   }
 

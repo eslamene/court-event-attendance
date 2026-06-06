@@ -1,13 +1,22 @@
 import bcrypt from "bcryptjs";
 import { apiT } from "@/lib/i18n/api";
 import { prisma } from "./db";
+import { roleHasPermission } from "./roles-store";
 
 export async function verifyAdminPassword(
   userId: string,
   password: string
 ): Promise<{ ok: boolean; error?: string }> {
   const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user || !user.isActive || user.role !== "ADMIN") {
+  if (!user || !user.isActive) {
+    return { ok: false, error: await apiT("api.adminRequired") };
+  }
+
+  const canManageSettings = await roleHasPermission(
+    user.roleId,
+    "manage_settings"
+  );
+  if (!canManageSettings) {
     return { ok: false, error: await apiT("api.adminRequired") };
   }
 

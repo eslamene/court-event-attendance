@@ -17,8 +17,12 @@ import { LocaleSwitcher } from "@/components/LocaleSwitcher";
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession();
   const { t, direction } = useI18n();
-  const role = session?.user?.role ?? "";
-  const roleLabel = role ? t(`roles.${role}`) : "";
+  const roleCode = session?.user?.roleCode ?? "";
+  const roleName = session?.user?.roleName ?? "";
+  const roleKey = roleCode ? `roles.${roleCode}` : "";
+  const roleTranslated = roleKey ? t(roleKey) : "";
+  const roleLabel =
+    roleName && roleTranslated === roleKey ? roleName : roleTranslated || roleName;
 
   return (
     <FeedbackProvider>
@@ -37,7 +41,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                   {session?.user?.name}
                 </p>
                 <p className="truncate text-xs text-muted-foreground">
-                  {roleLabel || role}
+                  {roleLabel || roleCode}
                 </p>
               </div>
               <LocaleSwitcher className="shrink-0" />

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth, canManageEvents } from "@/lib/auth";
+import { auth, canManageSeating } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { apiT } from "@/lib/i18n/api";
 import {
@@ -75,7 +75,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
-  if (!session?.user || !canManageEvents(session.user.role)) {
+  if (!session?.user || !(await canManageSeating(session.user.roleId))) {
     return NextResponse.json({ error: await apiT("api.forbidden") }, { status: 403 });
   }
 

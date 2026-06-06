@@ -30,7 +30,7 @@ const FILTER_COLUMNS = [
 
 export async function GET(req: Request) {
   const session = await auth();
-  if (!session?.user || !canViewAudit(session.user.role)) {
+  if (!session?.user || !(await canViewAudit(session.user.roleId))) {
     return NextResponse.json({ error: await apiT("api.forbidden") }, { status: 403 });
   }
 

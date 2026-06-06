@@ -5,10 +5,20 @@ import { ensureDefaultEmailTemplateSeeded } from "../src/lib/email-template";
 import { ensureDefaultRegistrationFormConfigSeeded } from "../src/lib/registration-form-config";
 import { ensureSystemSettingsSeeded } from "../src/lib/system-settings";
 import { seedDictionary } from "../src/lib/i18n/seed";
+import { ensureRolesSeeded, getRoleByCode } from "../src/lib/roles-store";
 
 const prisma = createPrismaClient();
 
 async function main() {
+  await ensureRolesSeeded();
+  const adminRole = await getRoleByCode("ADMIN");
+  const managerRole = await getRoleByCode("APPROVAL_MANAGER");
+  const staffRole = await getRoleByCode("EVENT_STAFF");
+
+  if (!adminRole || !managerRole || !staffRole) {
+    throw new Error("System roles were not seeded");
+  }
+
   const passwordHash = await bcrypt.hash(
     process.env.SEED_ADMIN_PASSWORD || "Admin@123",
     12
@@ -21,7 +31,7 @@ async function main() {
       email: process.env.SEED_ADMIN_EMAIL || "admin@court.local",
       name: "مدير النظام",
       passwordHash,
-      role: "ADMIN",
+      roleId: adminRole.id,
     },
   });
 
@@ -32,7 +42,7 @@ async function main() {
       email: "manager@court.local",
       name: "مدير الموافقات",
       passwordHash,
-      role: "APPROVAL_MANAGER",
+      roleId: managerRole.id,
     },
   });
 
@@ -43,7 +53,7 @@ async function main() {
       email: "staff@court.local",
       name: "طاقم الاستقبال",
       passwordHash,
-      role: "EVENT_STAFF",
+      roleId: staffRole.id,
     },
   });
 

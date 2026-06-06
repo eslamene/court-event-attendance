@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth, canManageEvents } from "@/lib/auth";
+import { auth, canManageSettings } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import {
   EMAIL_TEMPLATE_PLACEHOLDERS,
@@ -16,7 +16,7 @@ type RouteParams = { params: Promise<{ id: string }> };
 export async function GET(_req: Request, { params }: RouteParams) {
   try {
     const session = await auth();
-    if (!session?.user || !canManageEvents(session.user.role)) {
+    if (!session?.user || !(await canManageSettings(session.user.roleId))) {
       return NextResponse.json({ error: await apiT("api.forbidden") }, { status: 403 });
     }
 
@@ -57,7 +57,7 @@ export async function GET(_req: Request, { params }: RouteParams) {
 
 export async function PUT(req: Request, { params }: RouteParams) {
   const session = await auth();
-  if (!session?.user || !canManageEvents(session.user.role)) {
+  if (!session?.user || !(await canManageSettings(session.user.roleId))) {
     return NextResponse.json({ error: await apiT("api.forbidden") }, { status: 403 });
   }
 
@@ -102,7 +102,7 @@ export async function PUT(req: Request, { params }: RouteParams) {
 
 export async function DELETE(_req: Request, { params }: RouteParams) {
   const session = await auth();
-  if (!session?.user || !canManageEvents(session.user.role)) {
+  if (!session?.user || !(await canManageSettings(session.user.roleId))) {
     return NextResponse.json({ error: await apiT("api.forbidden") }, { status: 403 });
   }
 

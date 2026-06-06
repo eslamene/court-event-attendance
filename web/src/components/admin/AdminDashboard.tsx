@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
+import { useUserPermissions } from "@/hooks/useUserPermissions";
 import type { IconProps } from "@phosphor-icons/react";
 import {
   Calendar,
@@ -117,10 +118,12 @@ function StatCard({
 export function AdminDashboard() {
   const { t, locale, direction } = useI18n();
   const { data: session } = useSession();
-  const isAdmin = session?.user?.role === "ADMIN";
-  const canViewAudit =
-    session?.user?.role === "ADMIN" ||
-    session?.user?.role === "APPROVAL_MANAGER";
+  const { has } = useUserPermissions();
+  const canManageEvents = has("manage_events");
+  const canManageUsers = has("manage_users");
+  const canManageRoles = has("manage_roles");
+  const canManageSettings = has("manage_settings");
+  const canViewAudit = has("view_audit");
   const dateLocale = locale === "ar" ? ar : enUS;
   const Arrow = direction === "rtl" ? ArrowLeft : ArrowRight;
 
@@ -175,25 +178,25 @@ export function AdminDashboard() {
       href: "/admin/events",
       icon: Calendar,
       label: t("admin.nav.events"),
-      show: isAdmin,
+      show: canManageEvents,
     },
     {
       href: "/admin/settings/users",
       icon: Users,
       label: t("admin.settings.tabUsers"),
-      show: isAdmin,
+      show: canManageUsers,
     },
     {
       href: "/admin/settings/roles",
       icon: Shield,
       label: t("admin.settings.tabRoles"),
-      show: isAdmin,
+      show: canManageRoles,
     },
     {
       href: "/admin/settings/channels",
       icon: Radio,
       label: t("admin.settings.tabChannels"),
-      show: isAdmin,
+      show: canManageSettings,
     },
     {
       href: "/admin/audit",
@@ -258,7 +261,7 @@ export function AdminDashboard() {
           label={t("admin.dashboard.statEvents")}
           value={events.active}
           icon={Calendar}
-          href={isAdmin ? "/admin/events" : undefined}
+          href={canManageEvents ? "/admin/events" : undefined}
           barClass="bg-gold-dark"
           iconBgClass="bg-[#f5f0e8]"
         />
@@ -369,7 +372,7 @@ export function AdminDashboard() {
                 ))}
               </ul>
             )}
-            {isAdmin && (
+            {canManageEvents && (
               <Link
                 href="/admin/events"
                 className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-gold-dark hover:text-bronze"

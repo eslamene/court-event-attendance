@@ -11,8 +11,8 @@ export async function GET() {
   }
 
   const today = startOfDay(new Date());
-  const isAdmin = canManageEvents(session.user.role);
-  const viewAudit = canViewAudit(session.user.role);
+  const isAdmin = await canManageEvents(session.user.roleId);
+  const viewAudit = await canViewAudit(session.user.roleId);
 
   const [
     statusGroups,

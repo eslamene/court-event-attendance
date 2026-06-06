@@ -10,6 +10,7 @@ import {
   Calendar,
   ChevronsUpDown,
   ClipboardList,
+  LayoutTemplate,
   LayoutDashboard,
   LogOut,
   ListChecks,
@@ -42,6 +43,8 @@ import {
   SidebarRail,
   SidebarSeparator,
 } from "@/components/ui/sidebar";
+import { useUserPermissions } from "@/hooks/useUserPermissions";
+import type { RolePermission } from "@/lib/role-permissions";
 import { PLATFORM_LOGO_PATH } from "@/lib/platform-logo";
 
 const mainNavItems = [
@@ -55,12 +58,20 @@ const mainNavItems = [
     href: "/admin/registrations",
     icon: ClipboardList,
     labelKey: "admin.nav.registrations" as const,
+    permission: "manage_registrations" as const,
   },
   {
     href: "/admin/events",
     icon: Calendar,
     labelKey: "admin.nav.events" as const,
-    adminOnly: true,
+    permission: "manage_events" as const,
+  },
+  {
+    href: "/admin/seating/designer",
+    icon: LayoutTemplate,
+    labelKey: "admin.nav.seatingDesigner" as const,
+    permission: "manage_seating" as const,
+    designerNav: true,
   },
 ] as const;
 
@@ -69,41 +80,49 @@ const systemNavItems = [
     href: "/admin/settings/users",
     icon: Users,
     labelKey: "admin.settings.tabUsers" as const,
+    permission: "manage_users" as const,
   },
   {
     href: "/admin/settings/roles",
     icon: Shield,
     labelKey: "admin.settings.tabRoles" as const,
+    permission: "manage_roles" as const,
   },
   {
     href: "/admin/settings/channels",
     icon: Radio,
     labelKey: "admin.settings.tabChannels" as const,
+    permission: "manage_settings" as const,
   },
   {
     href: "/admin/settings/email-template",
     icon: Mail,
     labelKey: "admin.settings.tabEmail" as const,
+    permission: "manage_settings" as const,
   },
   {
     href: "/admin/settings/registration-form",
     icon: ListChecks,
     labelKey: "admin.settings.tabRegistrationForm" as const,
+    permission: "manage_settings" as const,
   },
   {
     href: "/admin/settings/advanced",
     icon: SlidersHorizontal,
     labelKey: "admin.settings.tabAdvanced" as const,
+    permission: "manage_settings" as const,
   },
   {
     href: "/admin/dictionary",
     icon: BookOpen,
     labelKey: "admin.nav.dictionary" as const,
+    permission: "manage_dictionary" as const,
   },
   {
     href: "/admin/audit",
     icon: ScrollText,
     labelKey: "admin.nav.audit" as const,
+    permission: "view_audit" as const,
   },
 ] as const;
 
@@ -123,14 +142,33 @@ export function AdminAppSidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
   const { t, direction } = useI18n();
-  const isAdmin = session?.user?.role === "ADMIN";
-  const role = session?.user?.role ?? "";
-  const roleLabel = role ? t(`roles.${role}`) : "";
+  const { has, loading: permissionsLoading } = useUserPermissions();
+  const roleCode = session?.user?.roleCode ?? "";
+  const roleName = session?.user?.roleName ?? "";
+  const roleKey = roleCode ? `roles.${roleCode}` : "";
+  const roleTranslated = roleKey ? t(roleKey) : "";
+  const roleLabel =
+    roleName && roleTranslated === roleKey ? roleName : roleTranslated || roleName;
   const side = direction === "rtl" ? "right" : "left";
 
-  const items = mainNavItems.filter(
-    (item) => !("adminOnly" in item) || isAdmin
-  );
+  const items = mainNavItems.filter((item) => {
+    if (permissionsLoading) return item.href === "/admin";
+    if (item.href === "/admin/registrations") {
+      return has("manage_registrations") || has("approve_registrations");
+    }
+    if ("designerNav" in item && item.designerNav) {
+      return has("manage_seating") || has("manage_events");
+    }
+    if ("permission" in item && item.permission) {
+      return has(item.permission);
+    }
+    return true;
+  });
+
+  const systemItems = systemNavItems.filter((item) => {
+    if (permissionsLoading) return false;
+    return has(item.permission);
+  });
 
   return (
     <Sidebar side={side} variant="inset" collapsible="icon" dir={direction}>
@@ -172,11 +210,15 @@ export function AdminAppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {items.map((item) => {
-                const active = isActive(
-                  pathname,
-                  item.href,
-                  "exact" in item ? item.exact : false
-                );
+                const active =
+                  "designerNav" in item && item.designerNav
+                    ? pathname === item.href ||
+                      pathname.includes("/seating/designer")
+                    : isActive(
+                        pathname,
+                        item.href,
+                        "exact" in item ? item.exact : false
+                      );
                 return (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton
@@ -194,12 +236,12 @@ export function AdminAppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {isAdmin && (
+        {systemItems.length > 0 && (
           <SidebarGroup>
             <SidebarGroupLabel>{t("admin.nav.groupSystem")}</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {systemNavItems.map((item) => {
+                {systemItems.map((item) => {
                   const active = isActive(pathname, item.href);
                   return (
                     <SidebarMenuItem key={item.href}>
@@ -243,7 +285,7 @@ export function AdminAppSidebar() {
                     {session?.user?.name ?? "—"}
                   </span>
                   <span className="truncate text-xs text-muted-foreground">
-                    {roleLabel || role}
+                    {roleLabel || roleCode}
                   </span>
                 </div>
                 <ChevronsUpDown className="ms-auto size-4 group-data-[collapsible=icon]:hidden" />

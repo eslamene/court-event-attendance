@@ -15,7 +15,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
-  if (!session?.user || !canManageEvents(session.user.role)) {
+  if (!session?.user || !(await canManageEvents(session.user.roleId))) {
     return jsonForbidden();
   }
 
@@ -65,7 +65,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
-  if (!session?.user || !canManageEvents(session.user.role)) {
+  if (!session?.user || !(await canManageEvents(session.user.roleId))) {
     return jsonForbidden();
   }
 

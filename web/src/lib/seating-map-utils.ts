@@ -6,6 +6,12 @@ import {
   type VenueCapacityProfile,
 } from "./seating-limits";
 import type { PositionedSeat } from "./seating-layout";
+import {
+  meterXToPercent,
+  meterYToPercent,
+  STAGE_SPECS,
+  type VenueExtents,
+} from "./seating-units";
 
 export type SeatingMapRenderMode = "full" | "sections" | "tier";
 
@@ -35,12 +41,15 @@ export type SparseTierMeta = {
   sortOrder: number;
   assigned: number;
   available: number;
+  color: string;
+  price: number | null;
   occupiedSeats: OccupiedSeatCell[];
 };
 
 export function computeSectionBounds(
   positioned: PositionedSeat[],
-  tiers: { id: string; name: string; seatCount: number; assigned: number }[]
+  tiers: { id: string; name: string; seatCount: number; assigned: number }[],
+  extents: VenueExtents
 ): SectionBound[] {
   const extrema = new Map<
     string,
@@ -61,7 +70,7 @@ export function computeSectionBounds(
     extrema.set(seat.tierId, current);
   }
 
-  const pad = 2.5;
+  const pad = STAGE_SPECS.seatBoundsPadM * 0.35;
 
   return tiers.map((tier) => {
     const box = extrema.get(tier.id);
@@ -78,13 +87,22 @@ export function computeSectionBounds(
       };
     }
 
+    const widthM = Math.min(
+      extents.widthM,
+      box.maxX - box.minX + pad * 2
+    );
+    const depthM = Math.min(
+      extents.depthM,
+      box.maxY - box.minY + pad * 2
+    );
+
     return {
       tierId: tier.id,
       tierName: tier.name,
-      x: Math.max(0, box.minX - pad),
-      y: Math.max(0, box.minY - pad),
-      width: Math.min(100, box.maxX - box.minX + pad * 2),
-      height: Math.min(100, box.maxY - box.minY + pad * 2),
+      x: meterXToPercent(Math.max(0, box.minX - pad), extents.widthM),
+      y: meterYToPercent(Math.max(0, box.minY - pad), extents.depthM),
+      width: meterXToPercent(widthM, extents.widthM),
+      height: meterYToPercent(depthM, extents.depthM),
       seatCount: tier.seatCount,
       assigned: tier.assigned,
     };

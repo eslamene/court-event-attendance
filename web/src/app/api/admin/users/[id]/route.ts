@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { auth, canManageEvents } from "@/lib/auth";
+import { auth, canManageUsers } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { apiDict, apiT } from "@/lib/i18n/api";
 import {
@@ -10,13 +10,14 @@ import {
 } from "@/lib/audit-log";
 import { createUpdateUserSchema } from "@/lib/i18n/schemas";
 import { jsonForbidden, jsonInvalidData } from "@/lib/i18n/responses";
+import { getRoleByCode, getRoleById } from "@/lib/roles-store";
 
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
-  if (!session?.user || !canManageEvents(session.user.role)) {
+  if (!session?.user || !(await canManageUsers(session.user.roleId))) {
     return jsonForbidden();
   }
 
@@ -43,7 +44,10 @@ export async function PATCH(
   }
 
   const data = parsed.data;
-  const existing = await prisma.user.findUnique({ where: { id } });
+  const existing = await prisma.user.findUnique({
+    where: { id },
+    include: { role: true },
+  });
   if (!existing) {
     return NextResponse.json(
       { error: await apiT("api.userNotFound") },
@@ -51,13 +55,22 @@ export async function PATCH(
     );
   }
 
+  if (data.roleId) {
+    const nextRole = await getRoleById(data.roleId);
+    if (!nextRole) {
+      return jsonInvalidData(await apiT("api.roleNotFound"));
+    }
+  }
+
+  const adminRole = await getRoleByCode("ADMIN");
   if (
-    existing.role === "ADMIN" &&
-    ((data.role && data.role !== "ADMIN") ||
+    adminRole &&
+    existing.roleId === adminRole.id &&
+    ((data.roleId && data.roleId !== adminRole.id) ||
       data.isActive === false)
   ) {
     const activeAdmins = await prisma.user.count({
-      where: { role: "ADMIN", isActive: true, NOT: { id } },
+      where: { roleId: adminRole.id, isActive: true, NOT: { id } },
     });
     if (activeAdmins === 0) {
       return NextResponse.json(
@@ -79,26 +92,25 @@ export async function PATCH(
     }
   }
 
-  const updateData = {
-    ...(data.name ? { name: data.name.trim() } : {}),
-    ...(data.email ? { email: data.email.toLowerCase().trim() } : {}),
-    ...(data.role ? { role: data.role } : {}),
-    ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
-    ...(data.password
-      ? { passwordHash: await bcrypt.hash(data.password, 12) }
-      : {}),
-  };
-
   const updated = await prisma.user.update({
     where: { id },
-    data: updateData,
+    data: {
+      ...(data.name ? { name: data.name.trim() } : {}),
+      ...(data.email ? { email: data.email.toLowerCase().trim() } : {}),
+      ...(data.roleId ? { roleId: data.roleId } : {}),
+      ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
+      ...(data.password
+        ? { passwordHash: await bcrypt.hash(data.password, 12) }
+        : {}),
+    },
     select: {
       id: true,
       email: true,
       name: true,
-      role: true,
+      roleId: true,
       isActive: true,
       createdAt: true,
+      role: { select: { code: true, name: true } },
     },
   });
 
@@ -111,7 +123,7 @@ export async function PATCH(
     metadata: {
       name: data.name,
       email: data.email,
-      role: data.role,
+      roleId: data.roleId,
       isActive: data.isActive,
       passwordChanged: Boolean(data.password),
     },
@@ -119,7 +131,14 @@ export async function PATCH(
   });
 
   return NextResponse.json({
-    ...updated,
+    id: updated.id,
+    email: updated.email,
+    name: updated.name,
+    roleId: updated.roleId,
+    roleCode: updated.role.code,
+    roleName: updated.role.name,
+    role: updated.role.code,
+    isActive: updated.isActive,
     createdAt: updated.createdAt.toISOString(),
   });
 }
@@ -129,7 +148,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
-  if (!session?.user || !canManageEvents(session.user.role)) {
+  if (!session?.user || !(await canManageUsers(session.user.roleId))) {
     return jsonForbidden();
   }
 

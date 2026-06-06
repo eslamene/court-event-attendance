@@ -20,7 +20,7 @@ const bodySchema = z.object({
 
 export async function POST(req: Request) {
   const session = await auth();
-  if (!session?.user || !canApprove(session.user.role)) {
+  if (!session?.user || !(await canApprove(session.user.roleId))) {
     return jsonForbidden();
   }
 

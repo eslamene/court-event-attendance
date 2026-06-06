@@ -43,18 +43,25 @@ export function totalSeatCount(tiers: { seatCount: number }[]): number {
 
 export type TierSeatRedistributionInput = SeatTierCountInput & {
   assigned?: number;
+  maxAssignedSeat?: number;
 };
 
-/** Split `targetTotal` seats evenly across tiers, never below assigned counts. */
+function tierSeatCountFloor(tier: TierSeatRedistributionInput): number {
+  return Math.max(
+    0,
+    Number(tier.maxAssignedSeat) || 0,
+    Number(tier.assigned) || 0
+  );
+}
+
+/** Split `targetTotal` seats evenly across tiers, never below occupied seats. */
 export function redistributeSeatCountsAcrossTiers<T extends TierSeatRedistributionInput>(
   tiers: T[],
   targetTotal?: number
 ): T[] {
   if (tiers.length === 0) return [];
 
-  const mins = tiers.map((tier) =>
-    Math.max(0, Number(tier.assigned) || 0)
-  );
+  const mins = tiers.map((tier) => tierSeatCountFloor(tier));
   const minSum = mins.reduce((sum, value) => sum + value, 0);
   const total = Math.max(targetTotal ?? totalSeatCount(tiers), minSum);
   const n = tiers.length;

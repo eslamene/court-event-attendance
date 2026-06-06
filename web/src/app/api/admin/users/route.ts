@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { auth, canManageEvents } from "@/lib/auth";
+import { auth, canManageUsers } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { apiDict, apiT } from "@/lib/i18n/api";
 import {
@@ -10,7 +10,8 @@ import {
 } from "@/lib/audit-log";
 import { createUserSchema } from "@/lib/i18n/schemas";
 import { jsonForbidden, jsonInvalidData } from "@/lib/i18n/responses";
-import type { Prisma, UserRole } from "@/generated/prisma/client";
+import { getRoleById } from "@/lib/roles-store";
+import type { Prisma } from "@/generated/prisma/client";
 import {
   paginatedResponse,
   parseColumnFilters,
@@ -21,9 +22,34 @@ import {
 const SORT_COLUMNS = ["name", "email", "role", "isActive", "createdAt"] as const;
 const FILTER_COLUMNS = ["name", "email", "role", "isActive"] as const;
 
+function serializeUser(u: {
+  id: string;
+  email: string;
+  name: string;
+  roleId: string;
+  isActive: boolean;
+  createdAt: Date;
+  role: { code: string; name: string };
+  _count?: { approvedRegistrations: number; scanLogs: number };
+}) {
+  return {
+    id: u.id,
+    email: u.email,
+    name: u.name,
+    roleId: u.roleId,
+    roleCode: u.role.code,
+    roleName: u.role.name,
+    role: u.role.code,
+    isActive: u.isActive,
+    createdAt: u.createdAt.toISOString(),
+    approvalsCount: u._count?.approvedRegistrations ?? 0,
+    scansCount: u._count?.scanLogs ?? 0,
+  };
+}
+
 export async function GET(req: Request) {
   const session = await auth();
-  if (!session?.user || !canManageEvents(session.user.role)) {
+  if (!session?.user || !(await canManageUsers(session.user.roleId))) {
     return jsonForbidden();
   }
 
@@ -39,7 +65,13 @@ export async function GET(req: Request) {
     ...(filters.email
       ? { email: { contains: filters.email, mode: "insensitive" } }
       : {}),
-    ...(filters.role ? { role: filters.role as UserRole } : {}),
+    ...(filters.role
+      ? {
+          role: {
+            OR: [{ code: filters.role }, { id: filters.role }],
+          },
+        }
+      : {}),
     ...(filters.isActive === "true"
       ? { isActive: true }
       : filters.isActive === "false"
@@ -53,7 +85,7 @@ export async function GET(req: Request) {
       : sort === "email"
         ? { email: order }
         : sort === "role"
-          ? { role: order }
+          ? { role: { name: order } }
           : sort === "isActive"
             ? { isActive: order }
             : { createdAt: order };
@@ -69,36 +101,23 @@ export async function GET(req: Request) {
         id: true,
         email: true,
         name: true,
-        role: true,
+        roleId: true,
         isActive: true,
         createdAt: true,
+        role: { select: { code: true, name: true } },
         _count: { select: { approvedRegistrations: true, scanLogs: true } },
       },
     }),
   ]);
 
   return NextResponse.json(
-    paginatedResponse(
-      users.map((u) => ({
-        id: u.id,
-        email: u.email,
-        name: u.name,
-        role: u.role,
-        isActive: u.isActive,
-        createdAt: u.createdAt.toISOString(),
-        approvalsCount: u._count.approvedRegistrations,
-        scansCount: u._count.scanLogs,
-      })),
-      total,
-      page,
-      pageSize
-    )
+    paginatedResponse(users.map(serializeUser), total, page, pageSize)
   );
 }
 
 export async function POST(req: Request) {
   const session = await auth();
-  if (!session?.user || !canManageEvents(session.user.role)) {
+  if (!session?.user || !(await canManageUsers(session.user.roleId))) {
     return jsonForbidden();
   }
 
@@ -113,6 +132,11 @@ export async function POST(req: Request) {
   const parsed = createUserSchema(dict).safeParse(body);
   if (!parsed.success) {
     return jsonInvalidData(parsed.error.issues[0]?.message);
+  }
+
+  const role = await getRoleById(parsed.data.roleId);
+  if (!role) {
+    return jsonInvalidData(await apiT("api.roleNotFound"));
   }
 
   const existing = await prisma.user.findUnique({
@@ -130,16 +154,17 @@ export async function POST(req: Request) {
     data: {
       email: parsed.data.email.toLowerCase().trim(),
       name: parsed.data.name.trim(),
-      role: parsed.data.role,
+      roleId: parsed.data.roleId,
       passwordHash,
     },
     select: {
       id: true,
       email: true,
       name: true,
-      role: true,
+      roleId: true,
       isActive: true,
       createdAt: true,
+      role: { select: { code: true, name: true } },
     },
   });
 
@@ -149,12 +174,9 @@ export async function POST(req: Request) {
     entityType: "user",
     entityId: user.id,
     entityLabel: user.name,
-    metadata: { email: user.email, role: user.role },
+    metadata: { email: user.email, roleId: user.roleId, roleCode: user.role.code },
     req,
   });
 
-  return NextResponse.json({
-    ...user,
-    createdAt: user.createdAt.toISOString(),
-  });
+  return NextResponse.json(serializeUser(user));
 }

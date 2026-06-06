@@ -120,7 +120,7 @@ export function createUserSchema(dict: Dictionary) {
     email: z.string().email(msg(dict, "validation.emailInvalid")),
     name: z.string().min(2, msg(dict, "validation.nameRequired")),
     password: z.string().min(8, msg(dict, "validation.passwordMin")),
-    role: z.enum(USER_ROLES, { message: msg(dict, "validation.roleRequired") }),
+    roleId: z.string().min(1, msg(dict, "validation.roleRequired")),
   });
 }
 
@@ -129,7 +129,7 @@ export function createUpdateUserSchema(dict: Dictionary) {
     name: z.string().min(2).optional(),
     email: z.string().email().optional(),
     password: z.string().min(8).optional(),
-    role: z.enum(USER_ROLES).optional(),
+    roleId: z.string().min(1).optional(),
     isActive: z.boolean().optional(),
   });
 }

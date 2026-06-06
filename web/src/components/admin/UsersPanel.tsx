@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { KeyRound, Plus, UserCog, UserMinus, UserPlus } from "lucide-react";
 import { TextField, SelectField } from "@/components/ui/Field";
@@ -19,16 +19,28 @@ import {
 import { useI18n } from "@/components/I18nProvider";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { useAdminTable } from "@/hooks/useAdminTable";
-import { USER_ROLES } from "@/lib/i18n/schemas";
+import type { RoleSummary } from "@/lib/role-permissions";
 
 type UserRow = {
   id: string;
   email: string;
   name: string;
+  roleId: string;
+  roleCode: string;
+  roleName: string;
   role: string;
   isActive: boolean;
   createdAt: string;
 };
+
+function roleLabel(
+  user: Pick<UserRow, "roleCode" | "roleName">,
+  t: (key: string) => string
+) {
+  const key = `roles.${user.roleCode}`;
+  const translated = t(key);
+  return translated !== key ? translated : user.roleName;
+}
 
 export function UsersPanel() {
   const { t } = useI18n();
@@ -38,12 +50,34 @@ export function UsersPanel() {
   const [creating, setCreating] = useState(false);
   const [editingRole, setEditingRole] = useState<UserRow | null>(null);
   const [roleError, setRoleError] = useState("");
+  const [roles, setRoles] = useState<RoleSummary[]>([]);
 
   const table = useAdminTable<UserRow>({
     fetchUrl: "/api/admin/users",
     defaultSort: "createdAt",
     defaultOrder: "desc",
   });
+
+  const loadRoles = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/roles");
+      const data = await res.json();
+      if (res.ok) {
+        setRoles(data.roles ?? []);
+      }
+    } catch {
+      setRoles([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadRoles();
+  }, [loadRoles]);
+
+  const defaultRoleId =
+    roles.find((role) => role.code === "APPROVAL_MANAGER")?.id ??
+    roles[0]?.id ??
+    "";
 
   const columns = useMemo(
     (): AdminTableColumn[] => [
@@ -66,9 +100,9 @@ export function UsersPanel() {
         sortable: true,
         filterable: true,
         filterType: "select",
-        filterOptions: USER_ROLES.map((r) => ({
-          value: r,
-          label: t(`roles.${r}`),
+        filterOptions: roles.map((role) => ({
+          value: role.code,
+          label: roleLabel({ roleCode: role.code, roleName: role.name }, t),
         })),
       },
       {
@@ -87,7 +121,7 @@ export function UsersPanel() {
         label: t("admin.users.colActions"),
       },
     ],
-    [t]
+    [roles, t]
   );
 
   useEffect(() => {
@@ -108,7 +142,7 @@ export function UsersPanel() {
         email: form.get("email"),
         name: form.get("name"),
         password: form.get("password"),
-        role: form.get("role"),
+        roleId: form.get("roleId"),
       }),
     });
     const data = await res.json();
@@ -134,11 +168,11 @@ export function UsersPanel() {
     if (!editingRole) return;
     setRoleError("");
     const form = new FormData(e.currentTarget);
-    const role = String(form.get("role") ?? "");
+    const roleId = String(form.get("roleId") ?? "");
     const res = await fetch(`/api/admin/users/${editingRole.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role }),
+      body: JSON.stringify({ roleId }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -214,7 +248,7 @@ export function UsersPanel() {
             <td className="px-4 py-3 text-left" dir="ltr">
               {u.email}
             </td>
-            <td className="px-4 py-3">{t(`roles.${u.role}`)}</td>
+            <td className="px-4 py-3">{roleLabel(u, t)}</td>
             <td className="px-4 py-3">
               <VisualStatusBadge kind="user" active={u.isActive} />
             </td>
@@ -262,14 +296,14 @@ export function UsersPanel() {
               {t("admin.users.changeRoleMessage", { name: editingRole.name })}
             </p>
             <SelectField
-              name="role"
+              name="roleId"
               label={t("admin.users.role")}
               required
-              defaultValue={editingRole.role}
+              defaultValue={editingRole.roleId}
             >
-              {USER_ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {t(`roles.${r}`)}
+              {roles.map((role) => (
+                <option key={role.id} value={role.id}>
+                  {roleLabel({ roleCode: role.code, roleName: role.name }, t)}
                 </option>
               ))}
             </SelectField>
@@ -320,14 +354,14 @@ export function UsersPanel() {
               className="text-left"
             />
             <SelectField
-              name="role"
+              name="roleId"
               label={t("admin.users.role")}
               required
-              defaultValue="APPROVAL_MANAGER"
+              defaultValue={defaultRoleId}
             >
-              {USER_ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {t(`roles.${r}`)}
+              {roles.map((role) => (
+                <option key={role.id} value={role.id}>
+                  {roleLabel({ roleCode: role.code, roleName: role.name }, t)}
                 </option>
               ))}
             </SelectField>
