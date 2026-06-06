@@ -4,10 +4,12 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  TouchableOpacity,
-  ActivityIndicator,
+  Pressable,
   RefreshControl,
 } from "react-native";
+import { Trash } from "phosphor-react-native";
+import { BackHeader, Screen, ScreenBody } from "../components/ui/Screen";
+import { LoadingState, EmptyState } from "../components/ui/States";
 import { useI18n } from "../context/I18nContext";
 import {
   clearActivityLog,
@@ -15,8 +17,13 @@ import {
   type ActivityEntry,
   type ActivityType,
 } from "../lib/activity-log";
+import { colors, radius, spacing, typography } from "../theme/tokens";
 
-export function ActivityLogScreen() {
+type Props = {
+  onBack: () => void;
+};
+
+export function ActivityLogScreen({ onBack }: Props) {
   const { t, textAlign, rowDirection, dateLocale } = useI18n();
   const [entries, setEntries] = useState<ActivityEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,84 +53,93 @@ export function ActivityLogScreen() {
 
   if (loading && entries.length === 0) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator color="#5c3d1e" size="large" />
-      </View>
+      <Screen>
+        <BackHeader title={t("settings.activityLog")} onBack={onBack} textAlign={textAlign} />
+        <LoadingState />
+      </Screen>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <Screen>
+      <BackHeader title={t("settings.activityLog")} onBack={onBack} textAlign={textAlign} />
+
       <View style={[styles.toolbar, { flexDirection: rowDirection }]}>
-        <TouchableOpacity onPress={() => void handleClear()}>
-          <Text style={styles.clearBtn}>{t("activityLog.clearLog")}</Text>
-        </TouchableOpacity>
+        <Pressable
+          style={styles.clearBtn}
+          onPress={() => void handleClear()}
+          hitSlop={8}
+        >
+          <Trash size={16} color={colors.danger} weight="duotone" />
+          <Text style={styles.clearText}>{t("activityLog.clearLog")}</Text>
+        </Pressable>
         <Text style={styles.count}>
-          {t("common.eventsCount", { count: entries.length })}
+          {t("activityLog.entryCount", { count: entries.length })}
         </Text>
       </View>
 
-      <FlatList
-        data={entries}
-        keyExtractor={(item) => item.id}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => void load(true)}
-          />
-        }
-        contentContainerStyle={
-          entries.length === 0 ? styles.emptyContainer : undefined
-        }
-        ListEmptyComponent={
-          <Text style={styles.empty}>{t("activityLog.empty")}</Text>
-        }
-        renderItem={({ item }) => (
-          <View style={styles.row}>
-            <View style={[styles.rowHeader, { flexDirection: rowDirection }]}>
-              <Text style={styles.type}>{typeLabel(item.type)}</Text>
-              <Text style={styles.time}>
-                {new Date(item.at).toLocaleString(dateLocale, {
-                  dateStyle: "short",
-                  timeStyle: "medium",
-                })}
-              </Text>
+      <ScreenBody>
+        <FlatList
+          data={entries}
+          keyExtractor={(item) => item.id}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => void load(true)}
+              tintColor={colors.gold}
+            />
+          }
+          contentContainerStyle={
+            entries.length === 0 ? styles.emptyContainer : styles.list
+          }
+          ListEmptyComponent={<EmptyState message={t("activityLog.empty")} />}
+          renderItem={({ item }) => (
+            <View style={styles.row}>
+              <View style={[styles.rowHeader, { flexDirection: rowDirection }]}>
+                <Text style={styles.type}>{typeLabel(item.type)}</Text>
+                <Text style={styles.time}>
+                  {new Date(item.at).toLocaleString(dateLocale, {
+                    dateStyle: "short",
+                    timeStyle: "medium",
+                  })}
+                </Text>
+              </View>
+              <Text style={[styles.message, { textAlign }]}>{item.message}</Text>
             </View>
-            <Text style={[styles.message, { textAlign }]}>{item.message}</Text>
-          </View>
-        )}
-      />
-    </View>
+          )}
+        />
+      </ScreenBody>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#faf8f5" },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
   toolbar: {
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
-  clearBtn: { color: "#991b1b", fontWeight: "600" },
-  count: { color: "#8b6914", fontSize: 12 },
-  emptyContainer: { flexGrow: 1, justifyContent: "center" },
-  empty: { textAlign: "center", color: "#8b6914", padding: 24 },
+  clearBtn: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 44 },
+  clearText: { color: colors.danger, fontWeight: "600" },
+  count: { ...typography.caption, color: colors.textMuted },
+  list: { paddingBottom: spacing.lg },
+  emptyContainer: { flexGrow: 1 },
   row: {
-    backgroundColor: "#fff",
-    marginHorizontal: 12,
-    marginBottom: 8,
-    padding: 12,
-    borderRadius: 10,
+    backgroundColor: colors.card,
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: "#e8dcc8",
+    borderColor: colors.border,
   },
   rowHeader: {
     justifyContent: "space-between",
-    marginBottom: 4,
+    marginBottom: spacing.xs,
+    gap: spacing.sm,
   },
-  type: { fontSize: 11, fontWeight: "700", color: "#5c3d1e" },
-  time: { fontSize: 10, color: "#8b6914" },
-  message: { fontSize: 13, color: "#2c1810" },
+  type: { ...typography.micro, fontWeight: "700", color: colors.gold },
+  time: { fontSize: 10, color: colors.goldLight },
+  message: { ...typography.caption, color: colors.text },
 });

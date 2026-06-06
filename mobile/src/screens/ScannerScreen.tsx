@@ -3,12 +3,21 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   Vibration,
-  ScrollView,
+  Pressable,
+  useWindowDimensions,
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Haptics from "expo-haptics";
+import {
+  CheckCircle,
+  Warning,
+  XCircle,
+  CloudArrowDown,
+  QrCode,
+  MapTrifold,
+  User,
+} from "phosphor-react-native";
 import {
   ApiError,
   formatRegistrationDetails,
@@ -24,6 +33,9 @@ import {
   SeatGuideModal,
   type SeatGuideTarget,
 } from "../components/SeatGuideModal";
+import { AppHeader, Screen, ScreenBody } from "../components/ui/Screen";
+import { Button } from "../components/ui/Button";
+import { EventPicker } from "../components/ui/EventPicker";
 import { extractQrToken, isLikelyQrPayload } from "../qr";
 import { useEventContext } from "../context/EventContext";
 import { useI18n } from "../context/I18nContext";
@@ -38,6 +50,7 @@ import {
   saveUser,
 } from "../storage";
 import { syncOfflineQueue } from "../offline";
+import { colors, layout, radius, spacing, typography } from "../theme/tokens";
 
 type Props = {
   onLogout: () => void;
@@ -58,6 +71,8 @@ export function ScannerScreen({ onLogout }: Props) {
   const { events, eventId, setEventId, selectedEvent, refreshEvents } =
     useEventContext();
   const { t, textAlign, rowDirection, dateLocale } = useI18n();
+  const { width } = useWindowDimensions();
+  const compact = width < layout.compactWidth;
   const [permission, requestPermission] = useCameraPermissions();
   const [userName, setUserName] = useState("");
   const [feedback, setFeedback] = useState<Feedback>("idle");
@@ -298,65 +313,73 @@ export function ScannerScreen({ onLogout }: Props) {
 
   if (!permission?.granted) {
     return (
-      <View style={styles.center}>
+      <Screen style={styles.center}>
+        <QrCode size={48} color={colors.goldLight} weight="duotone" />
         <Text style={styles.msg}>{t("scanner.cameraPermission")}</Text>
-        <TouchableOpacity style={styles.button} onPress={requestPermission}>
-          <Text style={styles.buttonText}>{t("scanner.grantPermission")}</Text>
-        </TouchableOpacity>
-      </View>
+        <Button
+          variant="primary"
+          label={t("scanner.grantPermission")}
+          onPress={requestPermission}
+          fullWidth={false}
+        />
+      </Screen>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.header, { flexDirection: rowDirection }]}>
-        <Text style={styles.headerTitle}>{t("scanner.title")}</Text>
-        <View style={styles.headerActions}>
-          {eventHasSeating ? (
-            <TouchableOpacity
-              style={styles.mapBtn}
-              onPress={() => {
-                setGuideTarget(null);
-                setGuideVisible(true);
-              }}
-            >
-              <Text style={styles.mapBtnText}>{t("scanner.openSeatMap")}</Text>
-            </TouchableOpacity>
-          ) : null}
-          <Text style={styles.headerUser}>{userName}</Text>
-        </View>
-      </View>
+    <Screen>
+      <AppHeader
+        title={t("scanner.title")}
+        textAlign={textAlign}
+        right={
+          <View style={styles.headerActions}>
+            {eventHasSeating ? (
+              compact ? (
+                <Pressable
+                  style={styles.iconBtn}
+                  onPress={() => {
+                    setGuideTarget(null);
+                    setGuideVisible(true);
+                  }}
+                  accessibilityLabel={t("scanner.openSeatMap")}
+                  hitSlop={8}
+                >
+                  <MapTrifold size={22} color={colors.goldAccent} weight="duotone" />
+                </Pressable>
+              ) : (
+                <Button
+                  variant="accent"
+                  label={t("scanner.openSeatMap")}
+                  icon={<MapTrifold size={16} color={colors.goldAccent} weight="duotone" />}
+                  onPress={() => {
+                    setGuideTarget(null);
+                    setGuideVisible(true);
+                  }}
+                  fullWidth={false}
+                  style={styles.mapBtn}
+                />
+              )
+            ) : null}
+            <View style={styles.userRow}>
+              <User size={14} color={colors.textOnGoldMuted} weight="duotone" />
+              <Text style={styles.headerUser} numberOfLines={1}>
+                {userName}
+              </Text>
+            </View>
+          </View>
+        }
+      />
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={[
-          styles.eventPicker,
-          { flexDirection: rowDirection },
-        ]}
-      >
-        {events.map((e) => (
-          <TouchableOpacity
-            key={e.id}
-            style={[styles.chip, eventId === e.id && styles.chipActive]}
-            onPress={() => setEventId(e.id)}
-          >
-            <Text
-              style={[
-                styles.chipText,
-                { textAlign },
-                eventId === e.id && styles.chipTextActive,
-              ]}
-              numberOfLines={2}
-            >
-              {e.name}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      <EventPicker
+        events={events}
+        eventId={eventId}
+        onSelect={setEventId}
+        textAlign={textAlign}
+        rowDirection={rowDirection}
+      />
 
       {selectedEvent ? (
-        <Text style={styles.eventHint}>
+        <Text style={styles.eventHint} numberOfLines={2}>
           {t("scanner.activeEvent", { name: selectedEvent.name })}
         </Text>
       ) : (
@@ -369,80 +392,77 @@ export function ScannerScreen({ onLogout }: Props) {
         </Text>
       ) : null}
 
-      <View
-        style={[
-          styles.feedback,
-          feedback === "success" && styles.feedbackSuccess,
-          feedback === "warning" && styles.feedbackWarning,
-          feedback === "error" && styles.feedbackError,
-          feedback === "offline" && styles.feedbackOffline,
-        ]}
-      >
-        <Text style={styles.feedbackIcon}>
-          {feedback === "success"
-            ? "✅"
-            : feedback === "warning"
-              ? "⚠️"
-              : feedback === "error"
-                ? "❌"
-                : feedback === "offline"
-                  ? "📥"
-                  : "📷"}
-        </Text>
-        {resultCode ? (
-          <Text style={styles.resultBadge}>{t(`scanResult.${resultCode}`)}</Text>
-        ) : null}
-        <Text style={styles.feedbackMsg}>{message}</Text>
-        {details ? <Text style={styles.feedbackDetails}>{details}</Text> : null}
-        {lastSeatRegistration && eventHasSeating ? (
-          <TouchableOpacity
-            style={styles.guideBtn}
-            onPress={() => openSeatGuide(lastSeatRegistration)}
+      <ScreenBody>
+        <View style={styles.main}>
+          <View
+            style={[
+              styles.feedback,
+              feedback === "success" && styles.feedbackSuccess,
+              feedback === "warning" && styles.feedbackWarning,
+              feedback === "error" && styles.feedbackError,
+              feedback === "offline" && styles.feedbackOffline,
+            ]}
           >
-            <Text style={styles.guideBtnText}>{t("seatGuide.open")}</Text>
-          </TouchableOpacity>
-        ) : null}
-      </View>
+            <FeedbackIcon feedback={feedback} />
+            {resultCode ? (
+              <Text style={styles.resultBadge}>{t(`scanResult.${resultCode}`)}</Text>
+            ) : null}
+            <Text style={styles.feedbackMsg}>{message}</Text>
+            {details ? (
+              <Text style={styles.feedbackDetails}>{details}</Text>
+            ) : null}
+            {lastSeatRegistration && eventHasSeating ? (
+              <Button
+                variant="primary"
+                label={t("seatGuide.open")}
+                icon={<MapTrifold size={18} color={colors.textOnGold} weight="duotone" />}
+                onPress={() => openSeatGuide(lastSeatRegistration)}
+                style={styles.guideBtn}
+              />
+            ) : null}
+          </View>
 
-      <View style={styles.cameraWrap}>
-        {scanning ? (
-          <CameraView
-            style={styles.camera}
-            facing="back"
-            barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-            onBarcodeScanned={({ data }) => void handleScan(data)}
-          />
-        ) : null}
-      </View>
+          <View style={styles.cameraWrap}>
+            {scanning ? (
+              <CameraView
+                style={styles.camera}
+                facing="back"
+                barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+                onBarcodeScanned={({ data }) => void handleScan(data)}
+              />
+            ) : null}
+          </View>
 
-      {recentScans.length > 0 ? (
-        <View style={styles.history}>
-          <Text style={[styles.historyTitle, { textAlign }]}>
-            {t("scanner.recentScans")}
-          </Text>
-          {recentScans.map((scan) => (
-            <View
-              key={`${scan.id}-${scan.at}`}
-              style={[styles.historyRow, { flexDirection: rowDirection }]}
-            >
-              <Text style={styles.historyTime}>{scan.at}</Text>
-              <View style={styles.historyBody}>
-                <Text style={[styles.historyName, { textAlign }]}>
-                  {scan.name ?? t(`scanResult.${scan.result}`)}
-                </Text>
-                {scan.seatLabel ? (
-                  <Text style={[styles.historySeat, { textAlign }]}>
-                    {t("common.seat", { label: scan.seatLabel })}
-                  </Text>
-                ) : null}
-                <Text style={[styles.historyMsg, { textAlign }]}>
-                  {scan.message}
-                </Text>
-              </View>
+          {recentScans.length > 0 ? (
+            <View style={styles.history}>
+              <Text style={[styles.historyTitle, { textAlign }]}>
+                {t("scanner.recentScans")}
+              </Text>
+              {recentScans.map((scan) => (
+                <View
+                  key={`${scan.id}-${scan.at}`}
+                  style={[styles.historyRow, { flexDirection: rowDirection }]}
+                >
+                  <Text style={styles.historyTime}>{scan.at}</Text>
+                  <View style={styles.historyBody}>
+                    <Text style={[styles.historyName, { textAlign }]} numberOfLines={1}>
+                      {scan.name ?? t(`scanResult.${scan.result}`)}
+                    </Text>
+                    {scan.seatLabel ? (
+                      <Text style={[styles.historySeat, { textAlign }]} numberOfLines={1}>
+                        {t("common.seat", { label: scan.seatLabel })}
+                      </Text>
+                    ) : null}
+                    <Text style={[styles.historyMsg, { textAlign }]} numberOfLines={2}>
+                      {scan.message}
+                    </Text>
+                  </View>
+                </View>
+              ))}
             </View>
-          ))}
+          ) : null}
         </View>
-      ) : null}
+      </ScreenBody>
 
       <SeatGuideModal
         visible={guideVisible}
@@ -453,161 +473,133 @@ export function ScannerScreen({ onLogout }: Props) {
           setGuideTarget(null);
         }}
       />
-    </View>
+    </Screen>
   );
 }
 
+function FeedbackIcon({ feedback }: { feedback: Feedback }) {
+  const size = 36;
+  switch (feedback) {
+    case "success":
+      return <CheckCircle size={size} color={colors.success} weight="duotone" />;
+    case "warning":
+      return <Warning size={size} color={colors.warning} weight="duotone" />;
+    case "error":
+      return <XCircle size={size} color={colors.danger} weight="duotone" />;
+    case "offline":
+      return <CloudArrowDown size={size} color={colors.info} weight="duotone" />;
+    default:
+      return <QrCode size={size} color={colors.gold} weight="duotone" />;
+  }
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#faf8f5" },
   center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: 24,
+    padding: spacing.xl,
+    gap: spacing.lg,
   },
-  header: {
+  headerActions: { alignItems: "flex-end", gap: spacing.sm, maxWidth: "100%" },
+  iconBtn: {
+    minWidth: layout.minTouchTarget,
+    minHeight: layout.minTouchTarget,
     alignItems: "center",
-    justifyContent: "space-between",
-    padding: 16,
-    paddingTop: 56,
-    backgroundColor: "#5c3d1e",
+    justifyContent: "center",
   },
-  headerTitle: { color: "#fff", fontSize: 18, fontWeight: "700" },
-  headerActions: { alignItems: "flex-end", gap: 4 },
-  headerUser: { color: "#e8dcc8", fontSize: 12 },
-  mapBtn: {
-    backgroundColor: "rgba(212, 168, 75, 0.25)",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#d4a84b",
-  },
-  mapBtnText: { color: "#d4a84b", fontSize: 11, fontWeight: "700" },
-  eventPicker: {
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-  },
-  chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#e8dcc8",
-    maxWidth: 220,
-  },
-  chipActive: { backgroundColor: "#5c3d1e", borderColor: "#5c3d1e" },
-  chipText: { fontSize: 12, color: "#5c3d1e" },
-  chipTextActive: { color: "#fff" },
+  userRow: { flexDirection: "row", alignItems: "center", gap: 4, maxWidth: 140 },
+  headerUser: { color: colors.textOnGoldMuted, fontSize: 12, flexShrink: 1 },
+  mapBtn: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md, minHeight: 36 },
+  main: { flex: 1, minHeight: 0 },
   eventHint: {
     textAlign: "center",
-    fontSize: 12,
-    color: "#8b6914",
-    paddingHorizontal: 16,
+    ...typography.caption,
+    color: colors.goldLight,
+    paddingHorizontal: spacing.lg,
   },
   syncHint: {
     textAlign: "center",
-    fontSize: 12,
-    color: "#b45309",
-    marginTop: 4,
+    ...typography.caption,
+    color: colors.warning,
+    marginTop: spacing.xs,
   },
   feedback: {
-    marginHorizontal: 12,
-    marginTop: 8,
-    padding: 14,
-    borderRadius: 12,
-    backgroundColor: "#fff",
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.card,
     borderWidth: 1,
-    borderColor: "#e8dcc8",
+    borderColor: colors.border,
     alignItems: "center",
   },
-  feedbackSuccess: { backgroundColor: "#dcfce7", borderColor: "#166534" },
-  feedbackWarning: { backgroundColor: "#fef3c7", borderColor: "#b45309" },
-  feedbackError: { backgroundColor: "#fee2e2", borderColor: "#991b1b" },
-  feedbackOffline: { backgroundColor: "#e0f2fe", borderColor: "#0369a1" },
-  feedbackIcon: { fontSize: 28, marginBottom: 4 },
+  feedbackSuccess: { backgroundColor: colors.successBg, borderColor: colors.success },
+  feedbackWarning: { backgroundColor: colors.warningBg, borderColor: colors.warning },
+  feedbackError: { backgroundColor: colors.dangerBg, borderColor: colors.danger },
+  feedbackOffline: { backgroundColor: colors.infoBg, borderColor: colors.info },
   resultBadge: {
-    fontSize: 11,
+    ...typography.micro,
     fontWeight: "700",
-    color: "#5c3d1e",
-    marginBottom: 4,
+    color: colors.gold,
+    marginTop: spacing.xs,
+    marginBottom: spacing.xs,
   },
   feedbackMsg: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#2c1810",
+    ...typography.bodyBold,
+    color: colors.text,
     textAlign: "center",
   },
   feedbackDetails: {
-    marginTop: 8,
-    fontSize: 14,
-    color: "#5c3d1e",
+    marginTop: spacing.sm,
+    ...typography.caption,
+    color: colors.gold,
     textAlign: "center",
     lineHeight: 22,
   },
-  guideBtn: {
-    marginTop: 12,
-    backgroundColor: "#5c3d1e",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  guideBtnText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 14,
-  },
+  guideBtn: { marginTop: spacing.md, alignSelf: "stretch" },
   cameraWrap: {
     flex: 1,
-    minHeight: 220,
-    margin: 12,
-    borderRadius: 16,
+    minHeight: 180,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    borderRadius: radius.lg,
     overflow: "hidden",
   },
   camera: { flex: 1 },
   history: {
-    maxHeight: 140,
-    marginHorizontal: 12,
-    marginBottom: 12,
-    padding: 10,
-    borderRadius: 12,
-    backgroundColor: "#fff",
+    maxHeight: 120,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.card,
     borderWidth: 1,
-    borderColor: "#e8dcc8",
+    borderColor: colors.border,
   },
   historyTitle: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#5c3d1e",
-    marginBottom: 6,
+    ...typography.captionBold,
+    color: colors.gold,
+    marginBottom: spacing.sm,
   },
   historyRow: {
-    gap: 8,
-    paddingVertical: 4,
+    gap: spacing.sm,
+    paddingVertical: spacing.xs,
     borderTopWidth: 1,
-    borderTopColor: "#f5f0e8",
+    borderTopColor: colors.creamDark,
   },
-  historyTime: { fontSize: 10, color: "#8b6914", minWidth: 52 },
-  historyBody: { flex: 1 },
+  historyTime: { fontSize: 10, color: colors.goldLight, minWidth: 52 },
+  historyBody: { flex: 1, minWidth: 0 },
   historyName: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#2c1810",
+    ...typography.captionBold,
+    color: colors.text,
   },
   historySeat: {
     fontSize: 11,
-    color: "#b8860b",
+    color: colors.goldAccent,
     fontWeight: "600",
   },
-  historyMsg: { fontSize: 10, color: "#8b6914" },
-  msg: { fontSize: 16, marginBottom: 16, textAlign: "center" },
-  button: {
-    backgroundColor: "#5c3d1e",
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  buttonText: { color: "#fff", fontWeight: "600" },
+  historyMsg: { ...typography.micro, color: colors.goldLight },
+  msg: { ...typography.body, marginBottom: spacing.lg, textAlign: "center", color: colors.text },
 });

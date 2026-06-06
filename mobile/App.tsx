@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { StatusBar } from "expo-status-bar";
-import { View, ActivityIndicator, StyleSheet } from "react-native";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import { CircleNotch } from "phosphor-react-native";
 import { LoginScreen } from "./src/screens/LoginScreen";
 import { MainTabs } from "./src/navigation/MainTabs";
 import { I18nProvider } from "./src/context/I18nContext";
@@ -13,6 +15,7 @@ import {
   isBiometricEnabled,
 } from "./src/lib/settings";
 import { clearSession, getToken, saveEvents, saveSession, saveUser } from "./src/storage";
+import { colors, spacing } from "./src/theme/tokens";
 
 function AppRoot() {
   const [ready, setReady] = useState(false);
@@ -101,22 +104,25 @@ function AppRoot() {
 
   if (!ready) {
     return (
-      <View style={styles.boot}>
-        <ActivityIndicator size="large" color="#5c3d1e" />
-        <StatusBar style="light" />
-      </View>
+      <SafeAreaProvider>
+        <View style={styles.boot}>
+          <CircleNotch size={40} color={colors.goldAccent} weight="bold" />
+          <ActivityIndicator size="large" color={colors.goldAccent} style={styles.spinner} />
+          <StatusBar style="light" />
+        </View>
+      </SafeAreaProvider>
     );
   }
 
   return (
-    <>
+    <SafeAreaProvider>
       <StatusBar style="light" />
       {loggedIn ? (
         <MainTabs onLogout={() => void handleLogout()} />
       ) : (
         <LoginScreen onLogin={() => setLoggedIn(true)} />
       )}
-    </>
+    </SafeAreaProvider>
   );
 }
 
@@ -133,6 +139,8 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#5c3d1e",
+    backgroundColor: colors.gold,
+    gap: spacing.lg,
   },
+  spinner: { marginTop: spacing.sm },
 });

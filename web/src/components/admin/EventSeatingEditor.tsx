@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Armchair, LayoutGrid, LayoutTemplate, Plus, Save, Trash2 } from "lucide-react";
 import { IconTabBar } from "@/components/ui/icon-tabs";
 import { EventSeatingMap } from "@/components/admin/EventSeatingMap";
@@ -8,7 +8,7 @@ import { SeatingLayoutDesigner } from "@/components/admin/SeatingLayoutDesigner"
 import { useI18n } from "@/components/I18nProvider";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { Modal } from "@/components/ui/Modal";
-import { CheckboxField, TextField } from "@/components/ui/Field";
+import { CheckboxField } from "@/components/ui/Field";
 import {
   CancelFormButton,
   PrimaryFormButton,
@@ -23,7 +23,15 @@ import {
   type SeatingLayoutConfig,
   type SeatingLayoutType,
 } from "@/lib/seating-layout";
+import { reorderList } from "@/components/admin/TierSortableList";
+import {
+  findDuplicateTierNames,
+  suggestUniqueTierName,
+  tierNameKey,
+} from "@/lib/seating-tier-names";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { nanoid } from "nanoid";
 
 async function readJsonResponse(res: Response): Promise<Record<string, unknown> | null> {
   const text = await res.text();
@@ -37,6 +45,7 @@ async function readJsonResponse(res: Response): Promise<Record<string, unknown> 
 
 type TierRow = {
   id?: string;
+  clientKey?: string;
   name: string;
   seatCount: number;
   assigned?: number;
@@ -100,6 +109,7 @@ export function EventSeatingEditor({
         ((data.tiers as TierRow[]) ?? []).map(
           (tier: TierRow & { seatCount: number }) => ({
             id: tier.id,
+            clientKey: tier.id,
             name: tier.name,
             seatCount: tier.seatCount,
             assigned: tier.assigned,
@@ -121,9 +131,36 @@ export function EventSeatingEditor({
   function addTier() {
     setTiers((prev) => [
       ...prev,
-      { name: t("seating.newTierName"), seatCount: 50 },
+      {
+        clientKey: nanoid(),
+        name: suggestUniqueTierName(
+          t("seating.newTierName"),
+          prev.map((tier) => tier.name)
+        ),
+        seatCount: 50,
+      },
     ]);
   }
+
+  const tierNameErrors = useMemo(() => {
+    const byKey = new Map<string, number[]>();
+    tiers.forEach((tier, index) => {
+      const key = tierNameKey(tier.name);
+      if (!key) return;
+      const indices = byKey.get(key) ?? [];
+      indices.push(index);
+      byKey.set(key, indices);
+    });
+    const errors: Record<number, string> = {};
+    for (const indices of byKey.values()) {
+      if (indices.length > 1) {
+        for (const index of indices) {
+          errors[index] = t("seating.tierNameDuplicate");
+        }
+      }
+    }
+    return errors;
+  }, [tiers, t]);
 
   function updateTier(index: number, patch: Partial<TierRow>) {
     setTiers((prev) =>
@@ -135,8 +172,19 @@ export function EventSeatingEditor({
     setTiers((prev) => prev.filter((_, i) => i !== index));
   }
 
+  function reorderTiers(fromIndex: number, toIndex: number) {
+    setTiers((prev) => reorderList(prev, fromIndex, toIndex));
+  }
+
   async function onSave(e: FormEvent) {
     e.preventDefault();
+    if (seatingEnabled) {
+      const duplicate = findDuplicateTierNames(tiers);
+      if (duplicate) {
+        toastError(t("seating.tierNameDuplicate"));
+        return;
+      }
+    }
     setSaving(true);
     const res = await fetch(`/api/admin/events/${eventId}/seating`, {
       method: "PUT",
@@ -214,6 +262,7 @@ export function EventSeatingEditor({
               onAddTier={addTier}
               onUpdateTier={updateTier}
               onRemoveTier={removeTier}
+              onReorderTiers={reorderTiers}
               expandedPreview
             />
           </div>
@@ -242,40 +291,68 @@ export function EventSeatingEditor({
             {t("admin.registrationForm.loading")}
           </p>
         ) : seatingEnabled ? (
-          <div className="space-y-3 rounded-xl border border-border bg-[#faf8f5] p-4">
+          <div className="space-y-2 rounded-xl border border-border bg-[#faf8f5] p-3">
             <div className="flex items-center justify-between gap-2">
-              <h3 className="flex items-center gap-2 text-sm font-semibold text-gold-dark">
-                <Armchair className="size-4 shrink-0" />
+              <h3 className="flex items-center gap-1.5 text-xs font-semibold text-gold-dark">
+                <Armchair className="size-3.5 shrink-0" />
                 {t("seating.tiersTitle")}
+                {tiers.length > 0 ? (
+                  <Badge variant="outline" className="text-[10px]">
+                    {tiers.length}
+                  </Badge>
+                ) : null}
               </h3>
-              <Button type="button" variant="outline" size="sm" onClick={addTier}>
-                <Plus className="size-4" />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1 px-2 text-[11px]"
+                onClick={addTier}
+              >
+                <Plus className="size-3.5" />
                 {t("seating.addTier")}
               </Button>
             </div>
 
             {tiers.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-bronze">
+              <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-bronze">
                 {t("seating.noTiers")}
               </p>
             ) : (
-              <div className="space-y-2">
-                {tiers.map((tier, index) => (
-                  <div
-                    key={tier.id ?? `new-${index}`}
-                    className="grid gap-3 rounded-xl border border-border bg-card p-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]"
-                  >
-                    <TextField
-                      label={t("seating.tierName")}
-                      value={tier.name}
-                      onChange={(e) =>
-                        updateTier(index, { name: e.target.value })
-                      }
-                      required
-                    />
-                    <div className="min-w-[9.5rem] shrink-0 [&_label]:whitespace-nowrap">
-                      <TextField
-                        label={t("seating.seatCount")}
+              <div className="space-y-1">
+                {tiers.map((tier, index) => {
+                  const nameError = tierNameErrors[index];
+                  return (
+                    <div
+                      key={tier.id ?? tier.clientKey ?? `new-${index}`}
+                      className="grid grid-cols-[minmax(0,1fr)_4.25rem_auto] items-start gap-1.5 rounded-lg border border-border bg-card p-1.5"
+                    >
+                      <div className="min-w-0 space-y-0.5">
+                        <Input
+                          value={tier.name}
+                          onChange={(e) =>
+                            updateTier(index, { name: e.target.value })
+                          }
+                          placeholder={t("seating.tierName")}
+                          aria-label={t("seating.tierName")}
+                          aria-invalid={Boolean(nameError)}
+                          className={cn(
+                            "h-7 px-2 text-xs",
+                            nameError && "border-destructive"
+                          )}
+                        />
+                        {nameError ? (
+                          <p className="text-[10px] text-destructive">{nameError}</p>
+                        ) : tier.id && tier.assigned != null ? (
+                          <p className="text-[9px] text-bronze/80">
+                            {t("seating.tierStats", {
+                              assigned: String(tier.assigned),
+                              total: String(tier.seatCount),
+                            })}
+                          </p>
+                        ) : null}
+                      </div>
+                      <Input
                         type="number"
                         min={1}
                         value={String(tier.seatCount)}
@@ -285,30 +362,21 @@ export function EventSeatingEditor({
                           })
                         }
                         dir="ltr"
-                        className="text-left"
-                        required
+                        aria-label={t("seating.seatCount")}
+                        className="h-7 px-2 text-left text-xs"
                       />
-                    </div>
-                    <div className="flex flex-col justify-end gap-2 pb-1">
-                      {tier.id && tier.assigned != null && (
-                        <Badge variant="outline" className="justify-center">
-                          {t("seating.tierStats", {
-                            assigned: String(tier.assigned),
-                            total: String(tier.seatCount),
-                          })}
-                        </Badge>
-                      )}
                       <Button
                         type="button"
-                        variant="destructive"
-                        size="sm"
+                        variant="ghost"
+                        size="icon"
+                        className="size-7 shrink-0 text-destructive hover:text-destructive"
                         onClick={() => removeTier(index)}
                       >
-                        <Trash2 className="size-4" />
+                        <Trash2 className="size-3.5" />
                       </Button>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

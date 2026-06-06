@@ -2,18 +2,24 @@ import { useEffect, useState } from "react";
 import {
   View,
   Text,
-  TextInput,
-  TouchableOpacity,
   StyleSheet,
   Image,
-  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  useWindowDimensions,
 } from "react-native";
+import { Fingerprint, SignIn } from "phosphor-react-native";
 import { staffLogin } from "../api";
+import { Button } from "../components/ui/Button";
+import { Input } from "../components/ui/Input";
+import { Screen } from "../components/ui/Screen";
 import { useI18n } from "../context/I18nContext";
 import { canUseBiometricLogin, getBiometricSupport } from "../lib/biometric";
 import { logActivity } from "../lib/activity-log";
 import { getBiometricCredentials } from "../lib/settings";
 import { saveSession } from "../storage";
+import { colors, layout, spacing, typography } from "../theme/tokens";
 
 type Props = {
   onLogin: () => void;
@@ -21,12 +27,15 @@ type Props = {
 
 export function LoginScreen({ onLogin }: Props) {
   const { t, textAlign } = useI18n();
+  const { width } = useWindowDimensions();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [biometricReady, setBiometricReady] = useState(false);
   const [biometricLabel, setBiometricLabel] = useState("");
+
+  const formWidth = Math.min(width - spacing.xl * 2, layout.maxFormWidth);
 
   useEffect(() => {
     async function checkBiometric() {
@@ -73,11 +82,72 @@ export function LoginScreen({ onLogin }: Props) {
     }
   }
 
-  async function handleLogin() {
-    await completeLogin(email, password);
-  }
+  return (
+    <Screen edges={["top", "left", "right"]}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={[styles.form, { width: formWidth, maxWidth: "100%" }]}>
+            <Image source={require("../../assets/logo.png")} style={styles.logo} />
+            <Text style={styles.title}>{t("login.title")}</Text>
+            <Text style={styles.subtitle}>{t("login.subtitle")}</Text>
+            <Text style={styles.version}>
+              {t("common.version", { version: "1.1.0" })}
+            </Text>
 
-  async function handleBiometricLogin() {
+            {biometricReady ? (
+              <>
+                <Button
+                  variant="ghost"
+                  label={t("login.biometricLogin", { method: biometricLabel })}
+                  icon={<Fingerprint size={22} color={colors.gold} weight="duotone" />}
+                  onPress={() => void handleBiometric()}
+                  disabled={loading}
+                />
+                <Text style={styles.orDivider}>{t("common.or")}</Text>
+              </>
+            ) : null}
+
+            <Input
+              placeholder={t("login.email")}
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              textAlign={textAlign}
+              autoComplete="email"
+            />
+            <Input
+              placeholder={t("login.password")}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              textAlign={textAlign}
+              autoComplete="password"
+            />
+
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+
+            <Button
+              label={t("login.submit")}
+              icon={<SignIn size={20} color={colors.textOnGold} weight="bold" />}
+              onPress={() => void completeLogin(email, password)}
+              loading={loading}
+            />
+
+            <Text style={styles.hint}>{t("login.hint")}</Text>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </Screen>
+  );
+
+  async function handleBiometric() {
     setError("");
     setLoading(true);
     try {
@@ -96,138 +166,58 @@ export function LoginScreen({ onLogin }: Props) {
       setLoading(false);
     }
   }
-
-  return (
-    <View style={styles.container}>
-      <Image source={require("../../assets/logo.png")} style={styles.logo} />
-      <Text style={styles.title}>{t("login.title")}</Text>
-      <Text style={styles.subtitle}>{t("login.subtitle")}</Text>
-      <Text style={styles.version}>{t("common.version", { version: "1.1.0" })}</Text>
-
-      {biometricReady ? (
-        <TouchableOpacity
-          style={styles.biometricButton}
-          onPress={() => void handleBiometricLogin()}
-          disabled={loading}
-        >
-          <Text style={styles.biometricIcon}>🔐</Text>
-          <Text style={styles.biometricText}>
-            {t("login.biometricLogin", { method: biometricLabel })}
-          </Text>
-        </TouchableOpacity>
-      ) : null}
-
-      {biometricReady ? (
-        <Text style={styles.orDivider}>{t("common.or")}</Text>
-      ) : null}
-
-      <TextInput
-        style={[styles.input, { textAlign }]}
-        placeholder={t("login.email")}
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        keyboardType="email-address"
-      />
-      <TextInput
-        style={[styles.input, { textAlign }]}
-        placeholder={t("login.password")}
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-      />
-
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-
-      <TouchableOpacity
-        style={styles.button}
-        onPress={() => void handleLogin()}
-        disabled={loading}
-      >
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>{t("login.submit")}</Text>
-        )}
-      </TouchableOpacity>
-
-      <Text style={styles.hint}>{t("login.hint")}</Text>
-    </View>
-  );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#faf8f5",
-    padding: 24,
+  flex: { flex: 1 },
+  scroll: {
+    flexGrow: 1,
     justifyContent: "center",
+    alignItems: "center",
+    padding: spacing.xl,
   },
+  form: { alignSelf: "center" },
   logo: {
-    width: 100,
-    height: 100,
+    width: 96,
+    height: 96,
     alignSelf: "center",
-    marginBottom: 16,
-    borderRadius: 50,
+    marginBottom: spacing.lg,
+    borderRadius: 48,
   },
   title: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#5c3d1e",
+    ...typography.title,
+    color: colors.gold,
     textAlign: "center",
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   subtitle: {
-    fontSize: 14,
-    color: "#8b6914",
+    ...typography.caption,
+    color: colors.goldLight,
     textAlign: "center",
-    marginBottom: 4,
   },
   version: {
-    fontSize: 11,
-    color: "#b8860b",
+    ...typography.micro,
+    color: colors.goldAccent,
     textAlign: "center",
-    marginBottom: 20,
+    marginBottom: spacing.xl,
+    marginTop: spacing.xs,
   },
-  biometricButton: {
-    backgroundColor: "#fff",
-    borderWidth: 2,
-    borderColor: "#5c3d1e",
-    borderRadius: 12,
-    padding: 16,
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  biometricIcon: { fontSize: 28, marginBottom: 4 },
-  biometricText: { color: "#5c3d1e", fontSize: 15, fontWeight: "700" },
   orDivider: {
     textAlign: "center",
-    color: "#8b6914",
-    marginVertical: 12,
-    fontSize: 12,
+    color: colors.goldLight,
+    marginVertical: spacing.md,
+    ...typography.micro,
   },
-  input: {
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#e8dcc8",
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 12,
-    fontSize: 16,
+  error: {
+    ...typography.caption,
+    color: colors.danger,
+    textAlign: "center",
+    marginBottom: spacing.sm,
   },
-  button: {
-    backgroundColor: "#5c3d1e",
-    borderRadius: 12,
-    padding: 16,
-    alignItems: "center",
-    marginTop: 8,
-  },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  error: { color: "#991b1b", textAlign: "center", marginBottom: 8 },
   hint: {
-    marginTop: 16,
-    fontSize: 11,
-    color: "#8b6914",
+    marginTop: spacing.lg,
+    ...typography.micro,
+    color: colors.goldLight,
     textAlign: "center",
     lineHeight: 18,
   },

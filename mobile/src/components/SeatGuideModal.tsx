@@ -4,13 +4,16 @@ import {
   Text,
   StyleSheet,
   Modal,
-  TouchableOpacity,
-  ActivityIndicator,
+  Pressable,
   ScrollView,
   useWindowDimensions,
 } from "react-native";
+import { Armchair, X } from "phosphor-react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { ApiError, fetchEventSeating, type SeatingMap } from "../api";
+import { LoadingState } from "./ui/States";
 import { useI18n } from "../context/I18nContext";
+import { colors, layout, radius, spacing, typography } from "../theme/tokens";
 
 export type SeatGuideTarget = {
   guestName: string;
@@ -27,11 +30,11 @@ type Props = {
 };
 
 const SEAT_COLORS = {
-  free: { bg: "#e8dcc8", text: "#5c3d1e" },
-  approved: { bg: "#fef3c7", text: "#92400e" },
-  attended: { bg: "#bbf7d0", text: "#166534" },
-  highlight: { bg: "#d4a84b", text: "#fff" },
-};
+  free: { bg: colors.creamDark, text: colors.gold },
+  approved: { bg: colors.warningBg, text: colors.warning },
+  attended: { bg: colors.attendedBg, text: colors.attended },
+  highlight: { bg: colors.goldAccent, text: colors.textOnGold },
+} as const;
 
 export function SeatGuideModal({ visible, eventId, target, onClose }: Props) {
   const { t, textAlign } = useI18n();
@@ -50,9 +53,7 @@ export function SeatGuideModal({ visible, eventId, target, onClose }: Props) {
     } catch (e) {
       setMap(null);
       setError(
-        e instanceof ApiError
-          ? e.message
-          : t("seatGuide.loadFailed")
+        e instanceof ApiError ? e.message : t("seatGuide.loadFailed")
       );
     } finally {
       setLoading(false);
@@ -63,7 +64,7 @@ export function SeatGuideModal({ visible, eventId, target, onClose }: Props) {
     if (visible) void load();
   }, [visible, load]);
 
-  const canvasWidth = Math.min(width - 32, 480);
+  const canvasWidth = Math.min(width - spacing.xl * 2, 480);
   const canvasHeight = canvasWidth * 0.68;
 
   const highlight =
@@ -81,37 +82,51 @@ export function SeatGuideModal({ visible, eventId, target, onClose }: Props) {
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-            <Text style={styles.closeText}>{t("common.cancel")}</Text>
-          </TouchableOpacity>
-          <Text style={[styles.title, { textAlign }]}>{t("seatGuide.title")}</Text>
+          <Text style={[styles.title, { textAlign }]} numberOfLines={2}>
+            {t("seatGuide.title")}
+          </Text>
+          <Pressable
+            onPress={onClose}
+            style={styles.closeBtn}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={t("common.cancel")}
+          >
+            <X size={22} color={colors.goldAccent} weight="bold" />
+          </Pressable>
         </View>
 
         {target ? (
           <View style={styles.guestBar}>
-            <Text style={[styles.guestName, { textAlign }]}>{target.guestName}</Text>
-            <Text style={[styles.seatLabel, { textAlign }]}>
-              {t("common.seat", { label: target.seatLabel })}
-            </Text>
+            <View style={styles.guestRow}>
+              <Armchair size={20} color={colors.goldAccent} weight="duotone" />
+              <View style={styles.guestText}>
+                <Text style={[styles.guestName, { textAlign }]} numberOfLines={2}>
+                  {target.guestName}
+                </Text>
+                <Text style={[styles.seatLabel, { textAlign }]}>
+                  {t("common.seat", { label: target.seatLabel })}
+                </Text>
+              </View>
+            </View>
           </View>
         ) : null}
 
-        <ScrollView contentContainerStyle={styles.body}>
+        <ScrollView
+          contentContainerStyle={styles.body}
+          showsVerticalScrollIndicator={false}
+        >
           {loading ? (
-            <View style={styles.center}>
-              <ActivityIndicator size="large" color="#5c3d1e" />
-            </View>
+            <LoadingState />
           ) : error ? (
             <Text style={styles.error}>{error}</Text>
           ) : map && !map.seatingEnabled ? (
             <Text style={styles.error}>{t("seatGuide.notEnabled")}</Text>
           ) : map ? (
             <>
-              <Text style={[styles.hint, { textAlign }]}>
-                {t("seatGuide.hint")}
-              </Text>
+              <Text style={[styles.hint, { textAlign }]}>{t("seatGuide.hint")}</Text>
 
               <View
                 style={[
@@ -140,7 +155,7 @@ export function SeatGuideModal({ visible, eventId, target, onClose }: Props) {
                     target &&
                     pos.tierId === target.seatTierId &&
                     pos.number === target.seatNumber;
-                  const colors = isTarget
+                  const seatColors = isTarget
                     ? SEAT_COLORS.highlight
                     : SEAT_COLORS[pos.seat.status];
 
@@ -153,11 +168,13 @@ export function SeatGuideModal({ visible, eventId, target, onClose }: Props) {
                         {
                           left: `${pos.x}%`,
                           top: `${pos.y}%`,
-                          backgroundColor: colors.bg,
+                          backgroundColor: seatColors.bg,
                         },
                       ]}
                     >
-                      <Text style={[styles.seatNumber, { color: colors.text }]}>
+                      <Text
+                        style={[styles.seatNumber, { color: seatColors.text }]}
+                      >
                         {pos.number}
                       </Text>
                     </View>
@@ -199,7 +216,7 @@ export function SeatGuideModal({ visible, eventId, target, onClose }: Props) {
             </>
           ) : null}
         </ScrollView>
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 }
@@ -214,78 +231,84 @@ function LegendItem({ color, label }: { color: string; label: string }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#faf8f5" },
+  container: { flex: 1, backgroundColor: colors.cream },
   header: {
-    paddingTop: 56,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    backgroundColor: "#5c3d1e",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.gold,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: spacing.md,
   },
-  closeBtn: { paddingVertical: 4, paddingHorizontal: 8 },
-  closeText: { color: "#d4a84b", fontWeight: "600", fontSize: 15 },
+  closeBtn: {
+    minWidth: layout.minTouchTarget,
+    minHeight: layout.minTouchTarget,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   title: {
+    ...typography.heading,
     flex: 1,
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "700",
+    color: colors.textOnGold,
   },
   guestBar: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.card,
     borderBottomWidth: 1,
-    borderBottomColor: "#e8dcc8",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    borderBottomColor: colors.border,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
+  guestRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  guestText: { flex: 1, minWidth: 0 },
   guestName: {
+    ...typography.bodyBold,
     fontSize: 17,
-    fontWeight: "700",
-    color: "#2c1810",
+    color: colors.text,
   },
   seatLabel: {
-    fontSize: 14,
-    color: "#b8860b",
-    fontWeight: "600",
-    marginTop: 4,
+    ...typography.captionBold,
+    color: colors.goldAccent,
+    marginTop: spacing.xs,
   },
   body: {
-    padding: 16,
+    padding: spacing.lg,
     alignItems: "center",
-    paddingBottom: 32,
+    paddingBottom: spacing.xxl,
+    flexGrow: 1,
   },
-  center: { paddingVertical: 48 },
   error: {
-    color: "#991b1b",
+    color: colors.danger,
     textAlign: "center",
-    padding: 24,
+    padding: spacing.xl,
+    ...typography.body,
   },
   hint: {
-    fontSize: 13,
-    color: "#8b6914",
-    marginBottom: 12,
+    ...typography.caption,
+    color: colors.textMuted,
+    marginBottom: spacing.md,
     lineHeight: 20,
+    alignSelf: "stretch",
   },
   canvas: {
-    backgroundColor: "#f5f0e8",
-    borderRadius: 16,
+    backgroundColor: colors.creamDark,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: "#e8dcc8",
+    borderColor: colors.border,
     overflow: "hidden",
     position: "relative",
   },
   stage: {
     position: "absolute",
-    backgroundColor: "#5c3d1e",
-    borderRadius: 8,
+    backgroundColor: colors.gold,
+    borderRadius: radius.sm,
     alignItems: "center",
     justifyContent: "center",
-    padding: 4,
+    padding: spacing.xs,
     zIndex: 5,
   },
   stageLabel: {
-    color: "#fff",
+    color: colors.textOnGold,
     fontSize: 10,
     fontWeight: "700",
     textAlign: "center",
@@ -305,7 +328,7 @@ const styles = StyleSheet.create({
   },
   seatHighlight: {
     borderWidth: 3,
-    borderColor: "#5c3d1e",
+    borderColor: colors.gold,
     width: 32,
     height: 32,
     marginLeft: -16,
@@ -313,7 +336,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     zIndex: 20,
     elevation: 4,
-    shadowColor: "#5c3d1e",
+    shadowColor: colors.gold,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.35,
     shadowRadius: 4,
@@ -326,11 +349,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "center",
-    gap: 12,
-    marginTop: 16,
-    paddingTop: 12,
+    gap: spacing.md,
+    marginTop: spacing.lg,
+    paddingTop: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: "#e8dcc8",
+    borderTopColor: colors.border,
     width: "100%",
   },
   legendItem: {
@@ -346,14 +369,13 @@ const styles = StyleSheet.create({
     borderColor: "rgba(92, 61, 30, 0.25)",
   },
   legendText: {
-    fontSize: 11,
-    color: "#5c3d1e",
+    ...typography.micro,
+    color: colors.gold,
   },
   directions: {
-    marginTop: 16,
-    fontSize: 14,
-    color: "#2c1810",
+    marginTop: spacing.lg,
+    ...typography.bodyBold,
+    color: colors.text,
     lineHeight: 22,
-    fontWeight: "600",
   },
 });

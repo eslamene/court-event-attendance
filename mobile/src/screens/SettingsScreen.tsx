@@ -5,12 +5,22 @@ import {
   StyleSheet,
   Switch,
   TouchableOpacity,
-  TextInput,
   Alert,
   ScrollView,
-  ActivityIndicator,
 } from "react-native";
+import {
+  ClockCounterClockwise,
+  Fingerprint,
+  Globe,
+  Info,
+  SignOut,
+  Trash,
+} from "phosphor-react-native";
 import { API_BASE_URL } from "../config";
+import { AppHeader, Screen } from "../components/ui/Screen";
+import { Button } from "../components/ui/Button";
+import { Input } from "../components/ui/Input";
+import { Card } from "../components/ui/Card";
 import { useI18n } from "../context/I18nContext";
 import type { Locale } from "../i18n/types";
 import { getBiometricSupport } from "../lib/biometric";
@@ -21,6 +31,7 @@ import {
   saveBiometricCredentials,
 } from "../lib/settings";
 import { clearSession, getOfflineQueue, getUser, setOfflineQueue } from "../storage";
+import { colors, radius, spacing, typography } from "../theme/tokens";
 
 type Props = {
   onLogout: () => void;
@@ -163,249 +174,192 @@ export function SettingsScreen({ onLogout, onOpenActivityLog }: Props) {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <Text style={[styles.title, { textAlign }]}>{t("settings.title")}</Text>
-        <Text style={[styles.subtitle, { textAlign }]}>{userName}</Text>
-        <Text style={[styles.email, { textAlign }]}>{userEmail}</Text>
-      </View>
+    <Screen>
+      <AppHeader
+        title={t("settings.title")}
+        subtitle={userName}
+        textAlign={textAlign}
+        right={
+          <Text style={styles.email} numberOfLines={1}>
+            {userEmail}
+          </Text>
+        }
+      />
 
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { textAlign }]}>
-          {t("settings.language")}
-        </Text>
-        <View style={[styles.langRow, { flexDirection: rowDirection }]}>
-          <LanguageOption value="ar" label={t("settings.languageArabic")} />
-          <LanguageOption value="en" label={t("settings.languageEnglish")} />
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { textAlign }]}>
-          {t("settings.security")}
-        </Text>
-        <View style={[styles.row, { flexDirection: rowDirection }]}>
-          <Switch
-            value={biometricOn}
-            onValueChange={(v) => void handleBiometricToggle(v)}
-            disabled={!biometricAvailable && !biometricOn}
-            trackColor={{ false: "#e8dcc8", true: "#d4a84b" }}
-            thumbColor={biometricOn ? "#5c3d1e" : "#fff"}
-          />
-          <View style={styles.rowText}>
-            <Text style={[styles.rowLabel, { textAlign }]}>
-              {t("settings.biometricLogin", { method: biometricLabel })}
-            </Text>
-            <Text style={[styles.rowHint, { textAlign }]}>
-              {biometricAvailable
-                ? t("settings.biometricHintAvailable")
-                : t("settings.biometricHintUnavailable")}
-            </Text>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <Card title={t("settings.language")} textAlign={textAlign}>
+          <View style={[styles.langRow, { flexDirection: rowDirection }]}>
+            <LanguageOption value="ar" label={t("settings.languageArabic")} />
+            <LanguageOption value="en" label={t("settings.languageEnglish")} />
           </View>
-        </View>
+        </Card>
 
-        {showPasswordPrompt ? (
-          <View style={styles.passwordBox}>
-            <Text style={[styles.passwordLabel, { textAlign }]}>
-              {t("settings.passwordConfirm")}
-            </Text>
-            <TextInput
-              style={[styles.input, { textAlign }]}
-              secureTextEntry
-              value={passwordPrompt}
-              onChangeText={setPasswordPrompt}
-              placeholder={t("login.password")}
+        <Card title={t("settings.security")} textAlign={textAlign}>
+          <View style={[styles.row, { flexDirection: rowDirection }]}>
+            <Fingerprint size={22} color={colors.gold} weight="duotone" />
+            <Switch
+              value={biometricOn}
+              onValueChange={(v) => void handleBiometricToggle(v)}
+              disabled={!biometricAvailable && !biometricOn}
+              trackColor={{ false: colors.border, true: colors.goldAccent }}
+              thumbColor={biometricOn ? colors.gold : colors.card}
+              style={styles.switch}
             />
-            <View style={[styles.passwordActions, { flexDirection: rowDirection }]}>
-              <TouchableOpacity
-                style={styles.secondaryBtn}
-                onPress={() => {
-                  setShowPasswordPrompt(false);
-                  setPasswordPrompt("");
-                }}
-              >
-                <Text style={styles.secondaryBtnText}>{t("common.cancel")}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.primaryBtn}
-                onPress={() => void confirmBiometricSetup()}
-                disabled={busy}
-              >
-                {busy ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.primaryBtnText}>{t("common.confirm")}</Text>
-                )}
-              </TouchableOpacity>
+            <View style={styles.rowText}>
+              <Text style={[styles.rowLabel, { textAlign }]}>
+                {t("settings.biometricLogin", { method: biometricLabel })}
+              </Text>
+              <Text style={[styles.rowHint, { textAlign }]}>
+                {biometricAvailable
+                  ? t("settings.biometricHintAvailable")
+                  : t("settings.biometricHintUnavailable")}
+              </Text>
             </View>
           </View>
-        ) : null}
-      </View>
 
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { textAlign }]}>{t("settings.data")}</Text>
-        <TouchableOpacity
-          style={[styles.linkRow, { flexDirection: rowDirection }]}
-          onPress={onOpenActivityLog}
-        >
-          <Text style={styles.linkArrow}>{locale === "ar" ? "‹" : "›"}</Text>
-          <Text style={styles.linkLabel}>{t("settings.activityLog")}</Text>
-        </TouchableOpacity>
-        {pendingSync > 0 ? (
-          <View style={[styles.offlineRow, { flexDirection: rowDirection }]}>
-            <TouchableOpacity onPress={() => void handleClearOfflineQueue()}>
-              <Text style={styles.dangerText}>{t("common.clear")}</Text>
-            </TouchableOpacity>
-            <Text style={styles.offlineText}>
-              {t("settings.pendingSync", { count: pendingSync })}
+          {showPasswordPrompt ? (
+            <View style={styles.passwordBox}>
+              <Input
+                placeholder={t("login.password")}
+                secureTextEntry
+                value={passwordPrompt}
+                onChangeText={setPasswordPrompt}
+                textAlign={textAlign}
+              />
+              <View style={[styles.passwordActions, { flexDirection: rowDirection }]}>
+                <View style={styles.passwordBtn}>
+                  <Button
+                    variant="secondary"
+                    label={t("common.cancel")}
+                    onPress={() => {
+                      setShowPasswordPrompt(false);
+                      setPasswordPrompt("");
+                    }}
+                  />
+                </View>
+                <View style={styles.passwordBtn}>
+                  <Button
+                    label={t("common.confirm")}
+                    onPress={() => void confirmBiometricSetup()}
+                    loading={busy}
+                  />
+                </View>
+              </View>
+            </View>
+          ) : null}
+        </Card>
+
+        <Card title={t("settings.data")} textAlign={textAlign}>
+          <TouchableOpacity
+            style={[styles.linkRow, { flexDirection: rowDirection }]}
+            onPress={onOpenActivityLog}
+          >
+            <ClockCounterClockwise size={20} color={colors.gold} weight="duotone" />
+            <Text style={[styles.linkLabel, { textAlign }]}>{t("settings.activityLog")}</Text>
+          </TouchableOpacity>
+          {pendingSync > 0 ? (
+            <View style={[styles.offlineRow, { flexDirection: rowDirection }]}>
+              <TouchableOpacity onPress={() => void handleClearOfflineQueue()}>
+                <View style={styles.clearRow}>
+                  <Trash size={16} color={colors.danger} weight="duotone" />
+                  <Text style={styles.dangerText}>{t("common.clear")}</Text>
+                </View>
+              </TouchableOpacity>
+              <Text style={styles.offlineText}>
+                {t("settings.pendingSync", { count: pendingSync })}
+              </Text>
+            </View>
+          ) : null}
+        </Card>
+
+        <Card title={t("settings.about")} textAlign={textAlign}>
+          <View style={styles.infoRowWrap}>
+            <Info size={18} color={colors.goldLight} weight="duotone" />
+            <Text style={[styles.infoRow, { textAlign }]}>
+              {t("common.version", { version: "1.1.0" })}
             </Text>
           </View>
-        ) : null}
-      </View>
+          <View style={styles.infoRowWrap}>
+            <Globe size={18} color={colors.goldLight} weight="duotone" />
+            <Text style={[styles.infoRow, { textAlign }]} numberOfLines={2}>
+              {t("common.server", { url: API_BASE_URL })}
+            </Text>
+          </View>
+        </Card>
 
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { textAlign }]}>{t("settings.about")}</Text>
-        <Text style={[styles.infoRow, { textAlign }]}>
-          {t("common.version", { version: "1.1.0" })}
-        </Text>
-        <Text style={[styles.infoRow, { textAlign }]} numberOfLines={2}>
-          {t("common.server", { url: API_BASE_URL })}
-        </Text>
-      </View>
-
-      <TouchableOpacity style={styles.logoutBtn} onPress={() => void handleLogout()}>
-        <Text style={styles.logoutText}>{t("settings.logout")}</Text>
-      </TouchableOpacity>
-    </ScrollView>
+        <Button
+          variant="danger"
+          label={t("settings.logout")}
+          icon={<SignOut size={20} color={colors.danger} weight="duotone" />}
+          onPress={() => void handleLogout()}
+          style={styles.logoutBtn}
+        />
+      </ScrollView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#faf8f5" },
-  content: { paddingBottom: 32 },
-  header: {
-    paddingTop: 56,
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-    backgroundColor: "#5c3d1e",
-  },
-  title: { color: "#fff", fontSize: 18, fontWeight: "700" },
-  subtitle: {
-    color: "#fff",
-    fontSize: 15,
-    marginTop: 8,
-    fontWeight: "600",
-  },
-  email: { color: "#e8dcc8", fontSize: 12, marginTop: 2 },
-  section: {
-    marginTop: 16,
-    marginHorizontal: 12,
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e8dcc8",
-    padding: 14,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#8b6914",
-    marginBottom: 12,
-  },
-  langRow: { gap: 8 },
+  content: { paddingBottom: spacing.xxl },
+  email: { color: colors.textOnGoldMuted, fontSize: 11, maxWidth: 140 },
+  langRow: { gap: spacing.sm },
   langOption: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: "#e8dcc8",
+    borderColor: colors.border,
     alignItems: "center",
-    backgroundColor: "#faf8f5",
+    backgroundColor: colors.cream,
+    minHeight: 44,
+    justifyContent: "center",
   },
   langOptionActive: {
-    backgroundColor: "#5c3d1e",
-    borderColor: "#5c3d1e",
+    backgroundColor: colors.gold,
+    borderColor: colors.gold,
   },
-  langOptionText: { fontWeight: "600", color: "#5c3d1e" },
-  langOptionTextActive: { color: "#fff" },
-  row: {
-    alignItems: "center",
-    gap: 12,
-  },
-  rowText: { flex: 1 },
-  rowLabel: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#2c1810",
-  },
-  rowHint: { fontSize: 11, color: "#8b6914", marginTop: 4 },
+  langOptionText: { fontWeight: "600", color: colors.gold },
+  langOptionTextActive: { color: colors.textOnGold },
+  row: { alignItems: "center", gap: spacing.md },
+  switch: { flexShrink: 0 },
+  rowText: { flex: 1, minWidth: 0 },
+  rowLabel: { ...typography.bodyBold, color: colors.text },
+  rowHint: { ...typography.micro, color: colors.goldLight, marginTop: spacing.xs },
   passwordBox: {
-    marginTop: 12,
-    paddingTop: 12,
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: "#f5f0e8",
+    borderTopColor: colors.creamDark,
   },
-  passwordLabel: {
-    fontSize: 12,
-    color: "#5c3d1e",
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: "#faf8f5",
-    borderWidth: 1,
-    borderColor: "#e8dcc8",
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 10,
-  },
-  passwordActions: { gap: 8 },
-  primaryBtn: {
-    flex: 1,
-    backgroundColor: "#5c3d1e",
-    borderRadius: 10,
-    padding: 12,
-    alignItems: "center",
-  },
-  primaryBtnText: { color: "#fff", fontWeight: "600" },
-  secondaryBtn: {
-    flex: 1,
-    backgroundColor: "#f5f0e8",
-    borderRadius: 10,
-    padding: 12,
-    alignItems: "center",
-  },
-  secondaryBtnText: { color: "#5c3d1e", fontWeight: "600" },
+  passwordActions: { gap: spacing.sm },
+  passwordBtn: { flex: 1, minWidth: 0 },
   linkRow: {
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 8,
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
+    minHeight: 44,
   },
-  linkLabel: { fontSize: 15, color: "#2c1810", fontWeight: "600" },
-  linkArrow: { fontSize: 20, color: "#8b6914" },
+  linkLabel: { flex: 1, ...typography.bodyBold, color: colors.text },
   offlineRow: {
     justifyContent: "space-between",
     alignItems: "center",
-    marginTop: 8,
-    paddingTop: 8,
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: "#f5f0e8",
+    borderTopColor: colors.creamDark,
   },
-  offlineText: { color: "#b45309", fontSize: 13 },
-  dangerText: { color: "#991b1b", fontWeight: "600" },
-  infoRow: {
-    fontSize: 13,
-    color: "#5c3d1e",
-    marginBottom: 6,
+  clearRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  offlineText: { color: colors.warning, fontSize: 13 },
+  dangerText: { color: colors.danger, fontWeight: "600" },
+  infoRowWrap: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
   },
-  logoutBtn: {
-    marginHorizontal: 12,
-    marginTop: 20,
-    backgroundColor: "#fee2e2",
-    borderRadius: 12,
-    padding: 16,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#991b1b",
-  },
-  logoutText: { color: "#991b1b", fontWeight: "700", fontSize: 15 },
+  infoRow: { flex: 1, fontSize: 13, color: colors.gold },
+  logoutBtn: { marginHorizontal: spacing.md, marginTop: spacing.lg },
 });

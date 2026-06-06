@@ -1,39 +1,64 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
+  ChevronDown,
   Circle,
   GraduationCap,
   Grid3x3,
+  Info,
   Layers,
   LayoutTemplate,
+  MapPin,
+  PanelBottom,
+  PanelLeft,
+  PanelRight,
+  PanelTop,
   Plus,
+  RotateCcw,
+  SlidersHorizontal,
   Square,
   Theater,
-  Trash2,
   UtensilsCrossed,
+  type LucideIcon,
 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { SeatingDesignerViewport } from "@/components/admin/SeatingDesignerViewport";
 import { SeatingVenueCanvas } from "@/components/admin/SeatingVenueCanvas";
-import { SelectField, TextField } from "@/components/ui/Field";
+import { TierSortableList } from "@/components/admin/TierSortableList";
+import { TextField } from "@/components/ui/Field";
 import { CheckboxField } from "@/components/ui/Field";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
+  analyzeVenueLayout,
+  ARENA_RING_LIMITS,
+  coerceLayoutConfig,
   computeVenueLayout,
   DEFAULT_LAYOUT_CONFIG,
+  getSpacingFieldsForLayout,
   getStagePositionsForLayout,
+  getTierPlacement,
+  tierPlacementKey,
   LAYOUT_TYPES,
   normalizeStagePositionForLayout,
   normalizeArenaArrangement,
+  ROW_LAYOUT_LIMITS,
   SPACING_LIMITS,
   type ArenaArrangement,
   type SeatingLayoutConfig,
   type SeatingLayoutType,
+  type SpacingFieldKey,
   type StagePosition,
 } from "@/lib/seating-layout";
 import type { SeatingMapTier } from "@/lib/seating";
+import { tierNameKey } from "@/lib/seating-tier-names";
+import { Input } from "@/components/ui/input";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 const layoutIcons: Record<SeatingLayoutType, typeof Theater> = {
@@ -45,8 +70,49 @@ const layoutIcons: Record<SeatingLayoutType, typeof Theater> = {
   grid: Grid3x3,
 };
 
+/** Matches PanelTop/Bottom/Left/Right — stage bar in the middle of the frame. */
+function StageCenterIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M5 12h14" strokeWidth="2.5" />
+    </svg>
+  );
+}
+
+const stagePositionIcons: Record<StagePosition, LucideIcon | typeof StageCenterIcon> = {
+  top: PanelTop,
+  bottom: PanelBottom,
+  left: PanelLeft,
+  right: PanelRight,
+  center: StageCenterIcon,
+};
+
+const STAGE_GRID_SLOTS: Array<{
+  position: StagePosition;
+  row: number;
+  col: number;
+}> = [
+  { position: "top", row: 1, col: 2 },
+  { position: "left", row: 2, col: 1 },
+  { position: "center", row: 2, col: 2 },
+  { position: "right", row: 2, col: 3 },
+  { position: "bottom", row: 3, col: 2 },
+];
+
 export type TierPreview = {
   id?: string;
+  /** Stable key for layout placement before the tier is saved. */
+  clientKey?: string;
   name: string;
   seatCount: number;
   assigned?: number;
@@ -62,12 +128,13 @@ type Props = {
   onAddTier: () => void;
   onUpdateTier: (index: number, patch: Partial<TierPreview>) => void;
   onRemoveTier: (index: number) => void;
+  onReorderTiers: (fromIndex: number, toIndex: number) => void;
   expandedPreview?: boolean;
 };
 
 function tiersToPreviewTiers(tiers: TierPreview[]): SeatingMapTier[] {
   return tiers.map((tier, index) => ({
-    id: tier.id ?? `preview-${index}`,
+    id: tier.id ?? tier.clientKey ?? `preview-${index}`,
     name: tier.name,
     seatCount: tier.seatCount,
     sortOrder: index + 1,
@@ -80,31 +147,130 @@ function tiersToPreviewTiers(tiers: TierPreview[]): SeatingMapTier[] {
   }));
 }
 
+function SectionInfoTip({
+  content,
+  label,
+}: {
+  content: string;
+  label: string;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-bronze/65 transition-colors hover:bg-gold/10 hover:text-gold-dark"
+            aria-label={label}
+            onClick={(e) => e.stopPropagation()}
+          />
+        }
+      >
+        <Info className="size-3.5" aria-hidden />
+      </TooltipTrigger>
+      <TooltipContent
+        side="bottom"
+        align="start"
+        className="max-w-[15rem] text-start leading-snug"
+      >
+        {content}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function DesignerSection({
+  title,
+  icon: Icon,
+  defaultOpen = true,
+  badge,
+  headerAction,
+  info,
+  infoLabel,
+  children,
+}: {
+  title: string;
+  icon?: React.ComponentType<{ className?: string }>;
+  defaultOpen?: boolean;
+  badge?: ReactNode;
+  headerAction?: ReactNode;
+  info?: string;
+  infoLabel?: string;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+      <div className="flex items-center gap-2 px-3 py-2.5">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="flex min-w-0 flex-1 items-center gap-2 text-start transition-colors hover:text-gold-dark"
+          aria-expanded={open}
+        >
+          {Icon ? <Icon className="size-4 shrink-0 text-gold" aria-hidden /> : null}
+          <span className="flex-1 text-sm font-semibold text-gold-dark">{title}</span>
+          {badge}
+          <ChevronDown
+            className={cn(
+              "size-4 shrink-0 text-bronze transition-transform",
+              open && "rotate-180"
+            )}
+            aria-hidden
+          />
+        </button>
+        {info && infoLabel ? (
+          <SectionInfoTip content={info} label={infoLabel} />
+        ) : null}
+        {headerAction}
+      </div>
+      {open ? (
+        <div className="space-y-3 border-t border-border bg-[#faf8f5]/40 px-3 pb-3 pt-2.5">
+          {children}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function SpacingSlider({
   label,
+  hint,
   value,
   min,
   max,
   step,
   onChange,
   formatValue,
+  zeroLabel,
+  subdued,
 }: {
   label: string;
+  hint?: string;
   value: number;
   min: number;
   max: number;
   step: number;
   onChange: (value: number) => void;
   formatValue?: (v: number) => string;
+  zeroLabel?: string;
+  subdued?: boolean;
 }) {
-  const display = formatValue ? formatValue(value) : value.toFixed(2);
+  const display =
+    value === 0 && zeroLabel
+      ? zeroLabel
+      : formatValue
+        ? formatValue(value)
+        : value.toFixed(2);
 
   return (
-    <div className="space-y-1.5">
+    <div className={cn("space-y-1", subdued && "opacity-65")}>
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-medium text-gold-dark">{label}</span>
         <span className="text-xs tabular-nums text-bronze">{display}</span>
       </div>
+      {hint ? <p className="text-[11px] leading-snug text-bronze/75">{hint}</p> : null}
       <input
         type="range"
         min={min}
@@ -118,6 +284,122 @@ function SpacingSlider({
   );
 }
 
+function StagePositionPicker({
+  value,
+  options,
+  disabled,
+  onChange,
+  label,
+  getLabel,
+}: {
+  value: StagePosition;
+  options: StagePosition[];
+  disabled?: boolean;
+  onChange: (position: StagePosition) => void;
+  label: string;
+  getLabel: (position: StagePosition) => string;
+}) {
+  const optionSet = new Set(options);
+  const onlyCenter =
+    options.length === 1 && options[0] === "center";
+
+  const renderSlot = (position: StagePosition) => {
+    const Icon = stagePositionIcons[position];
+    const active = value === position;
+    const title = getLabel(position);
+
+    return (
+      <button
+        key={position}
+        type="button"
+        title={title}
+        aria-label={title}
+        aria-pressed={active}
+        disabled={disabled}
+        onClick={() => onChange(position)}
+        className={cn(
+          "flex aspect-square items-center justify-center rounded-lg border transition-colors",
+          onlyCenter ? "size-14" : "w-full",
+          active
+            ? "border-gold bg-gold/10 text-gold-dark shadow-sm"
+            : "border-border bg-card text-bronze hover:border-gold/40 hover:bg-[#faf8f5]",
+          disabled && "cursor-not-allowed opacity-60"
+        )}
+      >
+        <Icon className="size-5 shrink-0" />
+      </button>
+    );
+  };
+
+  return (
+    <div className="space-y-2">
+      <span className="text-sm font-medium text-gold-dark">{label}</span>
+      {onlyCenter ? (
+        <div
+          className="flex justify-center rounded-xl border border-dashed border-border bg-card/60 p-4"
+          role="group"
+          aria-label={label}
+        >
+          {renderSlot("center")}
+        </div>
+      ) : (
+        <div
+          className="grid w-full max-w-[11rem] grid-cols-3 grid-rows-3 gap-1.5"
+          role="group"
+          aria-label={label}
+        >
+          {STAGE_GRID_SLOTS.map((slot) => {
+            if (!optionSet.has(slot.position)) {
+              return (
+                <div
+                  key={slot.position}
+                  style={{ gridRow: slot.row, gridColumn: slot.col }}
+                />
+              );
+            }
+
+            const Icon = stagePositionIcons[slot.position];
+            const active = value === slot.position;
+            const title = getLabel(slot.position);
+
+            return (
+              <button
+                key={slot.position}
+                type="button"
+                title={title}
+                aria-label={title}
+                aria-pressed={active}
+                disabled={disabled}
+                onClick={() => onChange(slot.position)}
+                style={{ gridRow: slot.row, gridColumn: slot.col }}
+                className={cn(
+                  "flex aspect-square items-center justify-center rounded-lg border transition-colors",
+                  active
+                    ? "border-gold bg-gold/10 text-gold-dark shadow-sm"
+                    : "border-border bg-card text-bronze hover:border-gold/40 hover:bg-[#faf8f5]",
+                  disabled && "cursor-not-allowed opacity-60"
+                )}
+              >
+                <Icon className="size-5 shrink-0" />
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <p className="text-xs text-bronze">{getLabel(value)}</p>
+    </div>
+  );
+}
+
+function LayoutStatChip({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-border bg-[#faf8f5] px-2.5 py-0.5 text-[11px] text-bronze">
+      <span className="font-medium text-gold-dark">{value}</span>
+      <span>{label}</span>
+    </span>
+  );
+}
+
 export function SeatingLayoutDesigner({
   layoutType,
   layoutConfig,
@@ -127,6 +409,7 @@ export function SeatingLayoutDesigner({
   onAddTier,
   onUpdateTier,
   onRemoveTier,
+  onReorderTiers,
   expandedPreview = false,
 }: Props) {
   const { t } = useI18n();
@@ -136,32 +419,106 @@ export function SeatingLayoutDesigner({
     layoutType,
     layoutConfig.stagePosition
   );
-  const stageSelectDisabled = stagePositions.length === 1;
+  const stagePickerDisabled = stagePositions.length === 1;
   const arenaArrangement = normalizeArenaArrangement(layoutConfig.arenaArrangement);
-  const showSeatsPerRow =
+  const showRowLayout =
     layoutType === "theater" ||
     layoutType === "classroom" ||
     layoutType === "grid" ||
     (layoutType === "arena" && arenaArrangement === "rows");
+  const showArenaRings =
+    layoutType === "arena" && arenaArrangement === "rings";
+  const showAisle =
+    layoutType === "theater" || layoutType === "classroom";
 
   const layoutHintKey =
     layoutType === "arena" && arenaArrangement === "rows"
       ? "seating.layoutHint.arena_rows"
-      : `seating.layoutHint.${layoutType}`;
+      : layoutType === "arena" && arenaArrangement === "rings"
+        ? "seating.layoutHint.arena_rings"
+        : `seating.layoutHint.${layoutType}`;
 
-  const hSpacing = layoutConfig.horizontalSpacing ?? DEFAULT_LAYOUT_CONFIG.horizontalSpacing!;
-  const vSpacing = layoutConfig.verticalSpacing ?? DEFAULT_LAYOUT_CONFIG.verticalSpacing!;
-  const tierSpacing = layoutConfig.tierSpacing ?? DEFAULT_LAYOUT_CONFIG.tierSpacing!;
-  const seatPadding = layoutConfig.seatPadding ?? DEFAULT_LAYOUT_CONFIG.seatPadding!;
+  const activeTiers = tiers.filter((tier) => tier.seatCount > 0);
+  const totalSeatCount = tiers.reduce(
+    (sum, tier) => sum + Math.max(0, tier.seatCount),
+    0
+  );
 
   const previewVenue = useMemo(() => {
-    const previewTiers = tiersToPreviewTiers(tiers.filter((t) => t.seatCount > 0));
+    const previewTiers = tiersToPreviewTiers(activeTiers);
     if (previewTiers.length === 0) return null;
     return computeVenueLayout(previewTiers, layoutType, {
       ...layoutConfig,
       stagePosition,
     });
-  }, [tiers, layoutType, layoutConfig, stagePosition]);
+  }, [activeTiers, layoutType, layoutConfig, stagePosition]);
+
+  const layoutStats = useMemo(
+    () =>
+      previewVenue
+        ? analyzeVenueLayout(previewVenue, activeTiers.length)
+        : null,
+    [previewVenue, activeTiers.length]
+  );
+
+  const spacingFields = useMemo(
+    () => getSpacingFieldsForLayout(layoutType, layoutConfig),
+    [layoutType, layoutConfig]
+  );
+
+  const spacingRelevance = useMemo(
+    () =>
+      Object.fromEntries(
+        spacingFields.map((f) => [f.key, f.relevance])
+      ) as Record<SpacingFieldKey, number>,
+    [spacingFields]
+  );
+
+  const maxTierSeats = useMemo(() => {
+    const counts = tiers.map((tier) => tier.seatCount).filter((count) => count > 0);
+    return counts.length > 0 ? Math.max(...counts) : 50;
+  }, [tiers]);
+
+  const tierNameErrors = useMemo(() => {
+    const byKey = new Map<string, number[]>();
+    tiers.forEach((tier, index) => {
+      const key = tierNameKey(tier.name);
+      if (!key) return;
+      const indices = byKey.get(key) ?? [];
+      indices.push(index);
+      byKey.set(key, indices);
+    });
+    const errors: Record<number, string> = {};
+    for (const indices of byKey.values()) {
+      if (indices.length > 1) {
+        for (const index of indices) {
+          errors[index] = t("seating.tierNameDuplicate");
+        }
+      }
+    }
+    return errors;
+  }, [tiers, t]);
+
+  const seatsPerRowMax = Math.min(
+    ROW_LAYOUT_LIMITS.seatsPerRow.max,
+    Math.max(8, maxTierSeats)
+  );
+  const numberOfRowsMax = Math.min(
+    ROW_LAYOUT_LIMITS.numberOfRows.max,
+    Math.max(4, totalSeatCount || maxTierSeats)
+  );
+  const numberOfRingsMax = Math.min(
+    ARENA_RING_LIMITS.numberOfRings.max,
+    Math.max(1, totalSeatCount)
+  );
+
+  const hSpacing = layoutConfig.horizontalSpacing ?? DEFAULT_LAYOUT_CONFIG.horizontalSpacing!;
+  const vSpacing = layoutConfig.verticalSpacing ?? DEFAULT_LAYOUT_CONFIG.verticalSpacing!;
+  const tierSpacing = layoutConfig.tierSpacing ?? DEFAULT_LAYOUT_CONFIG.tierSpacing!;
+  const seatPadding = layoutConfig.seatPadding ?? DEFAULT_LAYOUT_CONFIG.seatPadding!;
+  const seatsPerRowValue = layoutConfig.seatsPerRow ?? 0;
+  const numberOfRowsValue = layoutConfig.numberOfRows ?? 0;
+  const numberOfRingsValue = layoutConfig.numberOfRings ?? 0;
 
   function handleLayoutTypeChange(type: SeatingLayoutType) {
     onLayoutTypeChange(type);
@@ -170,12 +527,81 @@ export function SeatingLayoutDesigner({
       layoutConfig.stagePosition
     );
     if (nextPosition !== layoutConfig.stagePosition) {
-      onLayoutConfigChange({ ...layoutConfig, stagePosition: nextPosition });
+      patchConfig({ stagePosition: nextPosition });
     }
   }
 
   function patchConfig(patch: Partial<SeatingLayoutConfig>) {
-    onLayoutConfigChange({ ...layoutConfig, ...patch });
+    onLayoutConfigChange(coerceLayoutConfig({ ...layoutConfig, ...patch }));
+  }
+
+  function resetLayoutSettings() {
+    onLayoutConfigChange(
+      coerceLayoutConfig({
+        ...DEFAULT_LAYOUT_CONFIG,
+        stagePosition: normalizeStagePositionForLayout(
+          layoutType,
+          DEFAULT_LAYOUT_CONFIG.stagePosition
+        ),
+      })
+    );
+  }
+
+  function spacingHint(key: SpacingFieldKey): string {
+    return t(`seating.spacingRole.${key}`);
+  }
+
+  const effectiveRingCount =
+    numberOfRingsValue > 0
+      ? numberOfRingsValue
+      : layoutStats?.ringCount ?? Math.max(1, tiers.length);
+
+  function getTierPositionLabel(index: number, tierKey: string): string {
+    const ring = getTierPlacement(layoutConfig, tierKey).ring;
+    if (showArenaRings) {
+      if (ring && ring > 0) {
+        return t("seating.tierOnRing", { n: String(ring) });
+      }
+      if (index === 0) return t("seating.tierPosition.inner");
+      if (index === tiers.length - 1) return t("seating.tierPosition.outer");
+      return t("seating.tierPosition.middle");
+    }
+    if (index === 0) return t("seating.tierPosition.front");
+    if (index === tiers.length - 1) return t("seating.tierPosition.back");
+    return t("seating.tierPosition.middle");
+  }
+
+  function patchTierRing(tierKey: string, ring: number) {
+    const next = { ...(layoutConfig.tierPlacements ?? {}) };
+    if (ring <= 0) {
+      delete next[tierKey];
+    } else {
+      next[tierKey] = { ring };
+    }
+    patchConfig({
+      tierPlacements: Object.keys(next).length > 0 ? next : undefined,
+    });
+  }
+
+  function setRingSlotAssignment(ring: number, tierKey: string) {
+    const next = { ...(layoutConfig.tierPlacements ?? {}) };
+    for (const [key, placement] of Object.entries(next)) {
+      if (placement.ring === ring) delete next[key];
+    }
+    if (tierKey) {
+      next[tierKey] = { ring };
+    }
+    patchConfig({
+      tierPlacements: Object.keys(next).length > 0 ? next : undefined,
+    });
+  }
+
+  function tierKeyForRing(ring: number): string {
+    const entries = layoutConfig.tierPlacements ?? {};
+    for (const [key, placement] of Object.entries(entries)) {
+      if (placement.ring === ring) return key;
+    }
+    return "";
   }
 
   return (
@@ -188,99 +614,168 @@ export function SeatingLayoutDesigner({
       <div
         className={cn(
           "grid min-h-0 flex-1 grid-cols-1 gap-4 md:gap-5",
-          "lg:grid-cols-[minmax(0,min(100%,22rem))_minmax(0,1fr)]",
+          "xl:grid-cols-[minmax(0,min(100%,24rem))_minmax(0,1fr)]",
           expandedPreview && "h-full min-h-0"
         )}
       >
+        {/* ——— Settings panel ——— */}
         <aside
           className={cn(
-            "flex min-w-0 flex-col gap-4",
-            "lg:max-h-[min(78vh,780px)] lg:overflow-y-auto lg:overscroll-contain lg:pe-1",
-            expandedPreview && "lg:max-h-none lg:h-full"
+            "flex min-w-0 flex-col gap-3",
+            "xl:max-h-[min(82vh,820px)] xl:overflow-y-auto xl:overscroll-contain xl:pe-1",
+            expandedPreview && "xl:max-h-none xl:h-full"
           )}
         >
-          <p className="text-sm text-bronze">{t("seating.layoutIntro")}</p>
+          <div className="flex items-center justify-between gap-2 rounded-xl border border-border bg-[#faf8f5] px-3 py-2">
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-gold-dark">
+                {t("seating.designerSummary")}
+              </p>
+              <p className="truncate text-[11px] text-bronze">
+                {t(`seating.layout.${layoutType}`)}
+                {" · "}
+                {t("seating.statsTotal", { count: String(totalSeatCount) })}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="shrink-0 text-bronze hover:text-gold-dark"
+              onClick={resetLayoutSettings}
+            >
+              <RotateCcw className="size-3.5" />
+              {t("seating.designerReset")}
+            </Button>
+          </div>
 
-          {/* Seat tiers / layers */}
-          <div className="space-y-2 rounded-xl border border-border bg-[#faf8f5] p-3">
-            <div className="flex items-center justify-between gap-2">
-              <h4 className="flex items-center gap-2 text-sm font-semibold text-gold-dark">
-                <Layers className="size-4 shrink-0" />
-                {t("seating.tiersTitle")}
-              </h4>
-              <Button type="button" variant="outline" size="sm" onClick={onAddTier}>
-                <Plus className="size-4" />
+          <DesignerSection
+            title={t("seating.section.tiers")}
+            icon={Layers}
+            defaultOpen
+            badge={
+              tiers.length > 0 ? (
+                <Badge variant="outline" className="text-[10px]">
+                  {tiers.length}
+                </Badge>
+              ) : null
+            }
+            headerAction={
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1 px-2 text-[11px]"
+                onClick={onAddTier}
+              >
+                <Plus className="size-3.5" />
                 {t("seating.addTier")}
               </Button>
-            </div>
-
+            }
+          >
             {tiers.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-border px-3 py-5 text-center text-xs text-bronze">
+              <p className="rounded-lg border border-dashed border-border bg-card px-2 py-3 text-center text-[11px] text-bronze">
                 {t("seating.noTiers")}
               </p>
             ) : (
-              <div className="space-y-2">
-                {tiers.map((tier, index) => (
-                  <div
-                    key={tier.id ?? `tier-${index}`}
-                    className="space-y-2 rounded-lg border border-border bg-card p-2.5"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <Badge variant="outline" className="shrink-0 text-[10px]">
-                        {t("seating.tierLayer", { n: String(index + 1) })}
-                      </Badge>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="size-7 shrink-0 text-destructive hover:text-destructive"
-                        onClick={() => onRemoveTier(index)}
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    </div>
-                    <TextField
-                      label={t("seating.tierName")}
-                      value={tier.name}
-                      onChange={(e) =>
-                        onUpdateTier(index, { name: e.target.value })
-                      }
-                      required
-                    />
-                    <TextField
-                      label={t("seating.seatCount")}
-                      type="number"
-                      min={1}
-                      value={String(tier.seatCount)}
-                      onChange={(e) =>
-                        onUpdateTier(index, {
-                          seatCount: Number(e.target.value) || 0,
-                        })
-                      }
-                      dir="ltr"
-                      className="text-left"
-                      required
-                    />
-                    {tier.id && tier.assigned != null ? (
-                      <p className="text-[10px] text-bronze">
-                        {t("seating.tierStats", {
-                          assigned: String(tier.assigned),
-                          total: String(tier.seatCount),
-                        })}
-                      </p>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+              <TierSortableList
+                compact
+                items={tiers}
+                onReorder={onReorderTiers}
+                onRemove={onRemoveTier}
+                getItemKey={(tier, index) =>
+                  tier.id ?? tier.clientKey ?? `tier-${index}`
+                }
+                getPositionLabel={(index) =>
+                  getTierPositionLabel(
+                    index,
+                    tierPlacementKey(tiers[index], index)
+                  )
+                }
+                renderItem={(tier, index) => {
+                  const tierKey = tierPlacementKey(tier, index);
+                  const ringValue =
+                    getTierPlacement(layoutConfig, tierKey).ring ?? 0;
+                  const nameError = tierNameErrors[index];
 
-          <div>
-            <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold text-gold-dark">
-              <LayoutTemplate className="size-4 shrink-0" />
-              {t("seating.layoutType")}
-            </h4>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-2">
+                  return (
+                    <>
+                      <div className="grid grid-cols-[minmax(0,1fr)_4.25rem] gap-1.5">
+                        <div className="min-w-0 space-y-0.5">
+                          <Input
+                            value={tier.name}
+                            onChange={(e) =>
+                              onUpdateTier(index, { name: e.target.value })
+                            }
+                            placeholder={t("seating.tierName")}
+                            aria-label={t("seating.tierName")}
+                            aria-invalid={Boolean(nameError)}
+                            className={cn(
+                              "h-7 px-2 text-xs",
+                              nameError && "border-destructive"
+                            )}
+                          />
+                          {nameError ? (
+                            <p className="text-[10px] text-destructive">{nameError}</p>
+                          ) : null}
+                        </div>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={String(tier.seatCount)}
+                          onChange={(e) =>
+                            onUpdateTier(index, {
+                              seatCount: Number(e.target.value) || 0,
+                            })
+                          }
+                          dir="ltr"
+                          aria-label={t("seating.seatCount")}
+                          className="h-7 px-2 text-left text-xs"
+                        />
+                      </div>
+                      {showArenaRings ? (
+                        <select
+                          value={String(ringValue)}
+                          onChange={(e) =>
+                            patchTierRing(tierKey, Number(e.target.value))
+                          }
+                          aria-label={t("seating.tierRingPlacement")}
+                          className="h-7 w-full rounded-md border border-input bg-card px-2 text-[11px] text-foreground"
+                        >
+                          <option value="0">{t("seating.autoLayout")}</option>
+                          {Array.from(
+                            { length: effectiveRingCount },
+                            (_, i) => i + 1
+                          ).map((ring) => (
+                            <option key={ring} value={ring}>
+                              {t("seating.ringN", { n: String(ring) })}
+                            </option>
+                          ))}
+                        </select>
+                      ) : null}
+                      {tier.id && tier.assigned != null ? (
+                        <p className="text-[9px] text-bronze/80">
+                          {t("seating.tierStats", {
+                            assigned: String(tier.assigned),
+                            total: String(tier.seatCount),
+                          })}
+                        </p>
+                      ) : null}
+                    </>
+                  );
+                }}
+              />
+            )}
+          </DesignerSection>
+
+          <DesignerSection
+            title={t("seating.section.layout")}
+            icon={LayoutTemplate}
+            info={t("seating.layoutIntro")}
+            infoLabel={t("seating.layoutIntroLabel")}
+            defaultOpen
+          >
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {LAYOUT_TYPES.map((type) => {
                 const Icon = layoutIcons[type];
                 const active = layoutType === type;
@@ -304,126 +799,272 @@ export function SeatingLayoutDesigner({
                 );
               })}
             </div>
-          </div>
+          </DesignerSection>
 
-          <div className="space-y-3 rounded-xl border border-border bg-card p-3">
-            <h4 className="text-sm font-semibold text-gold-dark">
-              {t("seating.spacingTitle")}
-            </h4>
-            <p className="text-xs text-bronze/80">{t("seating.spacingHint")}</p>
+          <DesignerSection
+            title={t("seating.section.stage")}
+            icon={MapPin}
+            defaultOpen
+          >
+            <StagePositionPicker
+              label={t("seating.stagePosition")}
+              value={stagePosition}
+              options={stagePositions}
+              disabled={stagePickerDisabled}
+              onChange={(pos) => {
+                const patch: Partial<SeatingLayoutConfig> = { stagePosition: pos };
+                if (pos === "center") {
+                  patch.aisleCenter = true;
+                }
+                patchConfig(patch);
+              }}
+              getLabel={(pos) => t(`seating.stage.${pos}`)}
+            />
+            {stagePosition === "center" && showRowLayout ? (
+              <p className="text-xs leading-relaxed text-bronze/90">
+                {t("seating.stageCenterHint")}
+              </p>
+            ) : null}
+            <TextField
+              label={t("seating.stageLabel")}
+              value={layoutConfig.stageLabel ?? DEFAULT_LAYOUT_CONFIG.stageLabel ?? ""}
+              onChange={(e) => patchConfig({ stageLabel: e.target.value })}
+              placeholder={t("seating.stageLabelPlaceholder")}
+            />
+            {layoutType === "arena" ? (
+              <div className="space-y-2">
+                <span className="text-sm font-medium text-gold-dark">
+                  {t("seating.arenaArrangement")}
+                </span>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["rings", "rows"] as const).map((mode) => {
+                    const active = arenaArrangement === mode;
+                    return (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => patchConfig({ arenaArrangement: mode })}
+                        className={cn(
+                          "rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
+                          active
+                            ? "border-gold bg-gold/10 text-gold-dark"
+                            : "border-border bg-card text-bronze hover:border-gold/40"
+                        )}
+                      >
+                        {t(`seating.arenaArrangement.${mode}`)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+          </DesignerSection>
+
+          {(showArenaRings || showRowLayout || showAisle) ? (
+            <DesignerSection
+              title={t("seating.section.options")}
+              icon={SlidersHorizontal}
+              defaultOpen
+            >
+              {showArenaRings ? (
+                <div className="space-y-2">
+                  <p className="text-xs text-bronze/85">{t("seating.ringLayoutHint")}</p>
+                  <SpacingSlider
+                    label={t("seating.numberOfRings")}
+                    value={numberOfRingsValue}
+                    min={ARENA_RING_LIMITS.numberOfRings.min}
+                    max={numberOfRingsMax}
+                    step={ARENA_RING_LIMITS.numberOfRings.step}
+                    zeroLabel={t("seating.autoLayout")}
+                    formatValue={(v) => String(Math.round(v))}
+                    onChange={(v) =>
+                      patchConfig({ numberOfRings: Math.round(v) })
+                    }
+                  />
+                </div>
+              ) : null}
+
+              {showRowLayout ? (
+                <div className="space-y-3">
+                  <p className="text-xs text-bronze/85">{t("seating.rowLayoutHint")}</p>
+                  <SpacingSlider
+                    label={t("seating.seatsPerRow")}
+                    value={seatsPerRowValue}
+                    min={ROW_LAYOUT_LIMITS.seatsPerRow.min}
+                    max={seatsPerRowMax}
+                    step={ROW_LAYOUT_LIMITS.seatsPerRow.step}
+                    zeroLabel={t("seating.autoLayout")}
+                    formatValue={(v) => String(Math.round(v))}
+                    onChange={(v) =>
+                      patchConfig({ seatsPerRow: Math.round(v) })
+                    }
+                  />
+                  <SpacingSlider
+                    label={t("seating.numberOfRows")}
+                    value={numberOfRowsValue}
+                    min={ROW_LAYOUT_LIMITS.numberOfRows.min}
+                    max={numberOfRowsMax}
+                    step={ROW_LAYOUT_LIMITS.numberOfRows.step}
+                    zeroLabel={t("seating.autoLayout")}
+                    formatValue={(v) => String(Math.round(v))}
+                    onChange={(v) =>
+                      patchConfig({ numberOfRows: Math.round(v) })
+                    }
+                  />
+                </div>
+              ) : null}
+
+              {showAisle ? (
+                <CheckboxField
+                  label={t("seating.aisleCenter")}
+                  checked={Boolean(layoutConfig.aisleCenter)}
+                  onChange={(checked) => patchConfig({ aisleCenter: checked })}
+                />
+              ) : null}
+            </DesignerSection>
+          ) : null}
+
+          <DesignerSection
+            title={t("seating.section.spacing")}
+            icon={SlidersHorizontal}
+            defaultOpen={false}
+          >
+            <p className="text-xs text-bronze/85">{t("seating.spacingHint")}</p>
             <SpacingSlider
               label={t("seating.horizontalSpacing")}
+              hint={spacingHint("horizontal")}
               value={hSpacing}
               min={SPACING_LIMITS.horizontal.min}
               max={SPACING_LIMITS.horizontal.max}
               step={SPACING_LIMITS.horizontal.step}
+              subdued={spacingRelevance.horizontal < 0.5}
               onChange={(v) => patchConfig({ horizontalSpacing: v })}
             />
             <SpacingSlider
               label={t("seating.verticalSpacing")}
+              hint={spacingHint("vertical")}
               value={vSpacing}
               min={SPACING_LIMITS.vertical.min}
               max={SPACING_LIMITS.vertical.max}
               step={SPACING_LIMITS.vertical.step}
+              subdued={spacingRelevance.vertical < 0.5}
               onChange={(v) => patchConfig({ verticalSpacing: v })}
             />
             <SpacingSlider
               label={t("seating.tierSpacing")}
+              hint={spacingHint("tier")}
               value={tierSpacing}
               min={SPACING_LIMITS.tier.min}
               max={SPACING_LIMITS.tier.max}
               step={SPACING_LIMITS.tier.step}
+              subdued={spacingRelevance.tier < 0.5}
               onChange={(v) => patchConfig({ tierSpacing: v })}
             />
             <SpacingSlider
               label={t("seating.seatPadding")}
+              hint={spacingHint("padding")}
               value={seatPadding}
               min={SPACING_LIMITS.padding.min}
               max={SPACING_LIMITS.padding.max}
               step={SPACING_LIMITS.padding.step}
-              onChange={(v) => patchConfig({ seatPadding: v })}
               formatValue={(v) => `${Math.round(v * 100)}%`}
+              onChange={(v) => patchConfig({ seatPadding: v })}
             />
-          </div>
-
-          <div className="grid gap-3">
-            <SelectField
-              label={t("seating.stagePosition")}
-              fieldKey="stagePosition"
-              value={stagePosition}
-              disabled={stageSelectDisabled}
-              onChange={(e) =>
-                patchConfig({
-                  stagePosition: e.target.value as StagePosition,
-                })
-              }
-              options={stagePositions.map((pos) => ({
-                value: pos,
-                label: t(`seating.stage.${pos}`),
-              }))}
-            />
-
-            <TextField
-              label={t("seating.stageLabel")}
-              value={layoutConfig.stageLabel ?? DEFAULT_LAYOUT_CONFIG.stageLabel ?? ""}
-              onChange={(e) =>
-                patchConfig({ stageLabel: e.target.value })
-              }
-              placeholder={t("seating.stageLabelPlaceholder")}
-            />
-
-            {layoutType === "arena" ? (
-              <SelectField
-                label={t("seating.arenaArrangement")}
-                fieldKey="arenaArrangement"
-                value={arenaArrangement}
-                onChange={(e) =>
-                  patchConfig({
-                    arenaArrangement: e.target.value as ArenaArrangement,
-                  })
-                }
-                options={(["rings", "rows"] as const).map((mode) => ({
-                  value: mode,
-                  label: t(`seating.arenaArrangement.${mode}`),
-                }))}
-              />
-            ) : null}
-
-            {showSeatsPerRow ? (
-              <TextField
-                label={t("seating.seatsPerRow")}
-                type="number"
-                min={0}
-                value={String(layoutConfig.seatsPerRow ?? 0)}
-                onChange={(e) =>
-                  patchConfig({
-                    seatsPerRow: Number(e.target.value) || 0,
-                  })
-                }
-                dir="ltr"
-                className="text-left"
-                placeholder="0 = auto"
-              />
-            ) : null}
-
-            {layoutType === "classroom" ? (
-              <CheckboxField
-                label={t("seating.aisleCenter")}
-                checked={Boolean(layoutConfig.aisleCenter)}
-                onChange={(checked) =>
-                  patchConfig({ aisleCenter: checked })
-                }
-              />
-            ) : null}
-          </div>
-
-          <p className="text-xs text-bronze/80 lg:hidden">{t(layoutHintKey)}</p>
+          </DesignerSection>
         </aside>
 
-        <section className="flex min-h-0 min-h-[min(280px,52vh)] flex-col gap-2 lg:min-h-[min(400px,70vh)]">
-          <h4 className="shrink-0 text-sm font-semibold text-gold-dark">
-            {t("seating.layoutPreview")}
-          </h4>
+        {/* ——— Preview ——— */}
+        <section className="flex min-h-0 min-h-[min(280px,52vh)] flex-col gap-2 xl:min-h-[min(420px,72vh)]">
+          <div className="flex shrink-0 flex-wrap items-start justify-between gap-2">
+            <div>
+              <h4 className="text-sm font-semibold text-gold-dark">
+                {t("seating.layoutPreview")}
+              </h4>
+              <p className="mt-0.5 text-xs text-bronze/85">{t(layoutHintKey)}</p>
+            </div>
+            {layoutStats ? (
+              <div className="flex flex-wrap justify-end gap-1.5">
+                <LayoutStatChip
+                  label={t("seating.statsSeatsLabel")}
+                  value={String(layoutStats.totalSeats)}
+                />
+                <LayoutStatChip
+                  label={t("seating.statsTiersLabel")}
+                  value={String(layoutStats.tierCount)}
+                />
+                {layoutStats.ringCount != null ? (
+                  <LayoutStatChip
+                    label={t("seating.statsRingsLabel")}
+                    value={
+                      layoutStats.configuredRings != null
+                        ? String(layoutStats.configuredRings)
+                        : String(layoutStats.ringCount)
+                    }
+                  />
+                ) : null}
+                {layoutStats.rowCount != null ? (
+                  <LayoutStatChip
+                    label={t("seating.statsRowsLabel")}
+                    value={String(layoutStats.rowCount)}
+                  />
+                ) : null}
+                {layoutStats.tableRings != null ? (
+                  <LayoutStatChip
+                    label={t("seating.statsTablesLabel")}
+                    value={String(layoutStats.tableRings)}
+                  />
+                ) : null}
+                {layoutStats.configuredSeatsPerRow != null ? (
+                  <LayoutStatChip
+                    label={t("seating.statsPerRowLabel")}
+                    value={String(layoutStats.configuredSeatsPerRow)}
+                  />
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
+          {showArenaRings && tiers.length > 0 ? (
+            <div className="shrink-0 rounded-xl border border-border bg-[#faf8f5] p-3">
+              <h5 className="mb-2 text-xs font-semibold text-gold-dark">
+                {t("seating.ringSlotTitle")}
+              </h5>
+              <p className="mb-2 text-[11px] text-bronze/80">
+                {t("seating.ringSlotHint")}
+              </p>
+              <div className="space-y-1.5">
+                {Array.from({ length: effectiveRingCount }, (_, i) => i + 1).map(
+                  (ring) => (
+                    <div
+                      key={ring}
+                      className="flex items-center gap-2 rounded-lg border border-border bg-card px-2 py-1.5"
+                    >
+                      <span className="w-16 shrink-0 text-[11px] font-medium text-gold-dark">
+                        {t("seating.ringN", { n: String(ring) })}
+                      </span>
+                      <select
+                        value={tierKeyForRing(ring)}
+                        onChange={(e) =>
+                          setRingSlotAssignment(ring, e.target.value)
+                        }
+                        className="h-7 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-xs"
+                      >
+                        <option value="">{t("seating.ringSlotAuto")}</option>
+                        {tiers.map((tier, index) => {
+                          const key = tierPlacementKey(tier, index);
+                          return (
+                            <option key={key} value={key}>
+                              {tier.name}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+          ) : null}
 
           <SeatingDesignerViewport className="min-h-[min(300px,55vh)] flex-1">
             {previewVenue ? (
@@ -443,9 +1084,7 @@ export function SeatingLayoutDesigner({
             )}
           </SeatingDesignerViewport>
 
-          <p className="hidden shrink-0 text-xs text-bronze/80 lg:block">
-            {t(layoutHintKey)}
-          </p>
+          <p className="shrink-0 text-[11px] text-bronze/70">{t("seating.panHint")}</p>
         </section>
       </div>
     </div>

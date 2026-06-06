@@ -85,6 +85,8 @@ export const ar = {
   myScans: {
     title: "مسوحاتي",
     summary: "{{total}} مسح · {{success}} ناجح",
+    totalLabel: "إجمالي المسوحات",
+    successLabel: "ناجح",
     loadFailed: "تعذّر تحميل مسوحاتك",
     empty: "لم تقم بأي مسح لهذه الفعالية بعد",
   },
@@ -123,6 +125,7 @@ export const ar = {
     back: "‹ رجوع إلى الإعدادات",
     clearLog: "مسح السجل",
     empty: "لا يوجد نشاط مسجّل بعد",
+    entryCount: "{{count}} عنصر",
     types: {
       login: "تسجيل دخول",
       logout: "تسجيل خروج",

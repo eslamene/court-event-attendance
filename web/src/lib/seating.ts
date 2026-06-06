@@ -10,6 +10,7 @@ import {
   parseLayoutConfig,
   serializeLayoutConfig,
 } from "./seating-layout";
+import { findDuplicateTierNames } from "./seating-tier-names";
 
 const OCCUPIED_STATUSES = ["APPROVED", "ATTENDED"] as const;
 
@@ -108,6 +109,15 @@ export function validateSeatTiers(
       seatCount,
     });
   }
+
+  const duplicate = findDuplicateTierNames(normalized);
+  if (duplicate) {
+    return {
+      ok: false,
+      error: `Duplicate tier name "${duplicate}"`,
+    };
+  }
+
   return { ok: true, tiers: normalized };
 }
 

@@ -87,6 +87,8 @@ export const en: TranslationTree = {
   myScans: {
     title: "My scans",
     summary: "{{total}} scans · {{success}} successful",
+    totalLabel: "Total scans",
+    successLabel: "Successful",
     loadFailed: "Could not load your scans",
     empty: "You have not scanned anything for this event yet",
   },
@@ -125,6 +127,7 @@ export const en: TranslationTree = {
     back: "‹ Back to settings",
     clearLog: "Clear log",
     empty: "No activity recorded yet",
+    entryCount: "{{count}} entries",
     types: {
       login: "Sign in",
       logout: "Sign out",

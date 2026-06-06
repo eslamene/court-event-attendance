@@ -3,20 +3,22 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  ActivityIndicator,
   RefreshControl,
-  TouchableOpacity,
 } from "react-native";
+import { MapTrifold } from "phosphor-react-native";
 import type { AttendanceScan } from "../api";
 import { hasSeatAssignment } from "../api";
+import { Button } from "./ui/Button";
+import { LoadingState, EmptyState } from "./ui/States";
 import { useI18n } from "../context/I18nContext";
 import type { SeatGuideTarget } from "./SeatGuideModal";
+import { colors, radius, spacing, typography } from "../theme/tokens";
 
 const RESULT_COLORS: Record<string, string> = {
-  SUCCESS: "#166534",
-  INVALID: "#991b1b",
-  ALREADY_USED: "#b45309",
-  WRONG_EVENT: "#b45309",
+  SUCCESS: colors.success,
+  INVALID: colors.danger,
+  ALREADY_USED: colors.warning,
+  WRONG_EVENT: colors.warning,
 };
 
 type Props = {
@@ -44,21 +46,22 @@ export function ScanLogList({
 
   if (loading && scans.length === 0) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator color="#5c3d1e" size="large" />
+      <View style={styles.listRoot}>
+        <LoadingState />
       </View>
     );
   }
 
   return (
     <FlatList
+      style={styles.listRoot}
       data={scans}
       keyExtractor={(item) => item.id}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.gold} />
       }
-      contentContainerStyle={scans.length === 0 ? styles.emptyContainer : undefined}
-      ListEmptyComponent={<Text style={styles.empty}>{emptyMessage}</Text>}
+      contentContainerStyle={scans.length === 0 ? styles.emptyContainer : styles.list}
+      ListEmptyComponent={<EmptyState message={emptyMessage} />}
       renderItem={({ item }) => {
         const name = item.registration?.fullName ?? item.judgeName ?? "—";
         const time = new Date(item.scannedAt).toLocaleString(dateLocale, {
@@ -71,7 +74,7 @@ export function ScanLogList({
               <Text
                 style={[
                   styles.badge,
-                  { color: RESULT_COLORS[item.result] ?? "#5c3d1e" },
+                  { color: RESULT_COLORS[item.result] ?? colors.gold },
                 ]}
               >
                 {t(`scanResult.${item.result}`)}
@@ -103,8 +106,10 @@ export function ScanLogList({
             onGuideSeat &&
             item.registration &&
             hasSeatAssignment(item.registration) ? (
-              <TouchableOpacity
-                style={styles.guideBtn}
+              <Button
+                variant="primary"
+                label={t("seatGuide.open")}
+                icon={<MapTrifold size={16} color={colors.textOnGold} weight="duotone" />}
                 onPress={() =>
                   onGuideSeat({
                     guestName: item.registration!.fullName,
@@ -113,9 +118,9 @@ export function ScanLogList({
                     seatNumber: item.registration!.seatNumber!,
                   })
                 }
-              >
-                <Text style={styles.guideBtnText}>{t("seatGuide.open")}</Text>
-              </TouchableOpacity>
+                style={styles.guideBtn}
+                fullWidth={false}
+              />
             ) : null}
           </View>
         );
@@ -125,59 +130,40 @@ export function ScanLogList({
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  emptyContainer: { flexGrow: 1, justifyContent: "center" },
-  empty: {
-    textAlign: "center",
-    color: "#8b6914",
-    fontSize: 15,
-    padding: 24,
-  },
+  listRoot: { flex: 1 },
+  list: { paddingBottom: spacing.lg },
+  emptyContainer: { flexGrow: 1 },
   row: {
-    backgroundColor: "#fff",
-    marginHorizontal: 12,
-    marginBottom: 8,
-    padding: 14,
-    borderRadius: 12,
+    backgroundColor: colors.card,
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: "#e8dcc8",
+    borderColor: colors.border,
   },
   rowHeader: {
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 6,
   },
-  badge: { fontSize: 11, fontWeight: "700" },
-  time: { fontSize: 11, color: "#8b6914" },
+  badge: { ...typography.micro, fontWeight: "700" },
+  time: { ...typography.micro, color: colors.textMuted },
   name: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#2c1810",
+    ...typography.bodyBold,
+    color: colors.text,
   },
-  meta: { fontSize: 12, color: "#5c3d1e", marginTop: 2 },
+  meta: { ...typography.caption, color: colors.gold, marginTop: 2 },
   seat: {
-    fontSize: 12,
-    color: "#b8860b",
-    marginTop: 4,
-    fontWeight: "600",
+    ...typography.captionBold,
+    color: colors.goldAccent,
+    marginTop: spacing.xs,
   },
   scanner: {
-    fontSize: 11,
-    color: "#8b6914",
+    ...typography.micro,
+    color: colors.textMuted,
     marginTop: 6,
     fontStyle: "italic",
   },
-  guideBtn: {
-    marginTop: 10,
-    alignSelf: "flex-start",
-    backgroundColor: "#5c3d1e",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  guideBtnText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "700",
-  },
+  guideBtn: { marginTop: spacing.md, alignSelf: "flex-start" },
 });
