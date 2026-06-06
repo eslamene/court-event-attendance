@@ -8,10 +8,10 @@ const config: ExpoConfig = {
   icon: "./assets/icon.png",
   userInterfaceStyle: "light",
   scheme: "court-event-attendance",
-  owner: "hennawy",
+  owner: "eslamene",
   extra: {
     eas: {
-      projectId: process.env.EAS_PROJECT_ID,
+      projectId: "e4876420-b761-48a7-bf33-e98624497538",
     },
   },
   ios: {

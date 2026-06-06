@@ -5,39 +5,106 @@ import {
   StyleSheet,
   TouchableOpacity,
   Vibration,
+  ScrollView,
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Haptics from "expo-haptics";
-import { scanQr } from "../api";
+import {
+  ApiError,
+  formatRegistrationDetails,
+  fetchSession,
+  isNetworkError,
+  scanQr,
+  type EventItem,
+  type ScanResult,
+  type ScanResultCode,
+} from "../api";
+import { extractQrToken, isLikelyQrPayload } from "../qr";
 import {
   clearSession,
   enqueueOfflineScan,
   getEvents,
+  getOfflineQueue,
   getSelectedEventId,
   getToken,
   getUser,
+  saveEvents,
+  saveUser,
   setSelectedEventId,
 } from "../storage";
 import { syncOfflineQueue } from "../offline";
-import type { EventItem } from "../api";
 
 type Props = {
   onLogout: () => void;
 };
 
-type Feedback = "idle" | "success" | "error";
+type Feedback = "idle" | "success" | "warning" | "error" | "offline";
+
+type RecentScan = {
+  id: string;
+  at: string;
+  result: ScanResultCode;
+  message: string;
+  name?: string;
+  seatLabel?: string | null;
+};
+
+const RESULT_LABELS: Record<ScanResultCode, string> = {
+  SUCCESS: "حضور مسجّل",
+  INVALID: "رمز غير صالح",
+  ALREADY_USED: "مستخدم مسبقاً",
+  WRONG_EVENT: "فعالية أخرى",
+};
 
 export function ScannerScreen({ onLogout }: Props) {
   const [permission, requestPermission] = useCameraPermissions();
   const [events, setEvents] = useState<EventItem[]>([]);
-  const [eventId, setEventId] = useState<string>("");
+  const [eventId, setEventId] = useState("");
   const [userName, setUserName] = useState("");
   const [feedback, setFeedback] = useState<Feedback>("idle");
   const [message, setMessage] = useState("وجّه الكاميرا نحو رمز QR");
   const [details, setDetails] = useState("");
+  const [resultCode, setResultCode] = useState<ScanResultCode | null>(null);
   const [scanning, setScanning] = useState(true);
   const [pendingSync, setPendingSync] = useState(0);
+  const [recentScans, setRecentScans] = useState<RecentScan[]>([]);
   const lastScan = useRef(0);
+
+  const refreshPendingCount = useCallback(async () => {
+    const queue = await getOfflineQueue();
+    setPendingSync(queue.length);
+  }, []);
+
+  const refreshSession = useCallback(async () => {
+    const token = await getToken();
+    if (!token) {
+      onLogout();
+      return;
+    }
+
+    try {
+      const session = await fetchSession(token);
+      await saveUser(session.user);
+      await saveEvents(session.events);
+      setEvents(session.events);
+      setUserName(session.user.name);
+
+      const selected = await getSelectedEventId();
+      if (selected && session.events.some((e) => e.id === selected)) {
+        setEventId(selected);
+      } else if (session.events[0]) {
+        setEventId(session.events[0].id);
+        await setSelectedEventId(session.events[0].id);
+      } else {
+        setEventId("");
+      }
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        await clearSession();
+        onLogout();
+      }
+    }
+  }, [onLogout]);
 
   const load = useCallback(async () => {
     const [ev, sel, user, token] = await Promise.all([
@@ -48,20 +115,78 @@ export function ScannerScreen({ onLogout }: Props) {
     ]);
     setEvents(ev);
     setUserName(user?.name ?? "");
-    if (sel) setEventId(sel);
+    if (sel && ev.some((e) => e.id === sel)) setEventId(sel);
     else if (ev[0]) setEventId(ev[0].id);
 
+    await refreshPendingCount();
+
     if (token) {
-      const result = await syncOfflineQueue(token);
-      setPendingSync(result.failed);
+      const sync = await syncOfflineQueue(token);
+      await refreshPendingCount();
+      if (sync.sessionExpired) {
+        await clearSession();
+        onLogout();
+        return;
+      }
+      await refreshSession();
     }
-  }, []);
+  }, [onLogout, refreshPendingCount, refreshSession]);
 
   useEffect(() => {
-    load();
-    const interval = setInterval(load, 15000);
+    void load();
+    const interval = setInterval(() => {
+      void load();
+    }, 15000);
     return () => clearInterval(interval);
   }, [load]);
+
+  function pushRecentScan(scan: RecentScan) {
+    setRecentScans((prev) => [scan, ...prev].slice(0, 8));
+  }
+
+  function applyScanResult(result: ScanResult, raw: string) {
+    setResultCode(result.result);
+
+    if (result.success) {
+      setFeedback("success");
+      setMessage(result.message);
+      setDetails(formatRegistrationDetails(result.registration));
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Vibration.vibrate(200);
+      pushRecentScan({
+        id: raw,
+        at: new Date().toLocaleTimeString("ar-EG"),
+        result: result.result,
+        message: result.message,
+        name: result.registration?.fullName,
+        seatLabel: result.registration?.seatLabel,
+      });
+      return;
+    }
+
+    if (result.result === "ALREADY_USED" || result.result === "WRONG_EVENT") {
+      setFeedback("warning");
+    } else {
+      setFeedback("error");
+    }
+
+    setMessage(result.message);
+    setDetails(
+      result.registration
+        ? formatRegistrationDetails(result.registration)
+        : ""
+    );
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    Vibration.vibrate([0, 80, 80, 80]);
+
+    pushRecentScan({
+      id: raw,
+      at: new Date().toLocaleTimeString("ar-EG"),
+      result: result.result,
+      message: result.message,
+      name: result.registration?.fullName,
+    });
+  }
 
   async function handleScan(raw: string) {
     const now = Date.now();
@@ -71,6 +196,24 @@ export function ScannerScreen({ onLogout }: Props) {
     if (!eventId) {
       setFeedback("error");
       setMessage("يرجى اختيار الفعالية أولاً");
+      setResultCode(null);
+      return;
+    }
+
+    const qrToken = extractQrToken(raw);
+    if (!isLikelyQrPayload(raw)) {
+      setFeedback("error");
+      setMessage("رمز QR غير معروف — تأكد من مسح رمز الحضور الصحيح");
+      setDetails("");
+      setResultCode("INVALID");
+      setScanning(false);
+      setTimeout(() => {
+        setFeedback("idle");
+        setMessage("وجّه الكاميرا نحو رمز QR");
+        setDetails("");
+        setResultCode(null);
+        setScanning(true);
+      }, 2500);
       return;
     }
 
@@ -80,52 +223,55 @@ export function ScannerScreen({ onLogout }: Props) {
     const scannedAt = new Date().toISOString();
 
     try {
-      if (!token) throw new Error("انتهت الجلسة");
+      if (!token) throw new ApiError("انتهت الجلسة", 401);
 
       const result = await scanQr(token, {
-        qrToken: raw,
+        qrToken,
         eventId,
         offlineId,
         scannedAt,
       });
 
-      if (result.success) {
-        setFeedback("success");
-        setMessage(result.message);
-        setDetails(
-          result.registration
-            ? `${result.registration.fullName}\n${result.registration.rank}\n${result.registration.entity}`
-            : ""
-        );
-        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Vibration.vibrate(200);
-      } else {
-        setFeedback("error");
-        setMessage(result.message);
-        setDetails("");
-        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        Vibration.vibrate([0, 100, 100, 100]);
+      applyScanResult(result, qrToken);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        await clearSession();
+        onLogout();
+        return;
       }
-    } catch {
-      await enqueueOfflineScan({
-        offlineId,
-        qrToken: raw,
-        eventId,
-        scannedAt,
-      });
-      setFeedback("success");
-      setMessage("تم الحفظ محلياً — سيتم المزامنة عند عودة الاتصال");
+
+      if (isNetworkError(error)) {
+        await enqueueOfflineScan({
+          offlineId,
+          qrToken,
+          eventId,
+          scannedAt,
+        });
+        await refreshPendingCount();
+        setFeedback("offline");
+        setMessage("لا يوجد اتصال — تم الحفظ محلياً للمزامنة لاحقاً");
+        setDetails("");
+        setResultCode(null);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        return;
+      }
+
+      setFeedback("error");
+      setMessage(
+        error instanceof Error ? error.message : "تعذّر إتمام المسح"
+      );
       setDetails("");
-      setPendingSync((p) => p + 1);
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      setResultCode(null);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
 
     setTimeout(() => {
       setFeedback("idle");
       setMessage("وجّه الكاميرا نحو رمز QR");
       setDetails("");
+      setResultCode(null);
       setScanning(true);
-    }, 3500);
+    }, 4000);
   }
 
   if (!permission?.granted) {
@@ -151,67 +297,114 @@ export function ScannerScreen({ onLogout }: Props) {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.eventPicker}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.eventPicker}
+      >
         {events.map((e) => (
           <TouchableOpacity
             key={e.id}
             style={[styles.chip, eventId === e.id && styles.chipActive]}
             onPress={() => {
               setEventId(e.id);
-              setSelectedEventId(e.id);
+              void setSelectedEventId(e.id);
             }}
           >
             <Text
-              style={[styles.chipText, eventId === e.id && styles.chipTextActive]}
+              style={[
+                styles.chipText,
+                eventId === e.id && styles.chipTextActive,
+              ]}
               numberOfLines={2}
             >
               {e.name}
             </Text>
           </TouchableOpacity>
         ))}
-      </View>
+      </ScrollView>
 
-      {selectedEvent && (
+      {selectedEvent ? (
         <Text style={styles.eventHint}>الفعالية النشطة: {selectedEvent.name}</Text>
+      ) : (
+        <Text style={styles.eventHint}>لا توجد فعاليات نشطة</Text>
       )}
 
-      {pendingSync > 0 && (
+      {pendingSync > 0 ? (
         <Text style={styles.syncHint}>
           {pendingSync} مسح محفوظ بانتظار المزامنة
         </Text>
-      )}
+      ) : null}
 
       <View
         style={[
           styles.feedback,
           feedback === "success" && styles.feedbackSuccess,
+          feedback === "warning" && styles.feedbackWarning,
           feedback === "error" && styles.feedbackError,
+          feedback === "offline" && styles.feedbackOffline,
         ]}
       >
         <Text style={styles.feedbackIcon}>
-          {feedback === "success" ? "✅" : feedback === "error" ? "❌" : "📷"}
+          {feedback === "success"
+            ? "✅"
+            : feedback === "warning"
+              ? "⚠️"
+              : feedback === "error"
+                ? "❌"
+                : feedback === "offline"
+                  ? "📥"
+                  : "📷"}
         </Text>
+        {resultCode ? (
+          <Text style={styles.resultBadge}>{RESULT_LABELS[resultCode]}</Text>
+        ) : null}
         <Text style={styles.feedbackMsg}>{message}</Text>
         {details ? <Text style={styles.feedbackDetails}>{details}</Text> : null}
       </View>
 
       <View style={styles.cameraWrap}>
-        {scanning && (
+        {scanning ? (
           <CameraView
             style={styles.camera}
             facing="back"
             barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-            onBarcodeScanned={({ data }) => handleScan(data)}
+            onBarcodeScanned={({ data }) => void handleScan(data)}
           />
-        )}
+        ) : null}
       </View>
+
+      {recentScans.length > 0 ? (
+        <View style={styles.history}>
+          <Text style={styles.historyTitle}>آخر المسوحات</Text>
+          {recentScans.map((scan) => (
+            <View key={`${scan.id}-${scan.at}`} style={styles.historyRow}>
+              <Text style={styles.historyTime}>{scan.at}</Text>
+              <View style={styles.historyBody}>
+                <Text style={styles.historyName}>
+                  {scan.name ?? RESULT_LABELS[scan.result]}
+                </Text>
+                {scan.seatLabel ? (
+                  <Text style={styles.historySeat}>المقعد: {scan.seatLabel}</Text>
+                ) : null}
+                <Text style={styles.historyMsg}>{scan.message}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#faf8f5" },
-  center: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24 },
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
   header: {
     flexDirection: "row-reverse",
     alignItems: "center",
@@ -225,9 +418,9 @@ const styles = StyleSheet.create({
   logout: { color: "#d4a84b", fontSize: 14 },
   eventPicker: {
     flexDirection: "row-reverse",
-    flexWrap: "wrap",
     gap: 8,
-    padding: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
   },
   chip: {
     paddingHorizontal: 12,
@@ -236,7 +429,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderWidth: 1,
     borderColor: "#e8dcc8",
-    maxWidth: "48%",
+    maxWidth: 220,
   },
   chipActive: { backgroundColor: "#5c3d1e", borderColor: "#5c3d1e" },
   chipText: { fontSize: 12, color: "#5c3d1e", textAlign: "right" },
@@ -254,8 +447,9 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   feedback: {
-    margin: 12,
-    padding: 16,
+    marginHorizontal: 12,
+    marginTop: 8,
+    padding: 14,
     borderRadius: 12,
     backgroundColor: "#fff",
     borderWidth: 1,
@@ -263,10 +457,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   feedbackSuccess: { backgroundColor: "#dcfce7", borderColor: "#166534" },
+  feedbackWarning: { backgroundColor: "#fef3c7", borderColor: "#b45309" },
   feedbackError: { backgroundColor: "#fee2e2", borderColor: "#991b1b" },
-  feedbackIcon: { fontSize: 32, marginBottom: 8 },
+  feedbackOffline: { backgroundColor: "#e0f2fe", borderColor: "#0369a1" },
+  feedbackIcon: { fontSize: 28, marginBottom: 4 },
+  resultBadge: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#5c3d1e",
+    marginBottom: 4,
+  },
   feedbackMsg: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "600",
     color: "#2c1810",
     textAlign: "center",
@@ -280,11 +482,51 @@ const styles = StyleSheet.create({
   },
   cameraWrap: {
     flex: 1,
+    minHeight: 220,
     margin: 12,
     borderRadius: 16,
     overflow: "hidden",
   },
   camera: { flex: 1 },
+  history: {
+    maxHeight: 140,
+    marginHorizontal: 12,
+    marginBottom: 12,
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#e8dcc8",
+  },
+  historyTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#5c3d1e",
+    textAlign: "right",
+    marginBottom: 6,
+  },
+  historyRow: {
+    flexDirection: "row-reverse",
+    gap: 8,
+    paddingVertical: 4,
+    borderTopWidth: 1,
+    borderTopColor: "#f5f0e8",
+  },
+  historyTime: { fontSize: 10, color: "#8b6914", minWidth: 52, textAlign: "left" },
+  historyBody: { flex: 1 },
+  historyName: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#2c1810",
+    textAlign: "right",
+  },
+  historySeat: {
+    fontSize: 11,
+    color: "#b8860b",
+    textAlign: "right",
+    fontWeight: "600",
+  },
+  historyMsg: { fontSize: 10, color: "#8b6914", textAlign: "right" },
   msg: { fontSize: 16, marginBottom: 16, textAlign: "center" },
   button: {
     backgroundColor: "#5c3d1e",

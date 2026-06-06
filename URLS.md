@@ -17,7 +17,7 @@ Quick reference for every link in the project.
 | GitHub repository | https://github.com/eslamene/court-event-attendance |
 | Vercel dashboard | https://vercel.com/flagships-projects/court-event-attendance |
 | Neon database | [Neon Console](https://console.neon.tech) |
-| Expo / EAS | https://expo.dev — slug `court-event-attendance` |
+| Expo / EAS | https://expo.dev/accounts/eslamene/projects/court-event-attendance |
 
 ---
 
@@ -75,7 +75,8 @@ Base: `https://court-events.flagshipfintech.com` or `http://localhost:3000`
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/api/mobile/login` | Staff login |
-| POST | `/api/mobile/scan` | Scan QR |
+| GET | `/api/mobile/session` | Refresh staff session + active events |
+| POST | `/api/mobile/scan` | Scan QR (returns `seatLabel`, `result` codes) |
 
 ---
 

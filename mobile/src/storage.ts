@@ -1,6 +1,6 @@
 import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { EventItem } from "./api";
+import type { EventItem, StaffUser } from "./api";
 
 const TOKEN_KEY = "staff_token";
 const USER_KEY = "staff_user";
@@ -10,7 +10,7 @@ const OFFLINE_QUEUE_KEY = "offline_scan_queue";
 
 export async function saveSession(
   token: string,
-  user: { id: string; name: string; email: string },
+  user: StaffUser,
   events: EventItem[]
 ) {
   await SecureStore.setItemAsync(TOKEN_KEY, token);
@@ -18,11 +18,19 @@ export async function saveSession(
   await AsyncStorage.setItem(EVENTS_KEY, JSON.stringify(events));
 }
 
+export async function saveEvents(events: EventItem[]) {
+  await AsyncStorage.setItem(EVENTS_KEY, JSON.stringify(events));
+}
+
+export async function saveUser(user: StaffUser) {
+  await AsyncStorage.setItem(USER_KEY, JSON.stringify(user));
+}
+
 export async function getToken() {
   return SecureStore.getItemAsync(TOKEN_KEY);
 }
 
-export async function getUser() {
+export async function getUser(): Promise<StaffUser | null> {
   const raw = await AsyncStorage.getItem(USER_KEY);
   return raw ? JSON.parse(raw) : null;
 }

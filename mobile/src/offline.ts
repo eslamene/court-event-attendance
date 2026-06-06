@@ -1,28 +1,48 @@
-import { scanQr } from "./api";
+import { ApiError, scanQr } from "./api";
 import {
   getOfflineQueue,
   setOfflineQueue,
   type OfflineScan,
 } from "./storage";
 
-export async function syncOfflineQueue(token: string) {
+export type SyncResult = {
+  synced: number;
+  pending: number;
+  sessionExpired: boolean;
+};
+
+export async function syncOfflineQueue(token: string): Promise<SyncResult> {
   const queue = await getOfflineQueue();
-  if (queue.length === 0) return { synced: 0, failed: 0 };
+  if (queue.length === 0) {
+    return { synced: 0, pending: 0, sessionExpired: false };
+  }
 
   const remaining: OfflineScan[] = [];
   let synced = 0;
-  let failed = 0;
 
-  for (const item of queue) {
+  for (let i = 0; i < queue.length; i++) {
+    const item = queue[i];
     try {
       await scanQr(token, item);
       synced++;
-    } catch {
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        const toKeep = queue.slice(i);
+        await setOfflineQueue(toKeep);
+        return {
+          synced,
+          pending: toKeep.length,
+          sessionExpired: true,
+        };
+      }
       remaining.push(item);
-      failed++;
     }
   }
 
   await setOfflineQueue(remaining);
-  return { synced, failed };
+  return {
+    synced,
+    pending: remaining.length,
+    sessionExpired: false,
+  };
 }

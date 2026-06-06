@@ -20,8 +20,8 @@ type Props = {
 };
 
 export function LoginScreen({ onLogin }: Props) {
-  const [email, setEmail] = useState("staff@court.local");
-  const [password, setPassword] = useState("Admin@123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
