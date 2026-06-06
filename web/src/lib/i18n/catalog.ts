@@ -693,6 +693,18 @@ export const TRANSLATION_CATALOG: Record<string, Record<string, string>> = {
     "seating.liveConnecting": "جاري الاتصال…",
     "seating.livePolling": "تحديث دوري",
     "seating.updatedAt": "آخر تحديث {time}",
+    "seating.tierLayer": "طبقة {n}",
+    "seating.spacingTitle": "تباعد المقاعد",
+    "seating.spacingHint":
+      "اضبط المسافات لتجنب تداخل المقاعد. يُطبَّق الحشو تلقائياً عند الحاجة.",
+    "seating.horizontalSpacing": "تباعد أفقي بين المقاعد",
+    "seating.verticalSpacing": "تباعد عمودي بين الصفوف",
+    "seating.tierSpacing": "مسافة بين طبقات الفئات",
+    "seating.seatPadding": "حشو حول المقعد",
+    "seating.zoomIn": "تكبير",
+    "seating.zoomOut": "تصغير",
+    "seating.resetView": "إعادة ضبط العرض",
+    "seating.panHint": "اسحب للتنقل · عجلة الفأرة للتكبير",
 
     "admin.events.seatMap": "خريطة المقاعد المباشرة",
 
@@ -1452,6 +1464,18 @@ export const TRANSLATION_CATALOG: Record<string, Record<string, string>> = {
     "seating.liveConnecting": "Connecting…",
     "seating.livePolling": "Polling",
     "seating.updatedAt": "Updated {time}",
+    "seating.tierLayer": "Layer {n}",
+    "seating.spacingTitle": "Seat spacing",
+    "seating.spacingHint":
+      "Adjust spacing to avoid overlapping seats. Padding is applied automatically when needed.",
+    "seating.horizontalSpacing": "Horizontal seat spacing",
+    "seating.verticalSpacing": "Vertical row spacing",
+    "seating.tierSpacing": "Gap between tier layers",
+    "seating.seatPadding": "Seat padding",
+    "seating.zoomIn": "Zoom in",
+    "seating.zoomOut": "Zoom out",
+    "seating.resetView": "Reset view",
+    "seating.panHint": "Drag to pan · scroll wheel to zoom",
 
     "admin.events.seatMap": "Live seat map",
 

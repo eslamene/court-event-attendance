@@ -211,6 +211,9 @@ export function EventSeatingEditor({
               tiers={tiers}
               onLayoutTypeChange={setLayoutType}
               onLayoutConfigChange={setLayoutConfig}
+              onAddTier={addTier}
+              onUpdateTier={updateTier}
+              onRemoveTier={removeTier}
               expandedPreview
             />
           </div>

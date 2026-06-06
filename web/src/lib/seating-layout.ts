@@ -204,12 +204,17 @@ export function coerceLayoutConfig(
 }
 
 export function serializeLayoutConfig(config: SeatingLayoutConfig): string {
+  const merged = mergeLayoutConfig(config);
   return JSON.stringify({
-    stagePosition: config.stagePosition,
-    stageLabel: config.stageLabel?.trim() || DEFAULT_LAYOUT_CONFIG.stageLabel,
-    seatsPerRow: config.seatsPerRow ?? 0,
-    aisleCenter: Boolean(config.aisleCenter),
-    arenaArrangement: normalizeArenaArrangement(config.arenaArrangement),
+    stagePosition: merged.stagePosition,
+    stageLabel: merged.stageLabel?.trim() || DEFAULT_LAYOUT_CONFIG.stageLabel,
+    seatsPerRow: merged.seatsPerRow ?? 0,
+    aisleCenter: Boolean(merged.aisleCenter),
+    arenaArrangement: normalizeArenaArrangement(merged.arenaArrangement),
+    horizontalSpacing: merged.horizontalSpacing,
+    verticalSpacing: merged.verticalSpacing,
+    tierSpacing: merged.tierSpacing,
+    seatPadding: merged.seatPadding,
   });
 }
 
@@ -277,8 +282,13 @@ function theaterRows(
   const spr = config.seatsPerRow && config.seatsPerRow > 0
     ? config.seatsPerRow
     : autoSeatsPerRow(tier.seatCount);
-  const rowH = 5.2;
-  const seatW = Math.min(4.2, 88 / spr);
+  const hMult = spacingMult(config.horizontalSpacing);
+  const vMult = spacingMult(config.verticalSpacing);
+  const tierMult = spacingMult(config.tierSpacing);
+  const minDist = minSeatCenterDistance(config);
+  const rowH = Math.max(5.2 * vMult, minDist * 0.95);
+  const baseSeatW = Math.min(4.2, 88 / spr);
+  const seatW = Math.max(baseSeatW * hMult, minDist * 0.9);
   const positioned: PositionedSeat[] = [];
 
   for (let i = 0; i < tier.seats.length; i++) {
@@ -289,7 +299,7 @@ function theaterRows(
     let x = 50 - ((seatsInRow - 1) * seatW) / 2 + col * seatW;
 
     if (config.aisleCenter && seatsInRow > 4 && col >= Math.ceil(seatsInRow / 2)) {
-      x += 3.5;
+      x += Math.max(3.5, minDist * 0.5);
     }
 
     positioned.push({
@@ -303,7 +313,7 @@ function theaterRows(
   }
 
   const rows = Math.ceil(tier.seatCount / spr);
-  return { seats: positioned, nextY: startY + rows * rowH + 3 };
+  return { seats: positioned, nextY: startY + rows * rowH + 3 * tierMult };
 }
 
 function layoutTheaterLike(
@@ -330,21 +340,34 @@ function layoutTheaterLike(
   return all;
 }
 
-function layoutArenaRings(tiers: SeatingMapTier[]): PositionedSeat[] {
+function layoutArenaRings(
+  tiers: SeatingMapTier[],
+  config: SeatingLayoutConfig
+): PositionedSeat[] {
   const all: PositionedSeat[] = [];
-  const ringGap = 28 / Math.max(tiers.length, 1);
+  const tierMult = spacingMult(config.tierSpacing);
+  const minDist = minSeatCenterDistance(config);
+  const ringGap = (28 / Math.max(tiers.length, 1)) * tierMult;
 
   tiers.forEach((tier, tierIndex) => {
-    const radius = 14 + (tierIndex + 1) * ringGap;
+    const baseRadius = 14 + (tierIndex + 1) * ringGap;
+    const arcRadius =
+      tier.seatCount > 1
+        ? (tier.seatCount * minDist) / (2 * Math.PI * 0.85)
+        : 0;
+    const radius = Math.max(baseRadius, arcRadius);
+    const hMult = spacingMult(config.horizontalSpacing);
+
     for (let i = 0; i < tier.seats.length; i++) {
       const seat = tier.seats[i];
       const angle = (2 * Math.PI * i) / tier.seatCount - Math.PI / 2;
+      const r = radius * (0.85 + (hMult - 1) * 0.08);
       all.push({
         number: seat.number,
         tierId: tier.id,
         tierName: tier.name,
-        x: 50 + radius * Math.cos(angle) * 0.85,
-        y: 50 + radius * Math.sin(angle) * 0.85,
+        x: 50 + r * Math.cos(angle),
+        y: 50 + r * Math.sin(angle),
         seat,
       });
     }
@@ -362,10 +385,12 @@ function layoutArenaRows(
   let y = stage.y + stage.height + 5;
   const all: PositionedSeat[] = [];
 
+  const tierMult = spacingMult(config.tierSpacing);
+
   for (const tier of tiers) {
     const { seats, nextY } = theaterRows(tier, y, config);
     all.push(...seats);
-    y = nextY + 4;
+    y = nextY + 4 * tierMult;
   }
 
   return all;
@@ -378,17 +403,23 @@ function layoutArena(
   if (normalizeArenaArrangement(config.arenaArrangement) === "rows") {
     return layoutArenaRows(tiers, config);
   }
-  return layoutArenaRings(tiers);
+  return layoutArenaRings(tiers, config);
 }
 
-function layoutBanquet(tiers: SeatingMapTier[]): PositionedSeat[] {
+function layoutBanquet(
+  tiers: SeatingMapTier[],
+  config: SeatingLayoutConfig
+): PositionedSeat[] {
   const all: PositionedSeat[] = [];
+  const tierMult = spacingMult(config.tierSpacing);
+  const minDist = minSeatCenterDistance(config);
+  const tableSeatRadius = Math.max(3.8, minDist * 0.45);
 
   for (const tier of tiers) {
     const seatsPerTable = 8;
     const tableCount = Math.ceil(tier.seatCount / seatsPerTable);
     const tablesPerRing = Math.max(1, Math.ceil(Math.sqrt(tableCount)));
-    const ringRadius = 22 + tier.sortOrder * 8;
+    const ringRadius = (22 + tier.sortOrder * 8) * tierMult;
 
     for (let t = 0; t < tableCount; t++) {
       const ring = Math.floor(t / tablesPerRing);
@@ -408,8 +439,8 @@ function layoutBanquet(tiers: SeatingMapTier[]): PositionedSeat[] {
           number: seat.number,
           tierId: tier.id,
           tierName: tier.name,
-          x: tableX + 3.8 * Math.cos(seatAngle),
-          y: tableY + 3.8 * Math.sin(seatAngle),
+          x: tableX + tableSeatRadius * Math.cos(seatAngle),
+          y: tableY + tableSeatRadius * Math.sin(seatAngle),
           seat,
         });
       }
@@ -419,15 +450,22 @@ function layoutBanquet(tiers: SeatingMapTier[]): PositionedSeat[] {
   return all;
 }
 
-function layoutUShape(tiers: SeatingMapTier[]): PositionedSeat[] {
+function layoutUShape(
+  tiers: SeatingMapTier[],
+  config: SeatingLayoutConfig
+): PositionedSeat[] {
   const all: PositionedSeat[] = [];
+  const tierMult = spacingMult(config.tierSpacing);
+  const minDist = minSeatCenterDistance(config);
 
   for (const tier of tiers) {
     const count = tier.seatCount;
     const leftCount = Math.ceil(count * 0.28);
     const bottomCount = Math.ceil(count * 0.36);
     const rightCount = count - leftCount - bottomCount;
-    const tierOffset = (tier.sortOrder - 1) * 4;
+    const tierOffset = (tier.sortOrder - 1) * 4 * tierMult;
+    const sideSpan = Math.max(52, leftCount * minDist * 0.55);
+    const bottomSpan = Math.max(64, bottomCount * minDist * 0.55);
 
     for (let i = 0; i < count; i++) {
       const seat = tier.seats[i];
@@ -436,15 +474,15 @@ function layoutUShape(tiers: SeatingMapTier[]): PositionedSeat[] {
 
       if (i < leftCount) {
         x = 14 - tierOffset;
-        y = 22 + (i / Math.max(leftCount - 1, 1)) * 52;
+        y = 22 + (i / Math.max(leftCount - 1, 1)) * sideSpan;
       } else if (i < leftCount + bottomCount) {
         const bi = i - leftCount;
-        x = 18 + (bi / Math.max(bottomCount - 1, 1)) * 64;
+        x = 18 + (bi / Math.max(bottomCount - 1, 1)) * bottomSpan;
         y = 82 - tierOffset;
       } else {
         const ri = i - leftCount - bottomCount;
         x = 86 + tierOffset;
-        y = 22 + (ri / Math.max(rightCount - 1, 1)) * 52;
+        y = 22 + (ri / Math.max(rightCount - 1, 1)) * sideSpan;
       }
 
       all.push({
@@ -461,14 +499,21 @@ function layoutUShape(tiers: SeatingMapTier[]): PositionedSeat[] {
   return all;
 }
 
-function layoutGrid(tiers: SeatingMapTier[]): PositionedSeat[] {
+function layoutGrid(
+  tiers: SeatingMapTier[],
+  config: SeatingLayoutConfig
+): PositionedSeat[] {
   const all: PositionedSeat[] = [];
   let yOffset = 16;
+  const hMult = spacingMult(config.horizontalSpacing);
+  const vMult = spacingMult(config.verticalSpacing);
+  const tierMult = spacingMult(config.tierSpacing);
+  const minDist = minSeatCenterDistance(config);
 
   for (const tier of tiers) {
     const spr = autoSeatsPerRow(tier.seatCount);
-    const seatW = Math.min(4.5, 90 / spr);
-    const rowH = 5.5;
+    const seatW = Math.max(Math.min(4.5, 90 / spr) * hMult, minDist * 0.9);
+    const rowH = Math.max(5.5 * vMult, minDist * 0.95);
 
     for (let i = 0; i < tier.seats.length; i++) {
       const seat = tier.seats[i];
@@ -486,7 +531,7 @@ function layoutGrid(tiers: SeatingMapTier[]): PositionedSeat[] {
     }
 
     const rows = Math.ceil(tier.seatCount / spr);
-    yOffset += rows * rowH + 8;
+    yOffset += rows * rowH + 8 * tierMult;
   }
 
   return all;
@@ -516,16 +561,18 @@ export function computeVenueLayout(
       seats = layoutArena(tiers, normalizedConfig);
       break;
     case "banquet":
-      seats = layoutBanquet(tiers);
+      seats = layoutBanquet(tiers, normalizedConfig);
       break;
     case "u_shape":
-      seats = layoutUShape(tiers);
+      seats = layoutUShape(tiers, normalizedConfig);
       break;
     case "grid":
     default:
-      seats = layoutGrid(tiers);
+      seats = layoutGrid(tiers, normalizedConfig);
       break;
   }
+
+  seats = resolveSeatOverlaps(seats, minSeatCenterDistance(normalizedConfig));
 
   return {
     type,

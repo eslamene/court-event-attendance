@@ -21,6 +21,8 @@ type Props = {
   className?: string;
   isRecentSeat?: (tierId: string, seatNumber: number) => boolean;
   showTierLabels?: boolean;
+  /** Designer preview: seats are non-interactive so pan/zoom works. */
+  designMode?: boolean;
 };
 
 export function SeatingVenueCanvas({
@@ -30,6 +32,7 @@ export function SeatingVenueCanvas({
   className,
   isRecentSeat,
   showTierLabels = true,
+  designMode = false,
 }: Props) {
   const { t } = useI18n();
   const stagePos = venue.config.stagePosition;
@@ -71,6 +74,7 @@ export function SeatingVenueCanvas({
             positioned={pos}
             recent={isRecentSeat?.(pos.tierId, pos.number) ?? false}
             compact={compact}
+            designMode={designMode}
           />
         ))}
 
@@ -125,10 +129,12 @@ function SeatDot({
   positioned,
   recent,
   compact,
+  designMode,
 }: {
   positioned: PositionedSeat;
   recent: boolean;
   compact: boolean;
+  designMode: boolean;
 }) {
   const { seat, tierId, number, x, y, tierName } = positioned;
   const title =
@@ -140,18 +146,36 @@ function SeatDot({
     ? "h-6 w-6 min-h-6 min-w-6 text-[8px]"
     : "h-8 w-8 min-h-8 min-w-8 text-[9px] sm:h-9 sm:w-9 sm:min-h-9 sm:min-w-9 sm:text-[10px]";
 
+  const className = cn(
+    "absolute z-10 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full font-bold tabular-nums transition-all",
+    size,
+    SEAT_STATUS_STYLES[seat.status],
+    designMode && "pointer-events-none",
+    recent &&
+      "z-20 animate-pulse ring-2 ring-gold ring-offset-2 ring-offset-[var(--seat-map-floor)]"
+  );
+
+  if (designMode) {
+    return (
+      <div
+        title={title}
+        aria-label={title}
+        className={className}
+        style={{ left: `${x}%`, top: `${y}%` }}
+        data-tier={tierId}
+        data-seat={number}
+      >
+        {number}
+      </div>
+    );
+  }
+
   return (
     <button
       type="button"
       title={title}
       aria-label={title}
-      className={cn(
-        "absolute z-10 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full font-bold tabular-nums transition-all",
-        size,
-        SEAT_STATUS_STYLES[seat.status],
-        recent &&
-          "z-20 animate-pulse ring-2 ring-gold ring-offset-2 ring-offset-[var(--seat-map-floor)]"
-      )}
+      className={className}
       style={{ left: `${x}%`, top: `${y}%` }}
       data-tier={tierId}
       data-seat={number}
