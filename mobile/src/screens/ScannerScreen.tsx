@@ -15,22 +15,20 @@ import {
   fetchSession,
   isNetworkError,
   scanQr,
-  type EventItem,
   type ScanResult,
   type ScanResultCode,
 } from "../api";
 import { extractQrToken, isLikelyQrPayload } from "../qr";
+import { useEventContext } from "../context/EventContext";
+import { logActivity } from "../lib/activity-log";
 import {
   clearSession,
   enqueueOfflineScan,
-  getEvents,
   getOfflineQueue,
-  getSelectedEventId,
   getToken,
   getUser,
   saveEvents,
   saveUser,
-  setSelectedEventId,
 } from "../storage";
 import { syncOfflineQueue } from "../offline";
 
@@ -57,9 +55,9 @@ const RESULT_LABELS: Record<ScanResultCode, string> = {
 };
 
 export function ScannerScreen({ onLogout }: Props) {
+  const { events, eventId, setEventId, selectedEvent, refreshEvents } =
+    useEventContext();
   const [permission, requestPermission] = useCameraPermissions();
-  const [events, setEvents] = useState<EventItem[]>([]);
-  const [eventId, setEventId] = useState("");
   const [userName, setUserName] = useState("");
   const [feedback, setFeedback] = useState<Feedback>("idle");
   const [message, setMessage] = useState("وجّه الكاميرا نحو رمز QR");
@@ -86,38 +84,20 @@ export function ScannerScreen({ onLogout }: Props) {
       const session = await fetchSession(token);
       await saveUser(session.user);
       await saveEvents(session.events);
-      setEvents(session.events);
       setUserName(session.user.name);
-
-      const selected = await getSelectedEventId();
-      if (selected && session.events.some((e) => e.id === selected)) {
-        setEventId(selected);
-      } else if (session.events[0]) {
-        setEventId(session.events[0].id);
-        await setSelectedEventId(session.events[0].id);
-      } else {
-        setEventId("");
-      }
+      await refreshEvents();
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         await clearSession();
         onLogout();
       }
     }
-  }, [onLogout]);
+  }, [onLogout, refreshEvents]);
 
   const load = useCallback(async () => {
-    const [ev, sel, user, token] = await Promise.all([
-      getEvents(),
-      getSelectedEventId(),
-      getUser(),
-      getToken(),
-    ]);
-    setEvents(ev);
+    const [user, token] = await Promise.all([getUser(), getToken()]);
     setUserName(user?.name ?? "");
-    if (sel && ev.some((e) => e.id === sel)) setEventId(sel);
-    else if (ev[0]) setEventId(ev[0].id);
-
+    await refreshEvents();
     await refreshPendingCount();
 
     if (token) {
@@ -153,6 +133,9 @@ export function ScannerScreen({ onLogout }: Props) {
       setDetails(formatRegistrationDetails(result.registration));
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Vibration.vibrate(200);
+      void logActivity("scan_success", result.message, {
+        name: result.registration?.fullName ?? "",
+      });
       pushRecentScan({
         id: raw,
         at: new Date().toLocaleTimeString("ar-EG"),
@@ -178,6 +161,10 @@ export function ScannerScreen({ onLogout }: Props) {
     );
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     Vibration.vibrate([0, 80, 80, 80]);
+    void logActivity(
+      result.result === "INVALID" ? "scan_error" : "scan_warning",
+      result.message
+    );
 
     pushRecentScan({
       id: raw,
@@ -248,6 +235,7 @@ export function ScannerScreen({ onLogout }: Props) {
           scannedAt,
         });
         await refreshPendingCount();
+        void logActivity("offline_queue", "حفظ مسح بانتظار المزامنة");
         setFeedback("offline");
         setMessage("لا يوجد اتصال — تم الحفظ محلياً للمزامنة لاحقاً");
         setDetails("");
@@ -285,16 +273,11 @@ export function ScannerScreen({ onLogout }: Props) {
     );
   }
 
-  const selectedEvent = events.find((e) => e.id === eventId);
-
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>مسح الحضور</Text>
         <Text style={styles.headerUser}>{userName}</Text>
-        <TouchableOpacity onPress={onLogout}>
-          <Text style={styles.logout}>خروج</Text>
-        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -306,10 +289,7 @@ export function ScannerScreen({ onLogout }: Props) {
           <TouchableOpacity
             key={e.id}
             style={[styles.chip, eventId === e.id && styles.chipActive]}
-            onPress={() => {
-              setEventId(e.id);
-              void setSelectedEventId(e.id);
-            }}
+            onPress={() => setEventId(e.id)}
           >
             <Text
               style={[
@@ -415,7 +395,6 @@ const styles = StyleSheet.create({
   },
   headerTitle: { color: "#fff", fontSize: 18, fontWeight: "700" },
   headerUser: { color: "#e8dcc8", fontSize: 12 },
-  logout: { color: "#d4a84b", fontSize: 14 },
   eventPicker: {
     flexDirection: "row-reverse",
     gap: 8,

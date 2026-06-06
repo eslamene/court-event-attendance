@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,9 @@ import {
   I18nManager,
 } from "react-native";
 import { staffLogin } from "../api";
+import { canUseBiometricLogin, getBiometricSupport } from "../lib/biometric";
+import { logActivity } from "../lib/activity-log";
+import { getBiometricCredentials } from "../lib/settings";
 import { saveSession } from "../storage";
 
 I18nManager.allowRTL(true);
@@ -24,16 +27,63 @@ export function LoginScreen({ onLogin }: Props) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [biometricReady, setBiometricReady] = useState(false);
+  const [biometricLabel, setBiometricLabel] = useState("المصادقة البيومترية");
 
-  async function handleLogin() {
+  useEffect(() => {
+    async function checkBiometric() {
+      const [ready, support] = await Promise.all([
+        canUseBiometricLogin(),
+        getBiometricSupport(),
+      ]);
+      setBiometricReady(ready);
+      setBiometricLabel(support.label);
+    }
+    void checkBiometric();
+  }, []);
+
+  async function completeLogin(
+    loginEmail: string,
+    loginPassword: string,
+    viaBiometric = false
+  ) {
     setError("");
     setLoading(true);
     try {
-      const data = await staffLogin(email.trim(), password);
+      const data = await staffLogin(loginEmail.trim(), loginPassword);
       await saveSession(data.token, data.user, data.events);
+      await logActivity(
+        viaBiometric ? "biometric_login" : "login",
+        viaBiometric
+          ? `دخول عبر ${biometricLabel}`
+          : `تسجيل دخول: ${data.user.name}`
+      );
       onLogin();
     } catch (e) {
       setError(e instanceof Error ? e.message : "خطأ غير متوقع");
+      await logActivity("error", "فشل تسجيل الدخول");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleLogin() {
+    await completeLogin(email, password);
+  }
+
+  async function handleBiometricLogin() {
+    setError("");
+    setLoading(true);
+    try {
+      const credentials = await getBiometricCredentials();
+      if (!credentials) {
+        setError("لم يتم العثور على بيانات الدخول المحفوظة");
+        setBiometricReady(false);
+        return;
+      }
+      await completeLogin(credentials.email, credentials.password, true);
+    } catch {
+      setError("فشل التحقق البيومتري");
     } finally {
       setLoading(false);
     }
@@ -41,12 +91,25 @@ export function LoginScreen({ onLogin }: Props) {
 
   return (
     <View style={styles.container}>
-      <Image
-        source={require("../../assets/logo.png")}
-        style={styles.logo}
-      />
+      <Image source={require("../../assets/logo.png")} style={styles.logo} />
       <Text style={styles.title}>مسح حضور الفعاليات</Text>
       <Text style={styles.subtitle}>تسجيل دخول طاقم الاستقبال</Text>
+      <Text style={styles.version}>الإصدار 1.1.0</Text>
+
+      {biometricReady ? (
+        <TouchableOpacity
+          style={styles.biometricButton}
+          onPress={() => void handleBiometricLogin()}
+          disabled={loading}
+        >
+          <Text style={styles.biometricIcon}>🔐</Text>
+          <Text style={styles.biometricText}>الدخول عبر {biometricLabel}</Text>
+        </TouchableOpacity>
+      ) : null}
+
+      {biometricReady ? (
+        <Text style={styles.orDivider}>— أو —</Text>
+      ) : null}
 
       <TextInput
         style={styles.input}
@@ -70,7 +133,7 @@ export function LoginScreen({ onLogin }: Props) {
 
       <TouchableOpacity
         style={styles.button}
-        onPress={handleLogin}
+        onPress={() => void handleLogin()}
         disabled={loading}
       >
         {loading ? (
@@ -79,6 +142,10 @@ export function LoginScreen({ onLogin }: Props) {
           <Text style={styles.buttonText}>دخول</Text>
         )}
       </TouchableOpacity>
+
+      <Text style={styles.hint}>
+        يمكنك تفعيل الدخول البيومتري من الإعدادات بعد تسجيل الدخول
+      </Text>
     </View>
   );
 }
@@ -108,7 +175,30 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#8b6914",
     textAlign: "center",
-    marginBottom: 24,
+    marginBottom: 4,
+  },
+  version: {
+    fontSize: 11,
+    color: "#b8860b",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  biometricButton: {
+    backgroundColor: "#fff",
+    borderWidth: 2,
+    borderColor: "#5c3d1e",
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  biometricIcon: { fontSize: 28, marginBottom: 4 },
+  biometricText: { color: "#5c3d1e", fontSize: 15, fontWeight: "700" },
+  orDivider: {
+    textAlign: "center",
+    color: "#8b6914",
+    marginVertical: 12,
+    fontSize: 12,
   },
   input: {
     backgroundColor: "#fff",
@@ -128,4 +218,11 @@ const styles = StyleSheet.create({
   },
   buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
   error: { color: "#991b1b", textAlign: "center", marginBottom: 8 },
+  hint: {
+    marginTop: 16,
+    fontSize: 11,
+    color: "#8b6914",
+    textAlign: "center",
+    lineHeight: 18,
+  },
 });

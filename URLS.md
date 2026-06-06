@@ -20,6 +20,8 @@ Quick reference for every link in the project.
 | Expo / EAS | https://expo.dev/accounts/eslamene/projects/court-event-attendance |
 | Expo ↔ GitHub | https://expo.dev/accounts/eslamene/projects/court-event-attendance/github |
 | EAS CI setup | [mobile/EXPO_GITHUB.md](./mobile/EXPO_GITHUB.md) |
+| TestFlight | [mobile/TESTFLIGHT.md](./mobile/TESTFLIGHT.md) |
+| App Store Connect | https://appstoreconnect.apple.com/apps/6777443492/testflight/ios |
 
 ---
 

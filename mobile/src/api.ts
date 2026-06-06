@@ -115,6 +115,44 @@ export function isNetworkError(error: unknown): boolean {
   return false;
 }
 
+export type AttendanceScan = {
+  id: string;
+  result: ScanResultCode;
+  judgeName: string | null;
+  qrToken: string;
+  scannedAt: string;
+  scannedBy: { id: string; name: string; email: string };
+  registration: {
+    fullName: string;
+    rank: string;
+    entity: string;
+    seatLabel: string | null;
+  } | null;
+};
+
+export type AttendanceLogResponse = {
+  event: { id: string; name: string };
+  scope: "all" | "mine";
+  scans: AttendanceScan[];
+  summary: { total: number; success: number; mine: boolean };
+};
+
+export async function fetchEventScans(
+  token: string,
+  eventId: string,
+  scope: "all" | "mine" = "all"
+): Promise<AttendanceLogResponse> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/mobile/events/${eventId}/scans?scope=${scope}&limit=200`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  const data = await parseJson(res);
+  if (!res.ok) {
+    throw new ApiError(String(data.error || "تعذّر تحميل السجل"), res.status);
+  }
+  return data as AttendanceLogResponse;
+}
+
 export function formatRegistrationDetails(
   registration?: ScanRegistration
 ): string {

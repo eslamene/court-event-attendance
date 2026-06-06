@@ -1,0 +1,53 @@
+# Manual TestFlight: production iOS build + submit (after ASC API key is on EAS)
+name: EAS TestFlight
+
+on:
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: mobile
+
+jobs:
+  testflight:
+    name: Build & submit iOS
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require EXPO_TOKEN
+        run: |
+          if [ -z "${{ secrets.EXPO_TOKEN }}" ]; then
+            echo "::error::Missing EXPO_TOKEN. See mobile/TESTFLIGHT.md"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+          packager: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Write App Store Connect API key
+        if: ${{ secrets.ASC_API_KEY != '' }}
+        run: |
+          echo "${{ secrets.ASC_API_KEY }}" | base64 --decode > asc-api-key.p8
+          test -f asc-api-key.p8
+
+      - name: Build production iOS
+        run: eas build --profile production --platform ios --non-interactive --wait
+
+      - name: Submit to TestFlight
+        env:
+          EXPO_APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.EXPO_APPLE_APP_SPECIFIC_PASSWORD }}
+        run: eas submit --platform ios --profile production --latest --non-interactive

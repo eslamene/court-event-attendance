@@ -3,7 +3,7 @@ import type { ExpoConfig } from "expo/config";
 const config: ExpoConfig = {
   name: "مسح حضور الفعاليات",
   slug: "court-event-attendance",
-  version: "1.0.0",
+  version: "1.1.0",
   orientation: "portrait",
   icon: "./assets/icon.png",
   userInterfaceStyle: "light",
@@ -20,6 +20,8 @@ const config: ExpoConfig = {
     infoPlist: {
       NSCameraUsageDescription:
         "الكاميرا مطلوبة لمسح رموز QR وتسجيل الحضور",
+      NSFaceIDUsageDescription:
+        "Face ID مطلوب لتأمين تسجيل الدخول والوصول إلى بيانات الجلسة",
       ITSAppUsesNonExemptEncryption: false,
     },
   },
@@ -35,6 +37,7 @@ const config: ExpoConfig = {
   },
   plugins: [
     "expo-secure-store",
+    "expo-local-authentication",
     [
       "expo-camera",
       {
